@@ -13,6 +13,53 @@ Recipes are modular, reusable bash scripts that add specific features to your Gu
 
 ## Available Recipes
 
+### recipes/add/personal-config.scm — start here
+
+The first postinstall step: turn a machine that merely boots into your machine.
+It installs `git`, sets up an SSH key and pauses while you register it, clones
+your own configuration repository, and runs whatever that repository declares.
+
+Unlike every other recipe here, it needs nothing already on the machine:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm \
+  | guile --no-auto-compile -s /dev/stdin
+```
+
+A fresh Guix System has `wget`, `guile` and `nss-certs` but no `git`, `curl`,
+`gnu-make` or OpenSSH client — so the entry point assumes only the first three
+and provisions the rest. The pipe is safe because every prompt reads `/dev/tty`.
+
+What it runs is declared by a `guix-personal.scm` file at the root of *your*
+repository, not by anything in this one:
+
+```scheme
+(personal-config
+  (version 1)
+  (requires "git" "gnu-make" "zsh")
+  (steps
+    (step (name "home") (run "make apply")
+          (description "guix home reconfigure") (default? #t))
+    (step (name "keyd") (run "make setup-keyd")
+          (description "Physical machines only"))))
+```
+
+Full specification: [../docs/PERSONAL_CONFIG_CONTRACT.md](../docs/PERSONAL_CONFIG_CONTRACT.md)
+
+Other entry points, all offline and side-effect free:
+
+```sh
+--validate FILE   parse and check a contract
+--plan DIR        show what an already-cloned repository would run
+--init [DIR]      write a starter contract from what a repository contains
+--self-test       check the pure helpers
+```
+
+Also reachable as option `p` in `cloudzy/postinstall/customize.scm`, and
+documented for Oracle first boot in [../oracle/postinstall/README.md](../oracle/postinstall/README.md).
+
+---
+
 ### add-spacemacs.sh
 
 Installs Spacemacs, a community-driven Emacs distribution.

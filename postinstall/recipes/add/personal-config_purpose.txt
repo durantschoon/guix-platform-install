@@ -1,0 +1,255 @@
+personal-config.scm -- purpose of each part
+===========================================
+
+Follows the flow of the code.  The contract format itself is specified in
+docs/PERSONAL_CONFIG_CONTRACT.md; this file records why the SCRIPT is shaped the
+way it is, including the things deliberately left out.
+
+Why this script exists at all
+-----------------------------
+
+Every platform installer in this repository stops at "the machine boots".  That
+is the correct place for it to stop -- CLAUDE.md's known-good/generic rule says
+one-machine facts must not leak into the generic installer -- but it leaves a
+gap the user crosses by hand on every new machine: install git, set up a key,
+clone their config, remember which of two dozen Makefile targets to run.
+
+This is that crossing, made declarative.  The user's repository states what it
+needs; this script reads the statement and executes it.
+
+
+Shebang and entry point
+-----------------------
+
+  #!/run/current-system/profile/bin/guile --no-auto-compile -s
+
+Per CLAUDE.md, the Guix path, not /usr/bin/env.  Guile per the language policy:
+this runs on a freshly installed Guix system, and guile is in %base-packages
+where bash-as-a-scripting-choice would still be fine but idiomatically wrong.
+
+The documented invocation pipes the script into guile from wget.  That is only
+possible because every prompt reads /dev/tty (see below).  A version that read
+stdin would consume its own source text on the first prompt.
+
+Verified on Guile 3.0.11: `... | guile --no-auto-compile -s /dev/stdin` runs.
+
+
+ASCII only
+----------
+
+CLAUDE.md permits Unicode in postinstall scripts, since those run after boot on
+a real terminal.  This one is held to the ISO rule anyway: it is the script most
+likely to be run over the Oracle serial console, which renders no better than
+the Guix ISO terminal.  [OK]/[ERROR]/[WARN], no checkmarks.
+
+
+read-tty-line, ask, ask-yes?, pause
+-----------------------------------
+
+/dev/tty rather than stdin, per CLAUDE.md's "Reading User Input".  Here it is
+not a precaution but a load-bearing requirement, because the entry point IS a
+pipe into stdin.
+
+read-tty-line returns "" at EOF rather than an eof-object, so a caller running
+with no controlling terminal falls through to defaults instead of raising a
+wrong-type error deep in a string operation.  This is what makes --validate and
+--self-test usable from a test harness.
+
+
+succeeded?, not (zero? (status:exit-val ...))
+---------------------------------------------
+
+status:exit-val returns #f when a child is killed by a signal rather than
+exiting.  Ctrl-C during a long `guix install` is the ordinary way to see that,
+and passing #f to zero? raises a wrong-type error stacked on top of the
+interruption the user just caused.  succeeded? treats "no exit status" as
+failure, which it is.
+
+
+run echoes its command
+----------------------
+
+Not decoration.  This script runs shell commands that came out of the user's own
+repository; echoing each before it runs is the only way a user can tell what a
+contract actually did.  It is also what makes a failed step diagnosable from a
+scrollback buffer.
+
+
+ensure-profile-on-path!
+-----------------------
+
+`guix install` populates ~/.guix-profile but cannot alter the PATH of a process
+already running -- the login shell picks it up at the next login.  A script that
+installs git and then calls git in the same breath must prepend the profile's
+bin directory itself, or it installs a package it then cannot find.  This is the
+single most likely thing to break if the script is ever restructured.
+
+
+ensure-packages!: the user profile, not the system config
+---------------------------------------------------------
+
+The alternative was to append git/openssh/gnu-make to /etc/config.scm and
+reconfigure, which is what CHECKLIST.md's R1 proposes for the INSTALLER to emit
+at generation time.  Rejected here, for this script:
+
+  - `guix install` takes seconds and needs no root.  A `guix system reconfigure`
+    takes minutes, and on the Oracle VM.Standard.E2.1.Micro (1 GiB RAM) it is
+    the operation the swap file in oracle-image.scm exists to survive.
+  - Editing /etc/config.scm is a bigger promise than "let me fetch your config".
+    A user who wants git in the system closure can say so in their own
+    repository, which this script is about to clone.
+
+Although you might be tempted to make this idempotent by checking for the
+BINARY (git, ssh, make), it checks `guix package -I` instead: the mapping from
+package name to binary name is not one-to-one (openssh -> ssh, gnu-make -> make)
+and a table of those would rot.  spec->name strips a version qualifier because
+`guix package -I` lists bare names, so "python@3.11" would never match.
+
+
+Settings cache
+--------------
+
+~/.config/guix-personal/settings.scm holds the repository URL and clone
+directory.  Re-running is the normal case -- a step fails, the user fixes it and
+runs again -- and retyping a URL every time is the friction that makes people
+abandon a tool.  Written as an S-expression rather than key=value so it is read
+with `read` and needs no parser.
+
+
+Contract parsing: strict about unknown keys
+-------------------------------------------
+
+parse-clause and parse-step reject any key not in %contract-keys / %step-keys,
+and the error names the acceptable keys.
+
+The failure mode this prevents is specific: a user writes (require "git")
+instead of (requires "git"), a lenient parser drops it, the package is never
+installed, and the step that needed it fails on a machine reachable only by
+serial console.  The typo is invisible; the consequence is three time zones
+away.
+
+Also rejected: duplicate step names (the summary would be ambiguous), zero steps
+(there would be nothing to run), a version other than 1, a non-string where a
+string is required, and a top-level form that is not (personal-config ...).
+
+The version field exists so a future format change bumps the number rather than
+silently reinterpreting files that already exist in users' repositories.
+
+
+default? and the two-tier prompt
+--------------------------------
+
+Steps marked (default? #t) are "the one command"; the rest are offered with a
+default of no.  This is what lets one contract serve a laptop and a VPS: the
+keyd remapping step is real, belongs in the file, and must not run on a headless
+cloud instance.  Encoding that as "optional" rather than as two contracts keeps
+one source of truth.
+
+Every step is still confirmed individually.  A contract is executable code from
+a repository; running it unattended because it was declared is exactly the
+behaviour that makes such formats dangerous.
+
+
+install-channels!: offered, never silent
+----------------------------------------
+
+A personal channels.scm changes what every subsequent `guix pull` resolves to,
+for the life of the machine.  That is too large a consequence to apply as a side
+effect of "set up my config", so it is confirmed, and an existing channels.scm
+is never overwritten without asking.
+
+
+SSH: add-known-host! and the published fingerprints
+---------------------------------------------------
+
+%known-host-fingerprints carries GitHub's three published host key fingerprints
+so the first connection is checked rather than trust-on-first-use.
+
+A mismatch is reported, NOT fatal.  GitHub rotated its RSA host key in March
+2023 after a private key exposure; a hardcoded constant in this repository going
+stale must never become the reason a machine cannot be bootstrapped.  On
+mismatch the user is shown the offered fingerprints and asked -- which is
+strictly better than the bare TOFU prompt they would otherwise get, and no
+worse than what ssh does by default.
+
+For hosts with no published fingerprints on file, the fingerprints are displayed
+and the user is asked to verify out of band.  The default answer is "no" in that
+case (matched? is #f), so Enter declines.
+
+
+ensure-ssh-key!: why it pauses
+------------------------------
+
+A freshly installed machine holds no key any forge will accept, and nothing can
+paste a public key into a web page on the user's behalf.  This is the one step
+in the flow that is irreducibly manual.
+
+Stopping here, with the public key printed and an explicit "press Enter once the
+key is registered", is better than the alternative: failing later at `git clone`
+with "Permission denied (publickey)", which is a message that points at five
+possible causes and names none of them.
+
+No passphrase on the generated key: nothing can type one on a headless machine
+at boot, and a passphrase the user must enter interactively defeats the purpose
+of the step.  The script says so rather than deciding quietly, and a user who
+wants a passphrase can generate the key first -- an existing id_ed25519 is
+reused, never regenerated.
+
+The `ssh -T` verification matches on TEXT, not exit status.  A SUCCESSFUL
+authentication to GitHub exits 1 ("Hi user! You've successfully authenticated,
+but GitHub does not provide shell access."), so an exit-status test would report
+every success as a failure.
+
+
+first-index, and the bug it exists to prevent
+---------------------------------------------
+
+url-host originally used (or (string-index s #\/) (string-index s #\:)).  `or`
+yields the first index that EXISTS, not the smallest, so for
+
+  ssh://git@git.example.com:2222/user/repo.git
+
+it returned the slash's index and the host came back as "git.example.com:2222" --
+a string ssh-keyscan cannot resolve.  Found by --self-test, not by reading.
+first-index takes the minimum.  Regression is covered by the "host from ssh://
+with port" assertion.
+
+
+Detection fallback (%detectable, make-targets)
+----------------------------------------------
+
+For a user who has not written a contract yet.  Reads .PHONY declarations rather
+than every Makefile rule, because phony targets are the ones a human is meant to
+type and the full rule list of a real Makefile is mostly file paths.
+
+Deliberately a courtesy, not the mechanism.  Detection cannot know which target
+belongs on a new machine: on the dot_files repository this was written against,
+`apply`, `set_up_links` and `setup-keyd` are all plausible, and `setup-keyd`
+refuses to run on Guix System.  Guessing there would run the wrong thing
+confidently.  So detection always ends by pointing at --init.
+
+
+--init
+------
+
+Writes a starter contract from what the repository already contains, and refuses
+to overwrite an existing one.  The EDIT ME markers are load-bearing: the
+generator can only guess at what a target does, and an unedited guess runs a
+wrong command on a new machine.  Better a file that visibly demands editing than
+one that looks finished and is wrong.
+
+wrap-words exists because a real Makefile's .PHONY list is long enough to
+produce an unreadable single-line comment.
+
+
+--validate, --plan, --self-test
+-------------------------------
+
+The three exist so this file's logic is testable with no network, no Guix
+operations and no real machine -- which is the whole of what
+postinstall/tests/run-guile-tests.sh can exercise in CI or Docker.
+
+--self-test covers the pure helpers that have no visible failure mode: a wrong
+ssh-url? routes an SSH remote down the HTTPS path and the clone fails with an
+authentication error that points nowhere near the cause.  It has already caught
+one real bug (see first-index above).

@@ -135,6 +135,26 @@ Most likely causes, in order:
 2. **Wrong SSH key baked in** — boots fine, refuses your login
 3. ~~**Boot volume is `/dev/sda`, not `/dev/vda`**~~ — *resolved 2026-08-08*: it **is** `/dev/sda` (paravirtualized boot volumes attach via virtio-scsi), and `(targets ...)` in `image/oracle-image.scm` now says so. Only relevant if you change the launch mode or shape: verify with `lsblk` before the first `guix system reconfigure`.
 
+## 6. First boot: load your own customizations
+
+The image is deliberately minimal — it has no `git`, no editor beyond `nano` and
+`mg`, and bash as the login shell. Step two is one command, run over SSH:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm \
+  | guile --no-auto-compile -s /dev/stdin
+```
+
+It installs git, generates an SSH key and waits while you register it with your
+forge, clones your configuration repository, and runs what that repository
+declares in its `guix-personal.scm`.
+
+Prepare that file before you need it — see
+[../docs/PERSONAL_CONFIG_CONTRACT.md](../docs/PERSONAL_CONFIG_CONTRACT.md) — and
+[postinstall/README.md](postinstall/README.md) for the Oracle-specific notes
+(memory, egress rules, and why the key generated here points the opposite way
+from the one baked into the image).
+
 ## Design notes
 
 `image/oracle-image_purpose.txt` explains every setting and, more usefully, several things deliberately left out — why `initrd-modules` is absent, why the root label must stay `Guix_image`, why swap is a shepherd service rather than `swap-devices`, and why `%wheel ALL=NOPASSWD:ALL` is a consequence of key-only login rather than laziness.

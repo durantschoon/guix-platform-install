@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test runner for Guile config helper
 
 set -e
@@ -177,5 +177,13 @@ echo ""
 
 # Clean up
 rm -f "$SCRIPT_DIR/test-work.scm" "$SCRIPT_DIR/test-desktop.scm"
+
+# Personal configuration contract.
+#
+# The suite itself is Guile (CLAUDE.md language policy): the thing under test is
+# a Guile script and the contract it parses is an S-expression, so asserting
+# from bash would mean grepping for parentheses. Dispatched from here so
+# ./run-tests.sh keeps a single entry point.
+guile --no-auto-compile -s "$SCRIPT_DIR/test-personal-config.scm"
 
 echo -e "${GREEN}All Guile helper tests passed!${NC}"

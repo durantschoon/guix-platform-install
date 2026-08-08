@@ -48,6 +48,9 @@
   (display "Platform: Cloudzy / VPS / Cloud Server\n")
   (format #t "Current config: ~a\n" config-file)
   (newline)
+  (display "First Step:\n")
+  (display "  p) Load my personal config (git + clone + apply)\n")
+  (newline)
   (display "Essential Services:\n")
   (display "  1) Add SSH service (required for remote access)\n")
   (display "  3) Add common packages (git, vim, emacs, go, etc.)\n")
@@ -112,6 +115,23 @@
             (read-line)
             (main-menu))
            
+           ;; Bootstrapping the user's own configuration repository.  Listed
+           ;; first in the menu because it is what someone wants immediately
+           ;; after an install finishes, and because everything else here is
+           ;; a fallback for a user who has not written a contract yet.
+           ;; See docs/PERSONAL_CONFIG_CONTRACT.md.
+           ((string-ci=? choice-trimmed "p")
+            (let ((recipe-path (string-append install-root "/postinstall/recipes/add/personal-config.scm")))
+              (if (file-exists? recipe-path)
+                  (system (format #f "guile --no-auto-compile -s ~s" recipe-path))
+                  (begin
+                    (err (format #f "Recipe not found: ~a" recipe-path))
+                    (info "Please ensure bootstrap-postinstall.scm has been run"))))
+            (display "Press Enter to continue...")
+            (force-output)
+            (read-line)
+            (main-menu))
+
            ((string-ci=? choice-trimmed "d")
             (let ((recipe-path (string-append install-root "/postinstall/recipes/add/development.scm")))
               (if (file-exists? recipe-path)
