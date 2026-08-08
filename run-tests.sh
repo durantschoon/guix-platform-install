@@ -75,8 +75,20 @@ if command -v guile &> /dev/null; then
             
             # Run test file with guile from log directory (so logs go there)
             # Capture output but let logs be written to log/ directory
-            TEST_OUTPUT=$(cd "$LOG_DIR" && guile --no-auto-compile -s "../$test_file" 2>&1)
-            TEST_EXIT=$?
+            #
+            # The 'if' form is required, not stylistic: this script runs under
+            # 'set -e', where a failing command substitution in a plain
+            # assignment aborts the whole script before the next line runs. That
+            # made TEST_EXIT unreachable and killed the suite on the FIRST
+            # failing converted-script test -- defeating the deliberate decision
+            # below not to fail the suite for auto-generated tests. Commands in
+            # an if-condition are exempt from set -e, so the exit status can be
+            # captured and acted on.
+            if TEST_OUTPUT=$(cd "$LOG_DIR" && guile --no-auto-compile -s "../$test_file" 2>&1); then
+                TEST_EXIT=0
+            else
+                TEST_EXIT=$?
+            fi
             
             if [ $TEST_EXIT -eq 0 ]; then
                 echo -e "${GREEN}✓ $test_name passed${NC}"
