@@ -103,7 +103,7 @@ if [[ -n "${USEBIGFONT:-}" ]]; then
                 else
                     FONT_FOUND="$FONT_DIR/solar24x32.psfu"
                 fi
-                echo "  ⚠ Font '${USEBIGFONT}' not found, using default: solar24x32"
+                echo "  [WARN] Font '${USEBIGFONT}' not found, using default: solar24x32"
             fi
         fi
         
@@ -113,12 +113,12 @@ if [[ -n "${USEBIGFONT:-}" ]]; then
                 # Remove extension for setfont command
                 FONT_BASE=$(echo "$FONT_FOUND" | sed 's/\.psf.*$//')
                 if sudo setfont "$FONT_BASE" 2>/dev/null; then
-                    echo "  ✓ Set font: $(basename "$FONT_BASE")"
+                    echo "  [OK] Set font: $(basename "$FONT_BASE")"
                 else
-                    echo "  ⚠ Could not set font (may need sudo)"
+                    echo "  [WARN] Could not set font (may need sudo)"
                 fi
             else
-                echo "  ⚠ setfont command not found"
+                echo "  [WARN] setfont command not found"
             fi
         else
             # Font not found - but check if we're already using a large font
@@ -135,13 +135,13 @@ if [[ -n "${USEBIGFONT:-}" ]]; then
             # Check if current font is already a large font (24x32 or bigger)
             if [[ -n "$CURRENT_FONT" ]] && [[ "$CURRENT_FONT" =~ (24|32|36) ]]; then
                 echo ""
-                echo "  ℹ Current font appears to be already large: $CURRENT_FONT"
+                echo "  [INFO] Current font appears to be already large: $CURRENT_FONT"
                 echo "  Skipping font selection (already using a suitable font)"
                 echo ""
             else
                 # Font not found - ask user to choose
                 echo ""
-                echo "  ⚠ Font '${FONT_NAME}' not found in $FONT_DIR"
+                echo "  [WARN] Font '${FONT_NAME}' not found in $FONT_DIR"
                 echo ""
                 echo "  Please choose a font from the list below, or keep the current font:"
                 echo ""
@@ -252,18 +252,18 @@ if [[ -n "${USEBIGFONT:-}" ]]; then
                 if [[ -n "$SELECTED_FONT_FOUND" ]] && command -v setfont >/dev/null 2>&1; then
                     FONT_BASE=$(echo "$SELECTED_FONT_FOUND" | sed 's/\.psf.*$//')
                     if sudo setfont "$FONT_BASE" 2>/dev/null; then
-                        echo "  ✓ Set font: $(basename "$FONT_BASE")"
+                        echo "  [OK] Set font: $(basename "$FONT_BASE")"
                     else
-                        echo "  ⚠ Could not set font (may need sudo)"
+                        echo "  [WARN] Could not set font (may need sudo)"
                     fi
                 else
-                    echo "  ⚠ Could not set selected font"
+                    echo "  [WARN] Could not set selected font"
                 fi
             fi
             fi  # End of "else" for current font check
         fi
     else
-        echo "  ⚠ Font directory not found: $FONT_DIR"
+        echo "  [WARN] Font directory not found: $FONT_DIR"
         echo "  Font will be set after installation completes"
     fi
     echo ""
