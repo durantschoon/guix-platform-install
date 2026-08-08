@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Unwrap markdown-wrapped Scheme files from batch conversion
 # Removes the markdown header and code fences to make valid .scm files
 

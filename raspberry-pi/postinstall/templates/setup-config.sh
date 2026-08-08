@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/run/current-system/profile/bin/bash
 # Setup config.txt for Raspberry Pi model
 # Usage: ./setup-config.sh [pi3|pi4|pi5]
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Rollback recipe deployment - restore bash versions from backup
 
 set -euo pipefail

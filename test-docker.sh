@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Docker-based test runner for guix-platform-install
 # This script runs all tests in a clean Docker environment
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Master test runner for all Guile library tests
 
 set -e

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Test runner script for guix-platform-install
 # This script runs all tests to ensure the refactored code works correctly

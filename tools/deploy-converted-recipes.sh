@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy converted Guile recipe scripts to replace bash versions
 # Creates timestamped backup for easy rollback
 
