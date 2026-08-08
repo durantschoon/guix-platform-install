@@ -276,3 +276,70 @@ Fully validated 2026-08-08.  Everything below was observed, not reasoned:
   - boot volume appears as /dev/sda (virtio-scsi), settled by lsblk on the
     live instance; 'targets' now records this (an sda1 40M BIOS-boot
     partition plus sda2 root, exactly as in QEMU)
+
+
+%metadata-ssh-key-service  (added 2026-08-08)
+---------------------------------------------
+
+The one piece of cloud-init that matters, and the reason the note above about
+"there is no mechanism to inject an SSH key at launch" is now out of date.
+
+Why it exists: without it, a key can only be baked in, so a published image
+cannot serve anyone but its builder, so every user needs their own image build,
+so every user needs Guix installed.  That chain is what kept this platform from
+being usable by someone who has never used Guix.  See
+docs/ORACLE_ONE_CLICK_ROADMAP.md.
+
+Reads http://169.254.169.254/opc/v2/instance/metadata/ssh_authorized_keys and
+installs the result into ~guix/.ssh/authorized_keys at boot.
+
+Decisions that are load-bearing and non-obvious:
+
+  ~/.ssh/authorized_keys, NOT /etc/ssh/authorized_keys.d/
+    Guix's openssh-service-type DELETES AND RECREATES that directory at every
+    activation (gnu/services/ssh.scm: delete-file-recursively).  Anything the
+    service wrote there would vanish.  Both paths are consulted because Guix
+    emits
+      AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2 \
+                         /etc/ssh/authorized_keys.d/%u
+    so the baked-in key and the metadata key coexist, and neither mechanism can
+    destroy the other.  Verified by reading the Guix source, not assumed.
+
+  IMDSv2 and the Bearer header
+    v2 REQUIRES "Authorization: Bearer Oracle".  v1 needs no header but is
+    disabled on instances created with v2-only enforcement, so it is tried only
+    as a fallback for older instances.
+
+  wget, not (web client)
+    Guile's (web http) validates known header names against typed values, and
+    'authorization' is one of them -- handing it a raw string is a trap.  wget
+    is in %base-packages already; file-append pins the exact store path rather
+    than trusting PATH inside a shepherd service.
+
+  Never fails the boot
+    The one-shot always returns #t.  A one-shot returning #f is marked failed
+    and shows as a red line at boot, but "no metadata service" is the CORRECT
+    state during a local QEMU smoke test, and on an image that also carries a
+    baked-in key the instance is still perfectly reachable.  The
+    "metadata-ssh-keys:" log lines carry the real signal.
+
+  Only installs plausible key lines
+    The endpoint returns an HTML error body in some failure modes.  Writing that
+    into authorized_keys would be a silent, baffling failure, so lines are
+    filtered to those beginning ssh- / ecdsa- / sk-ssh- / sk-ecdsa-.
+
+  Short timeouts (--timeout=5 --tries=2)
+    On a machine with no metadata service this must fail in seconds.  A boot
+    that stalls waiting on 169.254.169.254 would be far worse than no keys.
+
+%authorized-key is now OPTIONAL
+    Absent oracle/image/authorized-key.pub, the image builds with no baked key
+    and relies entirely on metadata -- the generic, publishable case.  Present,
+    behaviour is exactly as before.  Both were verified to evaluate to an
+    <operating-system>.
+
+NOT YET VERIFIED ON A LIVE INSTANCE
+    QEMU has no metadata service, so 03-smoke-test.scm exercises only the
+    "no metadata available" path.  The real test is launching with
+    --metadata ssh_authorized_keys=... and NO baked-in key, then logging in.
+    Everything in the roadmap depends on that test passing.

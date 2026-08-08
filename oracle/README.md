@@ -117,7 +117,16 @@ oci compute instance launch \
     --display-name guix-oracle
 ```
 
-Note there is **no `--metadata ssh_authorized_keys`** — that only works for images running cloud-init. The key is already in the image.
+**`--metadata ssh_authorized_keys` now works.** It used to not: that field is consumed by
+cloud-init, which Guix has no equivalent of, so the key had to be baked in. As of
+`%metadata-ssh-key-service` in `image/oracle-image.scm`, a shepherd one-shot reads the key
+from the instance metadata service at boot and installs it — so the same field the OCI
+console's **Add SSH keys** box populates does the right thing, and one image can serve
+anyone. A baked-in `image/authorized-key.pub` is still honoured if present, and the two
+coexist. See [../docs/ORACLE_ONE_CLICK_ROADMAP.md](../docs/ORACLE_ONE_CLICK_ROADMAP.md).
+
+*Not yet verified on a live instance* — QEMU has no metadata service, so only the
+"no metadata" path is covered locally.
 
 Open port 22 in the subnet's security list, then:
 

@@ -50,6 +50,20 @@ if command -v guile &> /dev/null; then
     fi
     echo
     
+    # Oracle image configuration (evaluation only -- seconds, not the hour a
+    # real `guix system image` takes). Skipped without guix on PATH.
+    if command -v guix &> /dev/null; then
+        echo -e "${YELLOW}Testing Oracle Image Configuration...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s oracle/tests/test-oracle-image.scm; then
+            echo -e "${GREEN}\xe2\x9c\x93 Oracle image config tests passed${NC}"
+        else
+            echo -e "${RED}\xe2\x9c\x97 Oracle image config tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
     # Test converted scripts (if any)
     CONVERTED_TESTS_DIR="tools/converted-scripts"
     if [ -d "$CONVERTED_TESTS_DIR" ]; then
