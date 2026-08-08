@@ -6,6 +6,12 @@ This archive contains all completed items from CHECKLIST.md, listed with newest 
 
 ---
 
+## 2026-08-03
+
+- ✅ **Readable Console Font on the Framework 13 Panel (2026-08-03)**: The generated config now sets `solar24x32` on tty1-tty6, overriding `%default-console-font` (Unifont-APL8x16, ~1.5 mm cap height on a 2256x1504 13.5" display). This matters most when the desktop is not up and you are reading an error. Done via `modify-services`, **not** a second `(service console-font-service-type ...)` — `%base-services` already instantiates that type, so a second instance collides on the shepherd provisions `console-font-tty1`..`tty6`. Also corrected [docs/CONSOLE_FONT_TIPS.md](../docs/CONSOLE_FONT_TIPS.md), which recommended `ter-v32n`/`ter-v32b`: those live in `font-terminus`, not `kbd`, and naming a font `kbd` does not ship fails silently at boot. Guarded by `TestGenerateMinimalConfig_ConsoleFont`.
+
+---
+
 ## 2026-08-02
 
 - ✅ **Installed System Now Inherits the Channel Pin (2026-08-02)**: The generated config mirrors the pinned guix+nonguix commit pair into the target via `guix-configuration`, so the guix service writes `/etc/guix/channels.scm` at activation. Found the hard way: `guix system reconfigure /etc/config.scm` **on the machine that config had just built** died with `no code for module (nongnu packages linux)` — `guix system init` copies the store closure, not the channels. The same override adds `https://substitutes.nonguix.org` to `substitute-urls` and its signing key to `authorized-keys`; authorizing the key without the URL does not error, it just silently compiles Linux from source. Guarded by `TestGenerateMinimalConfig_ChannelsAndSubstitutes`; recovery steps in [docs/RECOVERY_REBUILD_FROM_HOST_OS.md](../docs/RECOVERY_REBUILD_FROM_HOST_OS.md). Narrative account in [docs/STORY.md](../docs/STORY.md) section V.

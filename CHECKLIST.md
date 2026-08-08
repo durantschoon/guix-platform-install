@@ -29,11 +29,11 @@ This checklist tracks remaining work for the guix-platform-install project.
 ## ✅ Latest Completed Items
 
 **Most Recent:**
-1. ✅ **Known-Good Artifacts Separated from the Generic Installer (2026-08-05)**: Added `known-good/`, holding configurations that demonstrably booted a real machine, captured from that machine's own `provenance-service-type` record — `configuration.scm`, `channels.scm` and `provenance`, straight out of the system closure. That is a stronger claim than the copy in someone's home directory, which drifts the moment it is edited for the next attempt; the closure's copy is immutable and is what the kernel actually booted. **Capture is time-sensitive:** a generation's provenance lives only in that generation, so `guix gc` or `delete-generations` destroys it. `known-good/capture-provenance.scm` (Guile, per the language policy — `guile-3.0-latest` is in `%base-packages`) copies the three files, refuses to overwrite an existing capture, and emits an `ATTESTATION.md` stub whose human-checkable questions stay as explicit `?` rather than a template that gets filled with "works". `--from` also captures a target mounted elsewhere, e.g. mid-install at `/mnt/guixroot`. The separation is now a rule in `CLAUDE.md`: one-machine answers (login shell, keymap, FHS shim) go to `known-good/` or `guix home`; their generalization goes to the installer as a prompt, which is the R1-R4 roadmap below.
-2. ✅ **Documentation Voice and Dormant Goals (2026-08-05)**: [docs/STORY.md](docs/STORY.md) tells the repin saga as narrative — a pin that could not work because the silicon postdated it, four symptoms read as four problems, a workaround that became the cause while silently dropping an unrelated upstream fix, a system with no supported path to change itself, and one of two required settings applied confidently. [docs/DORMANT_GOALS.md](docs/DORMANT_GOALS.md) records six intentions the repo stated and stopped acting on, recovered from git history: the 90/10 narrative ratio (stated 2025-11-25 in `cdc475e`, then existing **only in that commit message** for eight months while the doc it governed was edited ten more times), Guile conversion Phase 3, reviewer personas never offered at any milestone including first boot, time-tracking retrospectives, retry statistics, and a console-font TODO now cheap to close. The ratio is codified in `CLAUDE.md` — the fix for a goal lost precisely because it was never written there.
-3. ✅ **Postinstall Desktop Switch Fixed (2026-08-03)**: `add_desktop` used to `sed` `%base-services` → `%desktop-services` and stop. `%desktop-services` is a **superset**, so the network-manager/wpa-supplicant/dbus/polkit/ntp that a minimal config lists explicitly then existed twice — verified against a real framework-dual config, the build fails with `more than one target service of type 'dbus'`. Worse, the old warning told you to delete the explicit NetworkManager, which would silently take its DNS block with it. Replaced with `guile-config-helper.scm switch-to-desktop`, which works on parsed S-expressions: it switches the base, drops services the new base provides, and rewrites any that carried a configuration record into `modify-services` clauses with `(inherit config)`. Guarded by Test 6 in `postinstall/tests/run-guile-tests.sh`, confirmed to fail against the old sed-only output.
-4. ✅ **DNS That Survives a Reconnect (2026-08-03)**: The generated config ships `[global-dns-domain-*]` to `/etc/NetworkManager/conf.d/dns.conf` via the service's `extra-configuration-files` field, so a fresh install has working name resolution before anyone logs in. Found on hardware: after a reboot the machine had connectivity but an unusable `/etc/resolv.conf`, so `guix pull` died in `getaddrinfo` — **and reported the nonguix channel as untrusted**, because a channel introduction is verified against the `keyring` branch of a repo that could not be cloned. One fault, two messages, and the louder one sends you auditing signing keys. Hand-editing `resolv.conf` is only a reprieve; NetworkManager rewrites it on re-association. **Tradeoff:** this overrides DHCP-supplied servers, so split-horizon DNS breaks — opt-out documented in `03-config-dual-boot_purpose.txt`. Guarded by `TestGenerateMinimalConfig_DNS`; diagnosis ladder in [docs/RECOVERY_REBUILD_FROM_HOST_OS.md](docs/RECOVERY_REBUILD_FROM_HOST_OS.md).
-5. ✅ **Readable Console Font on the Framework 13 Panel (2026-08-03)**: The generated config now sets `solar24x32` on tty1-tty6, overriding `%default-console-font` (Unifont-APL8x16, ~1.5 mm cap height on a 2256x1504 13.5" display). This matters most when the desktop is not up and you are reading an error. Done via `modify-services`, **not** a second `(service console-font-service-type ...)` — `%base-services` already instantiates that type, so a second instance collides on the shepherd provisions `console-font-tty1`..`tty6`. Also corrected [docs/CONSOLE_FONT_TIPS.md](docs/CONSOLE_FONT_TIPS.md), which recommended `ter-v32n`/`ter-v32b`: those live in `font-terminus`, not `kbd`, and naming a font `kbd` does not ship fails silently at boot. Guarded by `TestGenerateMinimalConfig_ConsoleFont`.
+1. ✅ **Personal Configuration Contract — Postinstall Step One (2026-08-08)**: A platform installer stops at "the machine boots", which is correct but leaves a gap the user crossed by hand on every new machine. `postinstall/recipes/add/personal-config.scm` closes it in one command that assumes nothing is installed: `wget -qO- <raw-url> | guile --no-auto-compile -s /dev/stdin`. That pipe is only safe because every prompt reads `/dev/tty` — stdin is the script itself (verified on Guile 3.0.11). **The constraint that shaped it:** a fresh Guix System's `%base-packages` has `guile`, `wget` and `nss-certs` but **no `git`, `curl`, `gnu-make` or OpenSSH client**, so the script provisions them into the *user profile* (`guix install`, seconds, no root) rather than the system config (minutes, and on the 1 GiB Oracle micro it is what the swap file exists for). What runs is declared by a `guix-personal.scm` at the root of the user's OWN repository — no URL, username or Makefile target is hardcoded here, which is how [docs/PERSONAL_CONFIG_CONTRACT.md](docs/PERSONAL_CONFIG_CONTRACT.md) holds `CLAUDE.md`'s generic-vs-known-good line while still making step two one command. The parser rejects unknown keys **deliberately**: a lenient one drops a typo'd `(require "git")` silently, and the consequence surfaces on a machine reachable only by serial console. Two real bugs caught by its own `--self-test`: `url-host` used `(or (string-index s #\/) (string-index s #\:))`, which yields the first index that *exists* rather than the smallest, so `ssh://git@host:2222/path` returned `host:2222` — unresolvable by `ssh-keyscan`; and `"\033["` is **not an octal escape in Guile** (it reads as NUL + `"33"`, so the colour never applies and a NUL byte goes to the terminal on every message — the correct form is `"\x1b["`). 35 checks in `postinstall/tests/test-personal-config.scm`, itself Guile per the language policy.
+2. ✅ **Known-Good Artifacts Separated from the Generic Installer (2026-08-05)**: Added `known-good/`, holding configurations that demonstrably booted a real machine, captured from that machine's own `provenance-service-type` record — `configuration.scm`, `channels.scm` and `provenance`, straight out of the system closure. That is a stronger claim than the copy in someone's home directory, which drifts the moment it is edited for the next attempt; the closure's copy is immutable and is what the kernel actually booted. **Capture is time-sensitive:** a generation's provenance lives only in that generation, so `guix gc` or `delete-generations` destroys it. `known-good/capture-provenance.scm` (Guile, per the language policy — `guile-3.0-latest` is in `%base-packages`) copies the three files, refuses to overwrite an existing capture, and emits an `ATTESTATION.md` stub whose human-checkable questions stay as explicit `?` rather than a template that gets filled with "works". `--from` also captures a target mounted elsewhere, e.g. mid-install at `/mnt/guixroot`. The separation is now a rule in `CLAUDE.md`: one-machine answers (login shell, keymap, FHS shim) go to `known-good/` or `guix home`; their generalization goes to the installer as a prompt, which is the R1-R4 roadmap below.
+3. ✅ **Documentation Voice and Dormant Goals (2026-08-05)**: [docs/STORY.md](docs/STORY.md) tells the repin saga as narrative — a pin that could not work because the silicon postdated it, four symptoms read as four problems, a workaround that became the cause while silently dropping an unrelated upstream fix, a system with no supported path to change itself, and one of two required settings applied confidently. [docs/DORMANT_GOALS.md](docs/DORMANT_GOALS.md) records six intentions the repo stated and stopped acting on, recovered from git history: the 90/10 narrative ratio (stated 2025-11-25 in `cdc475e`, then existing **only in that commit message** for eight months while the doc it governed was edited ten more times), Guile conversion Phase 3, reviewer personas never offered at any milestone including first boot, time-tracking retrospectives, retry statistics, and a console-font TODO now cheap to close. The ratio is codified in `CLAUDE.md` — the fix for a goal lost precisely because it was never written there.
+4. ✅ **Postinstall Desktop Switch Fixed (2026-08-03)**: `add_desktop` used to `sed` `%base-services` → `%desktop-services` and stop. `%desktop-services` is a **superset**, so the network-manager/wpa-supplicant/dbus/polkit/ntp that a minimal config lists explicitly then existed twice — verified against a real framework-dual config, the build fails with `more than one target service of type 'dbus'`. Worse, the old warning told you to delete the explicit NetworkManager, which would silently take its DNS block with it. Replaced with `guile-config-helper.scm switch-to-desktop`, which works on parsed S-expressions: it switches the base, drops services the new base provides, and rewrites any that carried a configuration record into `modify-services` clauses with `(inherit config)`. Guarded by Test 6 in `postinstall/tests/run-guile-tests.sh`, confirmed to fail against the old sed-only output.
+5. ✅ **DNS That Survives a Reconnect (2026-08-03)**: The generated config ships `[global-dns-domain-*]` to `/etc/NetworkManager/conf.d/dns.conf` via the service's `extra-configuration-files` field, so a fresh install has working name resolution before anyone logs in. Found on hardware: after a reboot the machine had connectivity but an unusable `/etc/resolv.conf`, so `guix pull` died in `getaddrinfo` — **and reported the nonguix channel as untrusted**, because a channel introduction is verified against the `keyring` branch of a repo that could not be cloned. One fault, two messages, and the louder one sends you auditing signing keys. Hand-editing `resolv.conf` is only a reprieve; NetworkManager rewrites it on re-association. **Tradeoff:** this overrides DHCP-supplied servers, so split-horizon DNS breaks — opt-out documented in `03-config-dual-boot_purpose.txt`. Guarded by `TestGenerateMinimalConfig_DNS`; diagnosis ladder in [docs/RECOVERY_REBUILD_FROM_HOST_OS.md](docs/RECOVERY_REBUILD_FROM_HOST_OS.md).
 
 **Superseded:**
 - ❌ **Framework-dual Kernel Args Restore (2025-12-31)**: Restored `nomodeset`, `noapic`, `nolapic` after a refactor dropped them. **Reversed on 2026-08-01** — the refactor had been closer to correct. Those arguments were a misdiagnosis, not a hardware workaround. See item 1 above.
@@ -561,6 +561,140 @@ Learned the complete workflow for getting Framework 13 fully operational after m
 ---
 
 ## 📋 Remaining Work
+
+### 🟠 Bash Reduction — Audit Result (2026-08-08)
+
+**Question asked:** is bash used only where it must be, i.e. where bash exists
+but Guile does not?
+
+**Answer: no, and by a wide margin.** 42 tracked `.sh` files outside `archive/`
+and `tools/converted-scripts/`; roughly **one** has a defensible
+"Guile unavailable" justification.
+
+**The premise most of these rest on is false.** `guile` is in `%base-packages`,
+so it is present on the Guix ISO *and* on every freshly installed system.
+Verify:
+
+```sh
+guix repl -q <<'EOF'
+(use-modules (gnu system) (guix packages))
+(display (member "guile" (map package-name %base-packages)))
+EOF
+```
+
+"It runs on the ISO" is therefore an argument *for* Guile, not for bash. The
+policy's escape hatch — "scripts that must run on non-Guix systems" — genuinely
+applies only to workstation tooling.
+
+**Tier 1 — duplicates of already-deployed Guile (6 files).** A `.scm` doing the
+same job is already committed:
+
+| bash | Guile counterpart |
+|---|---|
+| `postinstall/lib.sh` | `postinstall/lib.scm` |
+| `postinstall/recipes/add-development.sh` | `postinstall/recipes/add/development.scm` |
+| `postinstall/recipes/add-fonts.sh` | `postinstall/recipes/add/fonts.scm` |
+| `postinstall/recipes/add-spacemacs.sh` | `postinstall/recipes/add/spacemacs.scm` |
+| `postinstall/recipes/add-doom-emacs.sh` | `postinstall/recipes/add/doom/emacs.scm` |
+| `postinstall/recipes/add-vanilla-emacs.sh` | `postinstall/recipes/add/vanilla/emacs.scm` |
+
+They cannot simply be deleted: `framework/postinstall/customize`,
+`framework-dual/postinstall/customize` and `raspberry-pi/postinstall/customize`
+are still bash and `source` them. **Only cloudzy migrated** to `customize.scm`.
+That is the actual blocker behind Phase 4's "Remaining: remove original `.sh`
+files after successful testing" — the removal is gated on three unconverted
+`customize` scripts, which the note does not say.
+
+**Tier 2 — converted, never deployed (7 files).** Finished conversions sit
+unused in `tools/converted-scripts/`: `lib_bootstrap-installer.scm`,
+`lib_channel-utils.scm`, `lib_clean-install.scm`, `lib_postinstall.scm`,
+`lib_recovery-complete-install.scm`, `lib_verify-guix-install.scm`,
+`lib_verify-postinstall.scm`. Work already paid for, not banked.
+
+**Tier 3 — Guix-target bash with no conversion at all.**
+`lib/fix-iso-artifacts.sh`, `lib/enforce-guix-filesystem-invariants.sh`,
+`diagnose-guix-build.sh`, `investigate-kernel-location.sh`,
+`fix_guix_cursor.sh`, `raspberry-pi/postinstall/templates/setup-config.sh`,
+plus the three `customize` scripts above.
+
+**Tier 4 — defensibly bash.** Workstation tooling that never touches a Guix
+machine: `run-tests.sh`, `update-manifest.sh`, `lib/validate-before-deploy.sh`,
+`test-docker.sh`, `test/*`, `tools/*`, the `*/tests/run-guile-tests.sh` runners.
+Keep, or convert last.
+
+**Shebang enforcement — DONE (2026-08-08).** `lib/validate-before-deploy.sh`
+never checked shebangs despite `CLAUDE.md` calling the rule CRITICAL. It does
+now, in **two tiers**, because measurement on a running Guix system showed the
+two ways of getting it wrong are not equally bad:
+
+- **FAIL** — `#!/bin/bash`. `/bin` contains **only `sh`**, so the script cannot
+  run at all. Found and fixed: `raspberry-pi/postinstall/templates/setup-config.sh`.
+- **WARN** — `#!/usr/bin/env bash`. **`/usr/bin/env` does exist on Guix**: it is
+  a store symlink installed by `special-files-service-type`, which is in
+  `%base-services`. These 9 scripts do run. Treating them as FAIL would block
+  every deploy over scripts that work, so they are flagged, not gated:
+  `lib/channel-utils.sh`, `lib/postinstall.sh`, `postinstall/lib.sh`, the five
+  `postinstall/recipes/add-*.sh`, and `cloudzy/postinstall/customize.scm`.
+
+`CLAUDE.md`'s claim that env "may not work reliably on the ISO" is overstated
+for an *installed* system — the ISO case was not measured, which is why these
+stay warnings rather than passes.
+
+**Also surfaced: `fix_guix_cursor.sh` is a 0-byte file**, the only empty tracked
+file in the repo, referenced by nothing, committed by accident in `56757b3` (a
+framework-dual initrd commit). Left in place — deletion is your call.
+
+**The bigger find: `run-tests.sh` could not run on a Guix workstation at all.**
+It carried `#!/bin/bash`, and `/bin` on Guix contains only `sh`:
+
+```
+$ ./run-tests.sh
+bad interpreter: /bin/bash: no such file or directory
+```
+
+Eight scripts had this, including **all three** `run-guile-tests.sh` runners and
+`test-docker.sh` — i.e. the script `CLAUDE.md` instructs you to run before every
+commit was unrunnable on the machine you develop on. It only ever worked when
+invoked as `bash run-tests.sh`, which bypasses the shebang. Fixed to
+`#!/usr/bin/env bash` rather than the Guix path, deliberately: this tier should
+also run on CI and on a contributor's non-Guix machine, and `env` satisfies
+both.
+
+**Two further bugs fell out of making it runnable:**
+
+1. **`set -e` defeated the suite's own failure tolerance.** `run-tests.sh` ran
+   `TEST_OUTPUT=$(...)` then `TEST_EXIT=$?`; under `set -e` a failing assignment
+   aborts before the next line, so the suite died on the FIRST failing
+   converted-script test — despite an explicit `# Don't fail the entire test
+   suite for auto-generated test failures` and a commented-out `return 1`.
+   Rewritten as an `if` condition, which is exempt from `set -e`. The suite now
+   runs to completion and exits 0.
+2. **14/14 converted-script tests fail** (`tools/converted-scripts/test-*.scm`).
+   Not a regression — they had never executed, because the runner never started.
+   This is the missing half of the Tier 2 story above: the conversions were
+   generated, their generated tests never passed, so nothing was ever deployed.
+   They do not gate the suite, by the author's explicit decision.
+
+**Device-detection tests were environment-dependent (fixed).** `TestDetectDevice`,
+`TestDetectDeviceFromState`, and three tests in
+`framework-dual/install/01-partition-check_test.go` asserted `expectError: true`
+on the stated assumption of "no actual devices in test environment". True in an
+empty container; false on any workstation with `/dev/sda` or `/dev/nvme0n1`, so
+they failed exactly where a developer runs them. Two were also wrong about the
+code: an unknown platform does **not** error (`DetectDevice`'s `default` branch
+is a deliberate generic fallback), and one condition was inverted such that the
+success case was reported as a failure. Rewritten to assert the contract — the
+return values agree, a returned path exists, detection is deterministic — which
+holds on any host.
+
+**Suggested order:** shebang check in `validate-before-deploy.sh` → convert the
+three `customize` scripts to `.scm` (unblocks deleting six duplicates) → deploy
+the Tier 2 conversions → Tier 3 as each file is next touched.
+
+**Impact:** ⭐⭐ Medium — nothing is broken today; the cost is that the stated
+policy and the tree disagree, so each new script re-litigates the question.
+
+---
 
 ### 🔴 Next Up — Roadmap to "New Laptop → Prompts → Full Guix" (2026-08-04)
 

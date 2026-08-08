@@ -16,7 +16,7 @@ b2d66c39f05a9943073c963eb1763993f4873841c28eab1e888c7500fc09d20b  ./cmd/hash-to-
 2a6a93d83ad59fd45b081a76d09dddf94c19cf052dc2f56eb4e8dc0613847fed  ./cmd/hash-to-words/main_test.go
 8f182be114dd652fc8c1c6ec48b722709b58a1bc7e7cb492d846c9e18723dd4b  ./cmd/recovery/main.go
 5b9757f039714f87bd5cc115b7e53ae3704ed790c0a7cce352c4d25418f6d396  ./framework-dual/install/01-partition-check.go
-16ada754d612ddc64a30667a37bcccc02b001409e452d18a02076c70b949c402  ./framework-dual/install/01-partition-check_test.go
+8a9de6b41da90684c9d58fd7b86e5dc001e1b870bdca7d1402c45a0115abb755  ./framework-dual/install/01-partition-check_test.go
 cb21308d6873b378ee6a6db59c2fb86b31a317cd3ccedde9783150b94ddeb811  ./framework-dual/install/02-mount-existing.go
 f14b5c13b9f056167119b6d33d1ca684202eb7b729db09c9abd967d56bb54882  ./framework-dual/install/02-mount-existing_test.go
 f48de5fe152bb5bcd5b72cbcc36f037375bd3e6a0b35c761eb555e5f41517451  ./framework-dual/install/03-config-dual-boot.go
@@ -32,12 +32,12 @@ abc5adff7532385203b236564f6aa59b1755f1f3e091cb5f3b66ae1e9cffc39f  ./framework/in
 cf0e0f9a551560cf335782c3cf1e8301c044911eec3a302e0cacf489b6fd2e68  ./lib/check-kernel-modules.go
 499c5b966dee469aa4c2e23e58e33a43108b5126649210d1477357b31b6b2a4a  ./lib/colors.go
 0b7b5229750366f4f7bdfd5d39ed32dcf5ad718821d9d599b581853a3a827ff9  ./lib/common.go
-f0b17e052df3bdc2a85d1543bf6295cf2207456acc2c3d00b057b76a10440fa6  ./lib/common_test.go
+ed2ccf69d3b348a271f7c589a1b5b02b587099eac3a78518a04d59b2f2d55c9c  ./lib/common_test.go
 fcf87db6aaf77059af1026e3dce07d3ebd91d6a7567d49731360d3cee82c8203  ./run-remote-steps.go
 
 ## Critical Shell Scripts
 
-1aee725a9e7ea9537b2715897ebe39ca394b2f347e0927b41bdc9547f73bbe87  lib/bootstrap-installer.sh
+679c7a7fdbd303bf5316e363a972e32690fe92b6601a44b40896a6522ef8f5d8  lib/bootstrap-installer.sh
 b6c21e662ca071bec4dcb734fc7abc95f431e1e91655366473aa349508ab17f5  lib/clean-install.sh
 11537f49ea21ecc83299bc2b6ace77b0e12682b2b89937573e70d8a676e32997  lib/verify-guix-install.sh
 0db0e6e259230ed7af5049562ed60caa625be39e28091b8675df50fd3acf9946  lib/recovery-complete-install.sh
@@ -55,7 +55,7 @@ f7e385cb935f6b498d32d0d5efea0efa51fdfff905ec2cf51be8906e7a98d497  postinstall/li
 
 ## Diagnostic Scripts
 
-badf8e3777a8a08f6e5468ed1558b0ab6122d4d1f0b84cc64ffbecccd7a4ddcd  lib/validate-before-deploy.sh
+037276b57ce9b1a1308d25f27a929046815c1f2baab0a3e33e1d05df279ca5aa  lib/validate-before-deploy.sh
 61c42f1a2ea25fcaebc46f8b66b28c4c44178f9b3917dce6a21141616460bfa2  diagnose-guix-build.sh
 f6c1207f91bce6538f2de25252655713b0fc78758998717f205038fe14d8fd2e  investigate-kernel-location.sh
 
@@ -69,9 +69,10 @@ f6c1207f91bce6538f2de25252655713b0fc78758998717f205038fe14d8fd2e  investigate-ke
 204609abbf678b35b36eefbe8082fcd0bda3ef68d7a57f2c5a50c74aa88bfb40  framework-dual/postinstall/customize
 5954e6350f562826b52249d41fee153b3621047ffa7ad0ca6553c0fe87c8477a  framework/postinstall/customize
 59818d2f9db089e2803417be1cd73def4bff1529c3497049e2c6949520228d87  raspberry-pi/postinstall/customize
-05a1c088f9deb946f433282af6f3cd889d796e8fc34a0ee3870c035bb520b3ce  cloudzy/postinstall/customize.scm
+05d7645ef32c29f33dbc72b5a527222d6a1b82805f8afbdce335c6f3a0102465  cloudzy/postinstall/customize.scm
 631f12abddea73caab98afa2177c4d1b812f6eb9cc9226e7a3a2f53f52ee8806  postinstall/recipes/add/development.scm
 b076dde21d023fa1335fd3e045d03e1862ad8c2196805d951d3659bcad43e1fa  postinstall/recipes/add/doom/emacs.scm
 70d114952c096e6802743808b0196ea75d0e9906b8e225887ba44b2655084687  postinstall/recipes/add/fonts.scm
+e2017578ee66b4d8d91f1ccfa936fc90bda257bcb08188554c3404f3dee42384  postinstall/recipes/add/personal-config.scm
 63e69f58ab9136622a458097346fc8e6e76efaaeda5b086d55bea67a7c17f7a7  postinstall/recipes/add/spacemacs.scm
 8345cb82cdf983e6dfd18011fd8d28d77a5deae24dd0f0a71ff08356a4cf7944  postinstall/recipes/add/vanilla/emacs.scm
