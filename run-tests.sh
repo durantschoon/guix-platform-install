@@ -64,6 +64,19 @@ if command -v guile &> /dev/null; then
         echo
     fi
 
+    # Oracle capacity handling (04-deploy.scm). Deliberately OUTSIDE the
+    # `command -v guix` guard above: these tests are offline and pure --
+    # no guix, no oci CLI, no network -- so they must run everywhere.
+    echo -e "${YELLOW}Testing Oracle Capacity Handling...${NC}"
+    echo "----------------------------------------"
+    if guile --no-auto-compile -s oracle/tests/test-oracle-capacity.scm; then
+        echo -e "${GREEN}[OK] Oracle capacity handling tests passed${NC}"
+    else
+        echo -e "${RED}[FAIL] Oracle capacity handling tests failed${NC}"
+        exit 1
+    fi
+    echo
+
     # Test converted scripts (if any)
     CONVERTED_TESTS_DIR="tools/converted-scripts"
     if [ -d "$CONVERTED_TESTS_DIR" ]; then
