@@ -179,6 +179,134 @@ check_unicode() {
 }
 check_unicode
 
+# Test 5b: Validate shebangs on scripts that run on Guix
+#
+# CLAUDE.md calls this rule CRITICAL and nothing enforced it. The required form:
+#     #!/run/current-system/profile/bin/bash      (or .../bin/guile)
+#
+# Two tiers, because the two ways of getting it wrong are not equally bad --
+# measured on a running Guix system (2026-08-08), not assumed:
+#
+#   FAIL  #!/bin/bash          /bin contains ONLY sh. The path does not exist,
+#                              so the script cannot run at all. Also a missing
+#                              shebang, where behaviour depends on the caller.
+#
+#   WARN  #!/usr/bin/env bash  /usr/bin/env DOES exist on Guix System -- it is
+#                              a store symlink installed by
+#                              special-files-service-type, which is part of
+#                              %base-services:
+#                                /usr/bin/env -> /gnu/store/...-coreutils-9.1/bin/env
+#                              So these scripts do run. They deviate from the
+#                              stated policy and depend on a service a custom
+#                              operating-system could drop, which is worth
+#                              flagging -- but calling it FAIL would block every
+#                              deploy over scripts that work.
+#
+# CLAUDE.md's claim that env "may not work reliably on the ISO" is therefore
+# overstated for an installed system. Kept as a warning rather than silence
+# because the ISO case was not measured here, and consistency has its own value.
+echo
+echo "Checking shebangs on Guix-target scripts..."
+check_shebangs() {
+    local required_bash="#!/run/current-system/profile/bin/bash"
+    local required_guile="#!/run/current-system/profile/bin/guile"
+    local broken=0      # cannot run on Guix at all
+    local deviations=0  # runs, but not the policy form
+
+    # Scripts that run on the ISO or on an installed Guix system. Deliberately
+    # NOT the developer tooling (run-tests.sh, update-manifest.sh, tools/*),
+    # which never executes on a Guix machine and may use /usr/bin/env.
+    local targets=()
+    for pattern in \
+        diagnose-guix-build.sh \
+        investigate-kernel-location.sh \
+        fix_guix_cursor.sh \
+        lib/bootstrap-installer.sh \
+        lib/clean-install.sh \
+        lib/recovery-complete-install.sh \
+        lib/verify-guix-install.sh \
+        lib/verify-postinstall.sh \
+        lib/fix-iso-artifacts.sh \
+        lib/enforce-guix-filesystem-invariants.sh \
+        lib/channel-utils.sh \
+        lib/postinstall.sh \
+        postinstall/lib.sh \
+        postinstall/lib.scm \
+        postinstall/recipes/*.sh \
+        postinstall/recipes/add/*.scm \
+        postinstall/recipes/add/*/*.scm \
+        */install/*.sh \
+        */postinstall/customize \
+        */postinstall/customize.scm \
+        */postinstall/templates/*.sh
+    do
+        for f in $pattern; do
+            [[ -f "$f" ]] && targets+=("$f")
+        done
+    done
+
+    for script in "${targets[@]}"; do
+        local first_line
+        first_line=$(head -1 "$script")
+
+        # An empty file is not a shebang problem, it is a leftover. Reported on
+        # its own so the message names the actual fault: telling someone to add
+        # a shebang to a 0-byte file sends them to fix the wrong thing.
+        if [[ ! -s "$script" ]]; then
+            log_test WARN "$script is empty (0 bytes) -- leftover?"
+            verbose_log "Nothing references it; consider deleting it"
+            ((deviations++))
+            continue
+        fi
+
+        # No shebang at all: how it runs depends on the caller's shell.
+        if [[ "$first_line" != \#!* ]]; then
+            log_test FAIL "No shebang in $script"
+            verbose_log "Add: $required_bash"
+            ((broken++))
+            continue
+        fi
+
+        # Match on the interpreter NAME, not on a path substring:
+        # "#!/usr/bin/env bash" does not contain "/bin/bash", so a substring
+        # test on the path silently passes the most common deviation.
+        if [[ "$first_line" == *bash* && "$first_line" != "$required_bash"* ]]; then
+            if [[ "$first_line" == *"/usr/bin/env"* ]]; then
+                log_test WARN "$script uses '#!/usr/bin/env bash'"
+                verbose_log "Runs on Guix (/usr/bin/env is a store symlink), but"
+                verbose_log "policy is: $required_bash"
+                ((deviations++))
+            else
+                log_test FAIL "$script cannot run on Guix: $first_line"
+                verbose_log "Guix has no FHS -- /bin contains only sh"
+                verbose_log "Use: $required_bash"
+                ((broken++))
+            fi
+            continue
+        fi
+
+        # Same two tiers for Guile scripts.
+        if [[ "$first_line" == *guile* && "$first_line" != "$required_guile"* ]]; then
+            if [[ "$first_line" == *"/usr/bin/env"* ]]; then
+                log_test WARN "$script uses '#!/usr/bin/env ... guile'"
+                verbose_log "Policy is: $required_guile --no-auto-compile -s"
+                ((deviations++))
+            else
+                log_test FAIL "$script cannot run on Guix: $first_line"
+                verbose_log "Use: $required_guile --no-auto-compile -s"
+                ((broken++))
+            fi
+        fi
+    done
+
+    if [[ $broken -eq 0 && $deviations -eq 0 ]]; then
+        log_test PASS "All Guix-target scripts use /run/current-system/profile paths"
+    elif [[ $broken -eq 0 ]]; then
+        verbose_log "$deviations script(s) deviate from policy but will run"
+    fi
+}
+check_shebangs
+
 # Test 6: Validate function signatures match callers
 echo
 echo "Checking function signature consistency..."
