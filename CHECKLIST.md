@@ -562,6 +562,52 @@ Learned the complete workflow for getting Framework 13 fully operational after m
 
 ## 📋 Remaining Work
 
+### 🟢 APPROVED FUTURE WORK — "Friend Clicks a Button, Gets Guix on Oracle" (2026-08-08)
+
+**Full plan: [docs/ORACLE_ONE_CLICK_ROADMAP.md](docs/ORACLE_ONE_CLICK_ROADMAP.md).**
+Approved by the user; step 1 is implemented, steps 2-6 are not started.
+
+**Target:** someone who has never used Guix, and has no Guix installed anywhere,
+makes an Oracle free-tier account, chooses a few preferences, waits, and is up
+and running.
+
+**Step 1 — Instance-metadata SSH keys — DONE (`59987c9`).** The unlock. Without
+it a key could only be baked in, so a published image could serve nobody but its
+builder, so every user needed their own build, so every user needed Guix. Now
+`--metadata ssh_authorized_keys` works and **one published image serves
+everyone**.
+
+> ⚠ **Blocking gate: this has never run on a live OCI instance.** QEMU has no
+> metadata service, so only the "no metadata" path is covered locally. Launch
+> once with `--metadata ssh_authorized_keys=...` and **no** baked-in key, and
+> confirm the login. **Do not start steps 2-6 before this passes** — every one
+> of them assumes it. If it fails, the serial console carries
+> `metadata-ssh-keys:` log lines naming the cause.
+
+| Step | Effort | Blocked by |
+|---|---|---|
+| 2. Publish one generic image (release + checksum, import from URL) | Small | step 1 verified |
+| 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | step 2 |
+| 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | step 1 verified |
+| 5. Capacity handling ("Out of host capacity" is common on E2.1.Micro) | Small | independent |
+| 6. Web UI to show friends | Medium | step 3 |
+
+**On step 4:** `oracle-image.scm` hardcodes `%user-name`, `%host-name`,
+`%timezone` and locale. With a shared image these *must* move to first
+boot — you cannot bake a stranger's timezone into an image everyone downloads.
+Note **R1 below does not help here**: it targets framework-dual's Go generator,
+and oracle is a separate Guile path. Oracle's preferences are closer in shape to
+the personal-config contract.
+
+**On step 6 (web UI):** scope it before building. A *presentation-only* page
+(explains the steps, generates commands to paste, links the image) is most of
+the value at a fraction of the risk. Anything that **launches** OCI resources
+needs the visitor's credentials — do not build a service that accepts other
+people's OCI API keys; generate a config they run locally, or lean on OCI's own
+console.
+
+---
+
 ### 🟠 Bash Reduction — Audit Result (2026-08-08)
 
 **Question asked:** is bash used only where it must be, i.e. where bash exists
