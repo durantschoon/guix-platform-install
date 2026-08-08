@@ -70,11 +70,20 @@ func TestLibFunctionIntegration(t *testing.T) {
 		t.Errorf("lib.MakePartitionPath returned %s, expected %s", result, expected)
 	}
 
-	// Test that DetectDeviceFromState is accessible
-	// (We expect an error since we don't have real devices in test environment)
-	_, err := lib.DetectDeviceFromState("", "framework-dual")
-	if err == nil {
-		t.Error("Expected error from DetectDeviceFromState in test environment")
+	// Test that DetectDeviceFromState is accessible.
+	//
+	// Whether it FINDS a device depends on the machine running the tests, so
+	// only the contract is asserted: the two return values must agree. The
+	// previous assertion ("expect an error, we have no real devices") held in
+	// an empty container and failed on any machine with /dev/nvme0n1 or
+	// /dev/sda -- i.e. on the developer workstation this suite is run from.
+	device, err := lib.DetectDeviceFromState("", "framework-dual")
+	if err == nil && device == "" {
+		t.Error("DetectDeviceFromState returned no device and no error")
+	}
+	if err != nil && device != "" {
+		t.Errorf("DetectDeviceFromState returned both an error (%v) and a device (%s)",
+			err, device)
 	}
 
 	// Test that IsPartitionFormatted is accessible
@@ -98,11 +107,15 @@ func TestRefactoredFunctionCalls(t *testing.T) {
 		t.Error("MakePartitionPath should return a non-empty string")
 	}
 
-	// Test DetectDeviceFromState signature
+	// Test DetectDeviceFromState signature.
+	//
+	// The old condition was inverted: `device_result != "" && err == nil` is
+	// the SUCCESS case -- a device found and no error -- and it was being
+	// reported as a failure. It only ever passed because the surrounding
+	// assumption (no devices present) made the branch unreachable.
 	device_result, err := lib.DetectDeviceFromState("", "framework-dual")
-	// We expect an error in test environment, but the function should be callable
-	if device_result != "" && err == nil {
-		t.Error("Expected empty result or error in test environment")
+	if err == nil && device_result == "" {
+		t.Error("DetectDeviceFromState returned no device and no error")
 	}
 
 	// Test IsPartitionFormatted signature
@@ -165,10 +178,26 @@ func TestPartitionPathGeneration(t *testing.T) {
 
 // TestErrorHandling tests that error handling works correctly
 func TestErrorHandling(t *testing.T) {
-	// Test that functions handle invalid inputs gracefully
-	_, err := lib.DetectDeviceFromState("", "nonexistent-platform")
-	if err == nil {
-		t.Error("Expected error for nonexistent platform")
+	// An unrecognised platform is NOT an error: DetectDevice's default branch
+	// is a deliberate generic fallback (/dev/nvme0n1, /dev/sda, /dev/vda), so
+	// on a machine with any of those it succeeds. Asserting an error here
+	// contradicted the implementation and only passed on a device-less host.
+	//
+	// What is worth testing is that an unknown platform is handled the same
+	// way as a known one rather than crashing or returning a half-answer.
+	device, err := lib.DetectDeviceFromState("", "nonexistent-platform")
+	if err == nil && device == "" {
+		t.Error("DetectDeviceFromState returned no device and no error")
+	}
+	if err != nil && device != "" {
+		t.Errorf("DetectDeviceFromState returned both an error (%v) and a device (%s)",
+			err, device)
+	}
+
+	// A device the user names explicitly must never be silently replaced by an
+	// auto-detected one -- that would partition the wrong disk.
+	if _, err := lib.DetectDeviceFromState("/dev/nonexistent-device", "framework-dual"); err == nil {
+		t.Error("Expected an error for an explicitly named device that does not exist")
 	}
 
 	// Test that functions don't panic on empty inputs

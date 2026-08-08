@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -66,31 +67,61 @@ func TestMakePartitionPath(t *testing.T) {
 
 // TestDetectDeviceFromState tests the DetectDeviceFromState function
 func TestDetectDeviceFromState(t *testing.T) {
-	// Test with user-specified device
-	t.Run("UserSpecifiedDevice", func(t *testing.T) {
-		// This test would require mocking os.Stat, but for now we'll test the logic
-		// In a real test environment, we'd use a test filesystem or mock
-		device := "/dev/testdevice"
-		platform := "test"
-		
-		// Since we can't easily mock os.Stat in this simple test,
-		// we'll test the auto-detection path by using a non-existent device
-		// and verifying it falls back to DetectDevice
-		result, err := DetectDeviceFromState("", platform)
-		
-		// DetectDevice should return an error for unknown platform
+	// A user-specified device is stat'd and returned unchanged. Any existing
+	// path exercises that branch -- it does not have to be a block device,
+	// because DetectDeviceFromState only calls os.Stat.
+	t.Run("UserSpecifiedDeviceIsHonoured", func(t *testing.T) {
+		existing := filepath.Join(t.TempDir(), "fake-device")
+		if err := os.WriteFile(existing, []byte{}, 0644); err != nil {
+			t.Fatalf("could not create test file: %v", err)
+		}
+
+		result, err := DetectDeviceFromState(existing, "framework")
+		if err != nil {
+			t.Errorf("DetectDeviceFromState(%s) unexpected error: %v", existing, err)
+		}
+		if result != existing {
+			t.Errorf("DetectDeviceFromState(%s) = %s, want the path unchanged",
+				existing, result)
+		}
+	})
+
+	// A user-specified device that does not exist must fail loudly rather than
+	// silently falling back to auto-detection -- installing to an auto-detected
+	// disk when the user named a different one would be destructive.
+	t.Run("UserSpecifiedMissingDeviceErrors", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "no-such-device")
+
+		result, err := DetectDeviceFromState(missing, "framework")
 		if err == nil {
-			t.Error("Expected error for unknown platform, got nil")
+			t.Errorf("DetectDeviceFromState(%s) expected an error, got nil (result %q)",
+				missing, result)
 		}
-		
-		// Test that empty device string triggers auto-detection
 		if result != "" {
-			t.Errorf("Expected empty result for unknown platform, got %s", result)
+			t.Errorf("DetectDeviceFromState(%s) = %s, want empty on error", missing, result)
 		}
-		
-		// Use the variables to avoid unused variable warnings
-		_ = device
-		_ = result
+	})
+
+	// An empty device string triggers auto-detection.
+	//
+	// Deliberately NOT asserting success or failure: that depends on whether
+	// the machine running the tests has a matching block device. This test
+	// previously asserted an error, on the stated assumption that there are
+	// "no actual devices in test environment" -- true in an empty container,
+	// false on any developer workstation or bare-metal CI runner, where
+	// /dev/sda or /dev/nvme0n1 exists and detection succeeds.
+	//
+	// What must hold on every machine is that the two return values agree.
+	t.Run("EmptyDeviceTriggersAutoDetection", func(t *testing.T) {
+		result, err := DetectDeviceFromState("", "framework")
+
+		if err == nil && result == "" {
+			t.Error("DetectDeviceFromState(\"\") returned no device and no error")
+		}
+		if err != nil && result != "" {
+			t.Errorf("DetectDeviceFromState(\"\") returned both an error (%v) and a device (%s)",
+				err, result)
+		}
 	})
 	
 	// Test with known platforms
@@ -241,51 +272,61 @@ func TestGetEnvOrDefault(t *testing.T) {
 	}
 }
 
-// TestDetectDevice tests the DetectDevice function with different platforms
+// TestDetectDevice tests the DetectDevice function with different platforms.
+//
+// The outcome is hardware-dependent, so the assertions are about the CONTRACT,
+// not about a particular machine. This test used to declare expectError: true
+// for every platform, on the stated assumption that there are "no actual
+// devices in test environment". That holds in an empty container and fails
+// everywhere else: a workstation with /dev/sda or /dev/nvme0n1 detects
+// successfully, so the suite failed on exactly the machines a developer runs it
+// on. It also asserted that an unknown platform errors, which contradicts the
+// implementation -- the default branch is a deliberate generic fallback
+// (/dev/nvme0n1, /dev/sda, /dev/vda), not an error path.
+//
+// What must hold regardless of the host:
+//
+//   - the two return values agree (never a device AND an error, never neither)
+//   - a returned device is an absolute path that actually exists
+//   - detection is deterministic for a given platform
+//   - an unknown platform behaves like the generic fallback, not like an error
 func TestDetectDevice(t *testing.T) {
-	tests := []struct {
-		name     string
-		platform string
-		// We expect errors since we don't have actual devices in test environment
-		expectError bool
-	}{
-		{
-			name:        "Cloudzy platform",
-			platform:    "cloudzy",
-			expectError: true, // No actual devices in test environment
-		},
-		{
-			name:        "Framework platform",
-			platform:    "framework",
-			expectError: true, // No actual devices in test environment
-		},
-		{
-			name:        "Framework-dual platform",
-			platform:    "framework-dual",
-			expectError: true, // No actual devices in test environment
-		},
-		{
-			name:        "Unknown platform",
-			platform:    "unknown",
-			expectError: true, // Unknown platform should error
-		},
-	}
+	platforms := []string{"cloudzy", "framework", "framework-dual", "unknown"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := DetectDevice(tt.platform)
-			
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("DetectDevice(%s) expected error, got nil", tt.platform)
+	for _, platform := range platforms {
+		t.Run(platform, func(t *testing.T) {
+			result, err := DetectDevice(platform)
+
+			if err != nil {
+				if result != "" {
+					t.Errorf("DetectDevice(%s) returned both an error (%v) and a device (%s)",
+						platform, err, result)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("DetectDevice(%s) unexpected error: %v", tt.platform, err)
+				// No matching device on this machine is a legitimate outcome.
+				// The message is what the user acts on, so it must say so.
+				if !strings.Contains(err.Error(), "no suitable block device found") {
+					t.Errorf("DetectDevice(%s) unexpected error: %v", platform, err)
 				}
-				if result == "" {
-					t.Errorf("DetectDevice(%s) returned empty result", tt.platform)
-				}
+				return
+			}
+
+			if result == "" {
+				t.Fatalf("DetectDevice(%s) returned no device and no error", platform)
+			}
+			if !strings.HasPrefix(result, "/dev/") {
+				t.Errorf("DetectDevice(%s) = %s, want a /dev/ path", platform, result)
+			}
+			if _, statErr := os.Stat(result); statErr != nil {
+				t.Errorf("DetectDevice(%s) = %s, which does not exist: %v",
+					platform, result, statErr)
+			}
+
+			// Detection drives partitioning. A function that returned a
+			// different disk on a retry could destroy the wrong one.
+			again, againErr := DetectDevice(platform)
+			if againErr != nil || again != result {
+				t.Errorf("DetectDevice(%s) not deterministic: first %s (err %v), then %s (err %v)",
+					platform, result, err, again, againErr)
 			}
 		})
 	}
