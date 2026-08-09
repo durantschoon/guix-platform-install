@@ -162,6 +162,82 @@ No cloud-init metadata
     cloud-init.  Guix has none; the key is baked in.  Passing metadata
     anyway would silently do nothing and mislead readers.
 
+Availability-domain walk on "Out of host capacity"
+    The launch used to take data[0] -- the first AD the CLI listed --
+    and stop there.  Always Free VM.Standard.E2.1.Micro capacity is
+    routinely exhausted in popular regions, and Oracle answers a full
+    AD with `Out of host capacity.' (service code OutOfCapacity, HTTP
+    500).  That landed on the user as a raw oci CLI traceback at the
+    very last step, after an upload and a 5-20 minute image import had
+    already succeeded.  The script now enumerates the ADs and tries each
+    once, in list order, saying which one it is on.
+
+    Capacity in one AD says nothing about the next -- they are separate
+    physical pools -- which is exactly why the walk is worth doing and
+    why a repeat of the SAME AD is not.
+
+launch-error-kind: four kinds, only one of which walks
+    capacity -> try the next AD.  limit (LimitExceeded / quota) -> stop,
+    because every AD draws on the same tenancy limit and the walk would
+    collect the identical refusal N times.  other (bad subnet OCID,
+    unusable image, malformed parameter) -> stop and print the CLI's own
+    words.  none -> no error signature.
+
+    Matching is on the message text, case-insensitively, not on the HTTP
+    status: OutOfCapacity arrives as a 500, which is indistinguishable
+    from a transient server fault by status code alone.
+
+    The procedure is pure and takes a string, so
+    oracle/tests/test-oracle-capacity.scm exercises it offline against
+    canned CLI output.  That test reads the definitions out of this
+    script rather than loading it (loading would run main and call
+    Oracle), which is why launch-error-kind and capacity-advice must
+    keep depending on core Guile only -- no oci-common helpers inside
+    them.  There is deliberately NO test hook in 04-deploy.scm itself.
+
+ADs enumerated by index, not as an array
+    --query 'data[N].name' --raw-output, N incrementing until the query
+    comes back empty.  Asking for 'data[*].name' returns a JSON LIST,
+    which --raw-output does not flatten, and parsing it would need
+    guile-json -- the one dependency these scripts exist without (see
+    the top of this file).  N+1 small API calls for an N of 1-3.
+
+Statement of omission: NO retry loop, anywhere.  Not per-AD, not
+whole-walk, not with backoff.  Every AD is tried at most once and then
+the script stops.  Exhausted Always Free capacity is a queue measured
+in hours to days, not seconds; a retry loop cannot make a host appear,
+it just turns one user's disappointment into API traffic that can get
+the tenancy rate-limited.  "Come back later and rerun" is the honest
+answer, and the script's own idempotency is what makes it a cheap one:
+a rerun skips straight past the bucket, the image and the network to
+the launch.
+
+Statement of omission: VM.Standard.A1.Flex (Ampere ARM) is ADVICE TEXT
+ONLY, never a fallback the script takes.  It is tempting -- it is the
+other Always Free shape and its capacity pool is usually free when
+E2.1.Micro's is not -- but the qcow2 this repo builds is x86_64 and
+will not boot on ARM.  Silently retrying on A1.Flex would produce a
+successful launch, a RUNNING instance, and an instance that never
+reaches the SSH banner, with the failure hidden inside a boot that no
+one is watching.  A1.Flex is also a flexible shape and needs
+--shape-config with an OCPU count and memory size, which a fixed shape
+does not take.  Real ARM support means building an aarch64 image; that
+is separate work, and until it exists the honest thing to print is a
+direction, not a flag.
+
+Statement of omission: no automatic region change either.  Always Free
+is granted in the tenancy's HOME region, which is fixed at signup, so
+"try another region" is really "create another tenancy" -- not
+something a deployment script should do on a user's behalf.  The advice
+says so plainly rather than implying that editing ~/.oci/config would
+be enough.
+
+Exit code on exhausted capacity is 1, not 0
+    Nothing was deployed, so the script must not report success to a
+    caller.  "Exit cleanly" here means no Python traceback and no raw
+    CLI JSON as the last thing on screen -- an [ERROR] line, the list
+    of ADs tried, and the advice.
+
 SSH BANNER check, deliberately not a login
     "Permission denied (publickey)" from a BatchMode probe user proves
     sshd is up, the route/security list work, and auth is enforced.  A

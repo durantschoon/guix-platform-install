@@ -9,10 +9,18 @@
 ;;;   default route + public subnet -> launch VM.Standard.E2.1.Micro
 ;;;   with a public IP -> wait for the SSH banner.
 ;;;
+;;; The launch walks the availability domains rather than taking the
+;;; first: Always Free E2.1.Micro capacity is routinely exhausted, and
+;;; `Out of host capacity' in one AD says nothing about the next.  The
+;;; walk is bounded (each AD once) and ends in advice, never in a retry
+;;; loop -- see launch-error-kind and capacity-advice below.
+;;;
 ;;; Idempotent throughout: every resource is looked up by display-name
 ;;; first and only created if absent, so a rerun after any failure
 ;;; continues instead of duplicating.  All state lives in OCI itself;
-;;; nothing is stored locally between runs.
+;;; nothing is stored locally between runs.  That property is what makes
+;;; "come back in a few hours and rerun" a real answer to a capacity
+;;; failure: the image and network are already there.
 ;;;
 ;;; No JSON parser needed: every oci call uses --query/--raw-output.
 ;;;
@@ -33,6 +41,11 @@
 (define %vcn-name "guix-vcn")
 (define %shape "VM.Standard.E2.1.Micro")
 
+;; Upper bound on the availability-domain walk.  Real tenancies have 1-3
+;; ADs; this exists so an unexpected CLI response cannot turn the
+;; enumeration below into an unbounded loop.  It is a guard, not policy.
+(define %max-availability-domains 10)
+
 (define (compartment)
   "The root compartment is the tenancy; free-tier resources live there."
   (or (oci-config-value "tenancy")
@@ -41,6 +54,110 @@
 (define (ocid-or-false s)
   "Treat empty/None query output as #f."
   (and (not (string-null? s)) (not (string=? s "None")) s))
+
+;;; ---------------------------------------------------------------------
+;;; Launch-failure classification (PURE -- no I/O, no CLI call)
+;;;
+;;; These two procedures are deliberately free of side effects so that
+;;; oracle/tests/test-oracle-capacity.scm can read them out of this file
+;;; and assert on them offline, with no OCI account and no network.  Keep
+;;; them dependent on core Guile only (string-contains, string-downcase,
+;;; string-join); the test evaluates them in isolation from the rest of
+;;; this script.
+
+(define (launch-error-kind output)
+  "Classify OUTPUT -- the combined stdout+stderr of a `compute instance
+launch' -- as one of four symbols:
+
+  capacity  Oracle has no free host for this shape in the availability
+            domain that was tried.  This is the ONLY kind the caller
+            walks past, because a different AD draws on a different
+            pool and may well succeed.
+  limit     A tenancy service limit or quota was hit.  Every AD draws on
+            the same tenancy limit, so walking would only produce the
+            same refusal three times.
+  other     Any other launch failure -- bad subnet OCID, unavailable
+            image, malformed parameter.  Reported verbatim; retrying it
+            anywhere would be equally wrong.
+  none      No error signature in OUTPUT.
+
+Matching is case-insensitive because the phrase reaches us both as the
+human message and as the machine service code."
+  (let ((text (string-downcase output)))
+    (cond
+     ((string-null? (string-trim-both text)) 'none)
+     ;; Oracle signals exhausted capacity two ways for the same event:
+     ;; the message "Out of host capacity." and the service code
+     ;; "OutOfCapacity".  It arrives with HTTP 500, so the status code
+     ;; alone cannot tell it from a transient server fault -- the text
+     ;; is the only reliable discriminator.
+     ((or (string-contains text "out of host capacity")
+          (string-contains text "outofcapacity"))
+      'capacity)
+     ;; A quota is NOT capacity, and the distinction is the whole point:
+     ;; capacity says "not here, maybe next door", a quota says "not for
+     ;; you, anywhere".  Advising an AD walk for a quota error would send
+     ;; the user round a loop that cannot succeed.
+     ((or (string-contains text "limitexceeded")
+          (string-contains text "quotaexceeded")
+          (string-contains text "service limit"))
+      'limit)
+     ;; Everything the CLI reports as a failure says "error" somewhere:
+     ;; "ServiceError:" for API refusals, "Error:"/"Usage:" for
+     ;; client-side ones.  Absent that, treat OUTPUT as not-an-error
+     ;; rather than guessing -- a bare OCID lands here.
+     ((or (string-contains text "error")
+          (string-contains text "usage:"))
+      'other)
+     (else 'none))))
+
+(define (capacity-advice)
+  "The text printed when EVERY availability domain reports capacity
+exhaustion.  Written for someone who has never used Guix or OCI: it says
+what is not broken, then the three real options in increasing order of
+effort.  Returned as a string rather than printed so the offline test can
+assert that all three options survive future edits."
+  (string-join
+   (list
+    "Oracle has no free Always Free host for this shape in ANY"
+    "availability domain of your home region at the moment.  This is a"
+    "capacity queue, not a mistake on your part, and not a bug in this"
+    "script."
+    ""
+    "Nothing you have built is lost.  The bucket, the uploaded object,"
+    "the imported custom image and the VCN/subnet all still exist, and"
+    "every step of this script looks resources up before creating them."
+    "Rerunning it later resumes at the launch and duplicates nothing."
+    ""
+    "Three things to try, least effort first:"
+    ""
+    "  1. Wait, then rerun this script."
+    "     Capacity is released continuously as other tenancies delete"
+    "     instances, so retrying later genuinely works; people commonly"
+    "     succeed within hours to a few days.  Off-peak hours for the"
+    "     region are the better bet.  Do not sit in a tight retry loop:"
+    "     it will not make a host appear and it can get your tenancy"
+    "     rate-limited."
+    ""
+    "  2. Try a different region."
+    "     Always Free capacity is granted in your tenancy's HOME region"
+    "     only, and the home region is fixed when the tenancy is created."
+    "     A region with spare capacity therefore means a new tenancy (a"
+    "     new free account) whose home region you choose at signup -- not"
+    "     just editing the region in ~/.oci/config."
+    ""
+    "  3. Try the other Always Free shape, VM.Standard.A1.Flex."
+    "     The Ampere ARM shape draws on a completely separate capacity"
+    "     pool, which is often free when E2.1.Micro is not."
+    ""
+    "     [WARN] This is NOT a flag you can add to this script.  The"
+    "     image this repo builds is x86_64, and an x86_64 image will not"
+    "     boot on an ARM instance -- you would need to rebuild the Guix"
+    "     image for aarch64 first.  A1.Flex is also a flexible shape, so"
+    "     a launch additionally needs --shape-config with an OCPU count"
+    "     and a memory size, which a fixed shape does not take."
+    "     Treat this as a direction to go in, not a switch to flip.")
+   "\n"))
 
 ;;; ---------------------------------------------------------------------
 ;;; Storage + image
@@ -171,23 +288,115 @@ grub-efi-bootloader)."
          " || \"lifecycle-state\"==`STARTING`])[0].id'"
          " --raw-output 2>/dev/null"))))
 
+(define (availability-domains)
+  "Every availability domain name in the tenancy, in the order the CLI
+lists them.
+
+Indexed one at a time with --query 'data[N].name' instead of asking for
+the whole array: --raw-output un-quotes a scalar but prints a LIST as
+JSON, and there is no JSON parser here by design (see the purpose file).
+N+1 tiny API calls for an N of 1-3 is a fair price for keeping that rule."
+  (let loop ((index 0) (found '()))
+    (if (>= index %max-availability-domains)
+        (reverse found)
+        ;; ocid-or-false is not OCID-specific: it is the empty/\"None\"
+        ;; guard every --raw-output query needs, and an out-of-range
+        ;; index yields exactly that.
+        (let ((name (ocid-or-false
+                     (oci (string-append
+                           "iam availability-domain list"
+                           " --query 'data[" (number->string index) "].name'"
+                           " --raw-output 2>/dev/null")))))
+          (if name
+              (loop (+ index 1) (cons name found))
+              (reverse found))))))
+
+(define (first-ocid-line text)
+  "The first line of TEXT that looks like an OCID, or #f.
+The launch below merges stderr into stdout so a failure can be
+classified, which means the OCID has to be picked out of possibly noisy
+output rather than assumed to be the whole string."
+  (let loop ((lines (string-split text #\newline)))
+    (cond ((null? lines) #f)
+          ((string-prefix? "ocid1." (string-trim-both (car lines)))
+           (string-trim-both (car lines)))
+          (else (loop (cdr lines))))))
+
+(define (attempt-launch availability-domain image-ocid subnet-ocid)
+  "One launch attempt in AVAILABILITY-DOMAIN.  Returns two values: the
+new instance OCID or #f, and the combined output for classification.
+2>&1 is required -- the CLI writes ServiceError to stderr, and without it
+the capacity message never reaches launch-error-kind."
+  ;; No --metadata ssh_authorized_keys: that needs cloud-init, which
+  ;; Guix does not run.  The key is already baked into the image.
+  (call-with-values
+      (lambda ()
+        (oci/status
+         (string-append
+          "compute instance launch"
+          " --compartment-id " (compartment)
+          " --availability-domain " (sh-quote availability-domain)
+          " --shape " %shape
+          " --image-id " image-ocid
+          " --subnet-id " subnet-ocid
+          " --assign-public-ip true"
+          " --display-name " %instance-name
+          " --query data.id --raw-output 2>&1")))
+    (lambda (output status)
+      (values (and (zero? status) (first-ocid-line output))
+              output))))
+
 (define (ensure-instance image-ocid subnet-ocid)
+  "Launch the instance, walking past `Out of host capacity'.
+
+BOUNDED WALK, NOT A RETRY LOOP: each availability domain is tried at
+most once, in list order, and no AD is ever tried twice.  Capacity does
+not reappear in seconds, so a retry loop would buy nothing and risk
+rate-limiting the tenancy.  When the list runs out the script prints
+advice and stops."
   (or (existing-instance)
-      (let ((availability-domain
-             (oci "iam availability-domain list --query 'data[0].name' --raw-output")))
-        (say "Launching " %shape " ...")
-        ;; No --metadata ssh_authorized_keys: that needs cloud-init, which
-        ;; Guix does not run.  The key is already baked into the image.
-        (oci (string-append
-              "compute instance launch"
-              " --compartment-id " (compartment)
-              " --availability-domain " (sh-quote availability-domain)
-              " --shape " %shape
-              " --image-id " image-ocid
-              " --subnet-id " subnet-ocid
-              " --assign-public-ip true"
-              " --display-name " %instance-name
-              " --query data.id --raw-output")))))
+      (let ((domains (availability-domains)))
+        (when (null? domains)
+          (die "no availability domains returned for this tenancy; check "
+               "that ~/.oci/config names a region you are subscribed to"))
+        (say "Launching " %shape " (" (number->string (length domains))
+             " availability domain(s) to try)...")
+        (let loop ((remaining domains) (exhausted '()))
+          (if (null? remaining)
+              (begin
+                (say "")
+                (say "[ERROR] out of host capacity in all "
+                     (number->string (length exhausted))
+                     " availability domain(s): "
+                     (string-join (reverse exhausted) ", "))
+                (say "")
+                (say (capacity-advice))
+                (say "")
+                (exit 1))
+              (let ((domain (car remaining)))
+                (say "  Trying availability domain " domain " ...")
+                (call-with-values
+                    (lambda () (attempt-launch domain image-ocid subnet-ocid))
+                  (lambda (instance-ocid output)
+                    (cond
+                     (instance-ocid
+                      (say "[OK] launch accepted in " domain)
+                      instance-ocid)
+                     ((eq? (launch-error-kind output) 'capacity)
+                      (say "[WARN] " domain ": no free " %shape
+                           " host -- trying the next availability domain")
+                      (loop (cdr remaining) (cons domain exhausted)))
+                     ((eq? (launch-error-kind output) 'limit)
+                      (die "launch refused by a tenancy service limit, not "
+                           "by capacity.  Every availability domain draws on "
+                           "the same limit, so trying another cannot help.  "
+                           "Check Governance -> Limits, Quotas and Usage in "
+                           "the console, and whether an old instance is still "
+                           "holding your Always Free allowance.\n" output))
+                     (else
+                      (die "launch failed in " domain ", and not because of "
+                           "capacity -- the other availability domains would "
+                           "fail the same way.  The CLI said:\n" output)))))))))))
 
 (define (wait-until-running instance-ocid)
   (or (poll-until "instance to reach RUNNING"
