@@ -91,6 +91,23 @@ if command -v guile &> /dev/null; then
     fi
     echo
 
+    # Comment and gexp preservation in config edits.
+    #
+    # Outside the `command -v guix` guard because the preservation checks need
+    # only guile; the single evaluation check inside the suite detects guix for
+    # itself and skips when it is absent. The fixture is a COPY of
+    # oracle/image/oracle-image.scm -- the hard case, with comments buried
+    # inside a #~ gexp -- so the real config is never touched.
+    echo -e "${YELLOW}Testing Config Helper Comment Preservation...${NC}"
+    echo "----------------------------------------"
+    if guile --no-auto-compile -s lib/tests/test-config-helper-comments.scm; then
+        echo -e "${GREEN}[OK] Config helper comment preservation tests passed${NC}"
+    else
+        echo -e "${RED}[FAIL] Config helper comment preservation tests failed${NC}"
+        exit 1
+    fi
+    echo
+
     # Test converted scripts (if any)
     CONVERTED_TESTS_DIR="tools/converted-scripts"
     if [ -d "$CONVERTED_TESTS_DIR" ]; then

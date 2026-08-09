@@ -6,27 +6,86 @@
 ;;; Note: Shebang uses env -S for portability between Guix and other systems
 ;;; On Guix, you can also run with: guile --no-auto-compile -s guile-config-helper.scm
 
-(use-modules (ice-9 pretty-print)
-             (ice-9 match)
+(use-modules (ice-9 match)
              (ice-9 rdelim)
              (srfi srfi-1))
 
-;;; Read all S-expressions from config file
+;;; --- The reader/printer: (guix read-print) ----------------------------------
+;;;
+;;; This module is the engine behind `guix style'.  It is used here for one
+;;; reason above all others: it represents comments as NODES IN THE TREE rather
+;;; than discarding them.  Guile's stock `read' throws every comment away, so
+;;; the previous read/pretty-print pair silently deleted all 134 comment lines
+;;; of oracle/image/oracle-image.scm on any edit -- in a repository whose entire
+;;; documentation convention is that non-obvious decisions are explained where
+;;; they live.
+;;;
+;;; It also parses #~ / #$ / #$@ / #+ / #+@ natively and prints them back in
+;;; that same spelling, which is why the stage-03 reader-macro workaround that
+;;; used to live here is gone.  See lib/guile-config-helper_purpose.txt.
+;;;
+;;; Resolved at run time rather than with `use-modules' so that a machine
+;;; without guix on its load path gets the sentence below instead of Guile's
+;;; "no code for module (guix read-print)" backtrace.
+(define %read-print
+  (catch #t
+    (lambda () (resolve-interface '(guix read-print)))
+    (lambda _ #f)))
+
+(unless %read-print
+  (display
+   (string-append
+    "[ERROR] The Guile module (guix read-print) is not available.\n"
+    "        It ships with Guix itself, and this helper needs it to edit a\n"
+    "        configuration without deleting its comments.\n"
+    "        Run this on a Guix system, or with guix on GUILE_LOAD_PATH.\n")
+   (current-error-port))
+  (exit 1))
+
+(define read-with-comments        (module-ref %read-print 'read-with-comments))
+(define pretty-print-with-comments
+  (module-ref %read-print 'pretty-print-with-comments))
+(define comment? (module-ref %read-print 'comment?))
+
+;;; blank? is TRUE for comments as well as for vertical space and page breaks:
+;;; it is the "this item is not code" predicate, and therefore the one to use
+;;; for pass-through.  comment? alone would let vertical space be mistaken for
+;;; a field.
+(define blank? (module-ref %read-print 'blank?))
+
+(define (code? item)
+  "Is ITEM a real S-expression rather than a comment or blank line?"
+  (not (blank? item)))
+
+(define (map-code proc items)
+  "Apply PROC to each code item of ITEMS, leaving comments and blank lines
+   exactly where they are.  Rebuilding a form with `map' alone would hand PROC
+   a <comment> record and corrupt the configuration."
+  (map (lambda (item) (if (blank? item) item (proc item))) items))
+
+;;; Read all S-expressions from config file, comments included.
+;;;
+;;; Deliberately a read-with-comments LOOP and not read-with-comments/sequence,
+;;; which looks like the obvious choice and is not: /sequence discards the
+;;; <vertical-space> nodes between top-level forms.  Those nodes are what tell
+;;; the printer to keep a comment on its own line, so without them a comment
+;;; that followed a blank line is re-emitted glued to the end of the preceding
+;;; form as a margin comment -- measured on oracle-image.scm, 2026-08-08.
 (define (read-config config-file)
   (call-with-input-file config-file
     (lambda (port)
       (let loop ((exprs '()))
-        (let ((expr (read port)))
+        (let ((expr (read-with-comments port)))
           (if (eof-object? expr)
               (reverse exprs)
               (loop (cons expr exprs))))))))
 
-;;; Write all S-expressions back to file with pretty printing
+;;; Write all S-expressions back to file, comments and #~ syntax included.
 (define (write-config exprs config-file)
   (call-with-output-file config-file
     (lambda (port)
       (for-each (lambda (expr)
-                  (pretty-print expr port))
+                  (pretty-print-with-comments port expr))
                 exprs))))
 
 ;;; Check if a module is in use-modules
@@ -190,15 +249,30 @@
             (base*   (rewrite-base-services base)))
        ;; Fold the preserved clauses into an existing modify-services on the
        ;; base if there is one; otherwise wrap the base in a new one.
-       (match base*
-         ((('modify-services base-sym existing ...))
-          `(append (list ,@keep)
-                   (modify-services ,base-sym ,@clauses ,@existing)))
-         ((single)
-          (if (null? clauses)
-              `(append (list ,@keep) ,single)
-              `(append (list ,@keep) (modify-services ,single ,@clauses))))
-         (_ `(append (list ,@keep) ,@base*)))))
+       ;;
+       ;; The decision is taken on the CODE items only.  Matching base* itself
+       ;; would be a real bug now that comments are nodes: a single blank line
+       ;; inside the append makes base* two items long, the ((single) ...)
+       ;; pattern stops matching, and control falls to the catch-all -- which
+       ;; drops CLAUSES on the floor, silently discarding the very
+       ;; network-manager configuration this function exists to preserve.  The
+       ;; rebuild then goes through map-code so the blanks stay put.
+       (let ((base-code (filter code? base*)))
+         (match base-code
+           ((('modify-services base-sym existing ...))
+            `(append (list ,@keep)
+                     ,@(map-code
+                        (lambda (_)
+                          `(modify-services ,base-sym ,@clauses ,@existing))
+                        base*)))
+           ((single)
+            (if (null? clauses)
+                `(append (list ,@keep) ,@base*)
+                `(append (list ,@keep)
+                         ,@(map-code
+                            (lambda (s) `(modify-services ,s ,@clauses))
+                            base*))))
+           (_ `(append (list ,@keep) ,@base*))))))
 
     ;; Bare %base-services with no explicit list -- nothing to de-duplicate.
     ('%base-services '%desktop-services)
@@ -289,45 +363,16 @@
 ;;; field from the same text inside a comment or a string, and the failure mode
 ;;; is a config that no longer parses on a machine reachable only by SSH.
 
-;;; --- Reading a config that contains gexps -----------------------------------
-;;;
-;;; Guile's stock reader cannot read a real Guix config:
-;;;
-;;;   oracle/image/oracle-image.scm:89:9: Unknown # object: "#~"
-;;;
-;;; #~ / #$ / #$@ / #+ / #+@ are reader macros that (guix gexp) installs, and a
-;;; plain `guile -s` has never loaded it.  Reading them into the very forms Guix
-;;; expands them to -- #~x is literally (gexp x) -- means gexps survive a
-;;; read/write round trip as ordinary S-expressions and the written config still
-;;; evaluates.  Verified: oracle-image.scm read and pretty-printed back through
-;;; these extensions still yields an <operating-system> under `guix repl`.
-;;;
-;;; This is installed on demand rather than at load time so that add-service,
-;;; check-service and switch-to-desktop keep exactly the behaviour they have.
-(define (install-gexp-reader!)
-  (read-hash-extend #\~ (lambda (chr port) (list 'gexp (read port))))
-  (read-hash-extend #\$ (lambda (chr port)
-                          (let ((c (read-char port)))
-                            (if (eqv? c #\@)
-                                (list 'ungexp-splicing (read port))
-                                (begin (unread-char c port)
-                                       (list 'ungexp (read port)))))))
-  (read-hash-extend #\+ (lambda (chr port)
-                          (let ((c (read-char port)))
-                            (if (eqv? c #\@)
-                                (list 'ungexp-native-splicing (read port))
-                                (begin (unread-char c port)
-                                       (list 'ungexp-native (read port))))))))
-
-(define (read-config/gexp config-file)
-  "Like read-config, but able to read a config containing gexps."
-  (install-gexp-reader!)
-  (read-config config-file))
-
 ;;; --- Generic record-form field access ---------------------------------------
 ;;;
 ;;; Both (operating-system (field value) ...) and (user-account (field value) ...)
 ;;; are the same shape, so one set of accessors serves both.
+;;;
+;;; These are comment-safe for a structural reason worth stating, because it is
+;;; what everything below relies on: a <comment> or <vertical-space> node is a
+;;; RECORD, not a pair, so field-name returns #f for it.  Every lookup here is
+;;; driven by field-name, so comments are invisible to inspection and untouched
+;;; by rewriting, without a single explicit test for them.
 
 (define (field-name field)
   "Return the field name of a (NAME VALUE) form, or #f if FIELD is not one."
@@ -485,7 +530,13 @@
          `(append (list ,@items ,package) ,@rest)))
     (('list items ...)
      (if (memq package items) packages-expr `(list ,@items ,package)))
-    (('cons* items ... base)
+    ;; `base' is guarded with code? because it is the improper-list tail: an
+    ;; unguarded `items ... base' binds BASE to a trailing comment node, and
+    ;; the rebuild would then move the real base into the middle of the list
+    ;; and leave a <comment> record as the tail.  A trailing comment instead
+    ;; falls through to the catch-all below, which is merely a different shape,
+    ;; not a broken one.
+    (('cons* items ... (? code? base))
      (if (memq package items) packages-expr `(cons* ,@items ,package ,base)))
     (('cons item base)
      (if (equal? item package) packages-expr `(cons* ,item ,package ,base)))
@@ -575,7 +626,7 @@
    written, so a refusal leaves the file byte-for-byte as it was.  And a
    transform that changes nothing writes nothing -- re-running with the value
    already in place must not reformat the user's file as a side effect."
-  (let* ((original (read-config/gexp config-file))
+  (let* ((original (read-config config-file))
          (edited   (transform original)))
     (if (equal? original edited)
         (display "[OK] Already set; configuration left untouched\n")

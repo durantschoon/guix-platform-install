@@ -110,7 +110,19 @@
 (define record-has-field?   (helper 'record-has-field?))
 (define collect-forms       (helper 'collect-forms))
 (define user-account-form?  (helper 'user-account-form?))
-(define read-config/gexp    (helper 'read-config/gexp))
+;;; read-config replaces the stage-03 read-config/gexp, which no longer exists:
+;;; (guix read-print) parses gexps natively, so the read-hash-extend variant was
+;;; deleted in stage 04 and the ordinary reader is now the gexp-capable one.
+(define read-config         (helper 'read-config))
+
+;;; blank? is true for comments, vertical space and page breaks alike -- every
+;;; node the reader now interleaves among real forms.  Needed here because a
+;;; config's top-level item count is no longer its form count.
+(define blank?              (helper 'blank?))
+
+(define (code-forms exprs)
+  "The real S-expressions of EXPRS, without comment or blank-line nodes."
+  (remove blank? exprs))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Fixtures
@@ -391,7 +403,7 @@
     (check "three successive edits all exit 0"
            (and (eqv? 0 (car r1)) (eqv? 0 (car r2)) (eqv? 0 (car r3)))
            (string-append (cdr r1) (cdr r2) (cdr r3))))
-  (let* ((exprs (read-config/gexp file))
+  (let* ((exprs (read-config file))
          (systems (collect-forms (helper 'operating-system-form?) exprs)))
     (check "the file reads back without error"
            (pair? exprs))
@@ -419,25 +431,31 @@
                "  (users (cons (user-account (name \"guix\"))"
                " %base-user-accounts))\n"
                "  (packages %base-packages))\n"))
-  (let ((before (read-config/gexp file)))
+  (let ((before (code-forms (read-config file))))
     (check "a config containing #~ and #$ can be read at all"
            (= 3 (length before))
            (format #f "read ~a forms" (length before)))
-    (check "#~ reads as (gexp ...) and #$ as (ungexp ...)"
-           (equal? (list-ref before 1)
-                   '(define %program
-                      (program-file "p" (gexp (begin (display (ungexp foo)))))))
-           (format #f "got: ~s" (list-ref before 1)))
+    ;; Stage 03 asserted here that #~ read as (gexp ...) and #$ as (ungexp ...),
+    ;; which was true of the read-hash-extend reader it had just added.  Stage 04
+    ;; deleted that reader: (guix read-print) keeps gexps in their own syntax
+    ;; both ways, so the assertion is inverted -- the round trip must NOT
+    ;; rewrite #~ into (gexp ...).  That spelling is what a human then has to
+    ;; read in their own config file.
     (let ((result (run-helper "set-host-name" file "my-box")))
       (check "a config containing gexps can be edited" (eqv? 0 (car result))
              (cdr result)))
-    (let ((after (read-config/gexp file)))
+    (let ((text (read-text file)))
+      (check "the written config still spells gexps #~, not (gexp ...)"
+             (and (string-contains text "#~") (string-contains text "#$")
+                  (not (string-contains text "(gexp ")))
+             text))
+    (let ((after (code-forms (read-config file))))
       (check "the gexp form survives the write unchanged"
              (equal? (list-ref before 1) (list-ref after 1))
              (format #f "got: ~s" (list-ref after 1)))
       (check "a second read/write is stable"
              (begin (run-helper "set-host-name" file "my-box")
-                    (equal? after (read-config/gexp file)))))))
+                    (equal? after (code-forms (read-config file))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; 8. A config lacking the field being set is handled, never silently dropped.

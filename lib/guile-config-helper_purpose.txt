@@ -1,0 +1,211 @@
+lib/guile-config-helper.scm -- purpose and justification
+========================================================
+
+What this file is for
+---------------------
+
+It edits a Guix system configuration as S-EXPRESSIONS rather than as text.
+Every subcommand -- add-service, check-service, switch-to-desktop,
+set-host-name, set-timezone, set-login-shell -- parses config.scm into a tree,
+rewrites the tree, and writes the tree back.
+
+The text-editing alternative was tried and removed on 2026-08-03 in 954bb8b.
+`s/(host-name ...)/.../` cannot tell a field from the same characters inside a
+comment or a string, and its failure mode is a config that no longer parses on
+a machine reachable only by SSH. That is the whole reason this file exists.
+
+
+Why (guix read-print), and not Guile's own reader
+-------------------------------------------------
+
+Guile's `read' DISCARDS COMMENTS. It has to: a comment is not a datum, and
+`read' returns data.
+
+That made this helper's round trip lossy in the worst possible way -- it
+succeeded. Running any subcommand against oracle/image/oracle-image.scm
+deleted all 134 of its comment lines and printed "[OK] Configuration updated".
+No error, no warning, no diff worth reading afterwards because the whole file
+had been reflowed anyway. In a repository whose stated convention is that
+non-obvious decisions are explained where they live, the tool for adjusting
+those decisions was destroying the reasons for them.
+
+(guix read-print) is the module behind `guix style'. It represents comments and
+blank lines as NODES IN THE TREE, so they travel with the code through any
+transformation that does not deliberately drop them.
+
+Availability was checked rather than assumed (2026-08-08): it resolves from
+/run/current-system/profile/share/guile/site/3.0/guix/read-print.scm -- the
+SYSTEM profile -- and loads under bare `guile', with no `guix repl' wrapper.
+`guix' is in %base-packages, so a fresh install and the Oracle image both have
+it. No caller's invocation had to change.
+
+
+Why NOT a sidecar file of comments
+----------------------------------
+
+The tempting cheap fix is to record the comments separately before editing and
+paste them back afterwards. It does not work, and the reason is worth stating
+because it will be proposed again.
+
+A comment's address is a TEXT POSITION -- line 97, column 62, or "just after
+the fourth element of that list". S-expression editing exists precisely because
+those positions do not survive the edit. Insert a field, remove a duplicated
+service, or let the printer reflow a long form, and every position after the
+change point has moved. So the sidecar has to be re-keyed onto a tree that no
+longer has the shape it was keyed against.
+
+Get that wrong and the comment does not vanish -- it REAPPEARS SOMEWHERE ELSE.
+That is strictly worse than deleting it. A deleted comment loses information; a
+relocated one asserts something false about whatever code it landed beside.
+"dd rather than fallocate: fallocate produces unwritten extents on ext4" is
+true where it sits and actively misleading three forms away.
+
+Keeping comments as tree nodes makes the position question disappear rather
+than answering it: the comment is between the same two neighbours it was always
+between, whatever happens to the line numbers.
+
+
+Why the stage-03 gexp reader was DELETED
+----------------------------------------
+
+Stage 03 added `install-gexp-reader!', which used read-hash-extend to map
+#~ / #$ / #$@ / #+ / #+@ onto (gexp ...) / (ungexp ...) / etc., plus a
+`read-config/gexp' variant that installed it. That was a correct workaround for
+a real problem -- Guile's stock reader cannot read a Guix config at all, it
+dies with `Unknown # object: "#~"'.
+
+It is now dead code, and was removed on the stage-04 prompt's explicit
+instruction (so the "do not remove code you were not told to remove" guardrail
+does not apply to it). (guix read-print) parses those reader macros natively
+AND prints them back in the same syntax.
+
+Deleting it was not merely tidiness. The old reader was lossy on the way OUT:
+it round-tripped #~(begin ...) into the text `(gexp (begin ...))'. That
+evaluates identically, so nothing broke -- but it silently rewrote the user's
+config into a spelling that appears in no Guix manual, and it did so to a file
+the user is expected to read and keep editing by hand. Two readers for one
+question, one of which quietly rewrites your file, is not a fallback worth
+keeping.
+
+
+THE RULE for anyone editing this file: comments are PASS-THROUGH
+----------------------------------------------------------------
+
+Comment and blank nodes are now INTERLEAVED among a record's fields. This is
+not a corner case. In oracle-image.scm's operating-system form:
+
+    42 items in the body, of which only 11 are fields.
+    The other 31 are comments and blank lines.
+
+So `(match os (('operating-system fields ...) ...))' binds `fields' to a list
+that is three-quarters not-fields. Any code that iterates, counts, matches
+positionally, or rebuilds a form must treat those nodes as pass-through:
+
+  - SKIPPED when inspecting,
+  - PRESERVED when rebuilding,
+  - LEFT IN THEIR ORIGINAL RELATIVE POSITION.
+
+Drop them and you have reintroduced exactly the bug this file was changed to
+remove. Mistake one for a field and you corrupt the configuration.
+
+Use `blank?', not `comment?'. blank? is true for comments AND for vertical
+space AND for page breaks -- it is the "this item is not code" predicate.
+comment? alone would let a blank line be mistaken for a field. `code?' and
+`map-code' in the source are the two helpers that express this; map-code
+applies a procedure to the code items of a list and leaves everything else
+exactly where it was.
+
+Why most of the file needed no change for this
+----------------------------------------------
+
+Worth knowing before you "fix" something that is already correct. A <comment>
+or <vertical-space> is a RECORD, not a pair. Therefore:
+
+  - `field-name' returns #f for one, so every accessor driven by field-name
+    (record-has-field?, record-field-ref, record-field-set,
+    record-field-remove) skips comments and rewrites around them for free.
+  - `(match item (('services v) ...) (_ item))' does not match a record, so
+    comments fall to the catch-all and are preserved.
+  - `collect-forms' and `replace-form' recurse on `pair?' only, so records hit
+    the `else' branch and pass through untouched.
+
+Two places did NOT get this for free, and both are commented in the source:
+
+1. switch-services-to-desktop matched the base tail with `((single) ...)',
+   a pattern requiring a ONE-element list. A single blank line inside the
+   `append' makes that tail two items long, the pattern stops matching, and
+   control falls through to a catch-all that DROPS the accumulated
+   modify-services clauses -- silently discarding the NetworkManager
+   configuration this function exists to preserve. It now decides on
+   `(filter code? base*)' and rebuilds through map-code. The real
+   oracle-image.scm hits this shape: there is a blank line before
+   %base-services.
+
+2. add-package-to-packages matched `('cons* items ... base)'. `base' is the
+   improper-list tail, and an unguarded `items ... base' binds it to a TRAILING
+   COMMENT, which would move the real base into the middle of the list and
+   leave a <comment> record as the tail. `base' is now guarded with `code?'; a
+   trailing comment falls to the catch-all, which produces a different shape
+   but never a broken one.
+
+
+Why a read-with-comments LOOP and not read-with-comments/sequence
+-----------------------------------------------------------------
+
+/sequence is the obvious choice and is the wrong one. Measured on
+oracle-image.scm, 2026-08-08:
+
+  loop:      106 top-level items
+  /sequence: 100 top-level items
+
+The six missing items are <vertical-space> nodes, and they are load-bearing.
+They are what tells pretty-print-with-comments to keep a comment on its own
+line. Without them, a comment that followed a blank line comes back GLUED to
+the end of the preceding form as a margin comment:
+
+  (use-service-modules networking shepherd ssh);; wget: for %metadata-ssh-...
+
+which is a relocated comment -- the failure mode the sidecar section above
+explains is worse than deletion. The loop reproduces that region of the fixture
+byte-for-byte.
+
+
+Statements of omission
+----------------------
+
+- Although it is tempting to make write-config preserve the file's ORIGINAL
+  formatting, it does not: pretty-print-with-comments reflows to `guix style'
+  conventions, so an edited config comes back restyled. This is unchanged from
+  the previous behaviour (plain pretty-print reflowed too) and is not what this
+  file was changed to fix. It is bounded by run-config-edit, which writes
+  NOTHING when the transform changed nothing -- so a config is only ever
+  restyled by an edit that was actually asked for, never by a no-op re-run.
+
+- Although it is tempting to have rewrite-base-services also rewrite the text
+  of comments mentioning %base-services, it deliberately does not. Rewriting a
+  human's prose to match a mechanical substitution is how a comment starts
+  lying about more than it did before. A comment that has gone stale is a
+  question for a human.
+
+- (ice-9 pretty-print) is no longer imported. It was imported solely for
+  `pretty-print', which was the lossy printer this change exists to replace;
+  leaving the import would invite the next reader to wonder which printer is
+  in use.
+
+- The module is resolved with `resolve-interface' inside a `catch' rather than
+  with `use-modules' so that a machine without guix on its load path gets one
+  clear sentence instead of Guile's "no code for module (guix read-print)"
+  backtrace. The cost is that the bindings are runtime values rather than
+  syntax; nothing here needs them to be syntax.
+
+
+Tests
+-----
+
+lib/tests/test-config-helper-comments.scm, registered in run-tests.sh behind
+`command -v guile'. It runs every subcommand against a COPY of
+oracle-image.scm -- the hard case, with comments buried several levels deep
+inside a #~ gexp -- and asserts that the comment count, the #~ count, the #$
+count and the position of the "dd rather than fallocate" comment relative to
+its dd call all survive. It also asserts the edited config still evaluates to
+an <operating-system>, and that a repeated edit is a byte-level no-op.
