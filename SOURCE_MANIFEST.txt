@@ -47,7 +47,7 @@ f856f82f394f1a3d6b982eb61e0fcab1d62a30de59ca01bdd08f6c362e46d25e  lib/postinstal
 
 ## Guile Library Scripts
 
-0ece64feca9004076fbee6bd46de419a004b959922b9249f07757660df92468e  lib/guile-config-helper.scm
+c7f1547d7273f1b4456879839be923a203f9e031c4fd2fd88af00d5d224d30a2  lib/guile-config-helper.scm
 c6cf685b75ed05e77f858a00474a610b2dc1191ea8ed3124a0106ce7de55f45b  lib/bootstrap-postinstall.scm
 89d2c2b52d5da202b0dc4d7de2dc7121bc74c023cd601a4b24a07aee69d81d46  lib/fix-network.scm
 cf72b297e8043a00058ad0f5baa3806b175e91c34c315a21659074d6082925bc  lib/finish-installation.scm
@@ -55,7 +55,7 @@ d4678a5c0e473fe43c23b5a4087809622e5b2703377bea56ce572ad0dd1ffc43  postinstall/li
 
 ## Diagnostic Scripts
 
-185de0bd2c65115d906f753cf4f92d361149d865c684f7496f1f9a39fe42dc15  lib/validate-before-deploy.sh
+c139a569a01ea8d232ac87e2890eb0c935e8d9dd117f799a7ce9eab1114c7876  lib/validate-before-deploy.sh
 61c42f1a2ea25fcaebc46f8b66b28c4c44178f9b3917dce6a21141616460bfa2  diagnose-guix-build.sh
 f6c1207f91bce6538f2de25252655713b0fc78758998717f205038fe14d8fd2e  investigate-kernel-location.sh
 

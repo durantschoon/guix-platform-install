@@ -413,16 +413,59 @@ check_manifest() {
         return 1
     fi
 
-    # Check if lib/common.go checksum matches manifest
-    local current_hash=$(shasum -a 256 lib/common.go | awk '{print $1}')
-    local manifest_hash=$(grep lib/common.go SOURCE_MANIFEST.txt | awk '{print $1}')
+    # Verify EVERY entry, not just lib/common.go.
+    #
+    # This used to hash lib/common.go alone -- one file out of the ~50 the
+    # manifest covers -- so a change to any other file left the check green.
+    # Observed 2026-08-08: lib/guile-config-helper.scm had changed
+    # (0ece64fe... -> c7f1547d...) and this still printed
+    # "[PASS] Source manifest is up-to-date".
+    #
+    # It is also a FAIL now, not a WARN. Users verify the manifest hash to
+    # confirm GitHub's CDN is serving current code (CLAUDE.md, "Verification
+    # Strategy"); a stale manifest means their checksum comparison fails
+    # during an install. That is not advisory.
+    #
+    # Process substitution, per the repo convention: `done < file` consumes
+    # stdin and breaks any later read.
+    local mismatched=0
+    local missing=0
+    local checked=0
 
-    if [[ "$current_hash" == "$manifest_hash" ]]; then
-        log_test PASS "Source manifest is up-to-date"
+    while IFS= read -r line; do
+        # Skip comments and blank lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// /}" ]] && continue
+
+        local expected_hash="${line%% *}"
+        local file="${line##* }"
+        [[ -z "$file" || -z "$expected_hash" ]] && continue
+
+        if [[ ! -f "$file" ]]; then
+            log_test FAIL "Manifest lists a file that does not exist: $file"
+            ((missing++))
+            continue
+        fi
+
+        local actual_hash
+        actual_hash=$(shasum -a 256 "$file" | awk '{print $1}')
+        ((checked++))
+
+        if [[ "$actual_hash" != "$expected_hash" ]]; then
+            if [[ $mismatched -eq 0 ]]; then
+                log_test FAIL "Source manifest is STALE (run ./update-manifest.sh)"
+            fi
+            verbose_log "$file"
+            verbose_log "  manifest: $expected_hash"
+            verbose_log "  actual:   $actual_hash"
+            ((mismatched++))
+        fi
+    done < <(cat SOURCE_MANIFEST.txt)
+
+    if [[ $mismatched -eq 0 && $missing -eq 0 ]]; then
+        log_test PASS "Source manifest is up-to-date ($checked files verified)"
     else
-        log_test WARN "Source manifest may be outdated (run ./update-manifest.sh)"
-        verbose_log "Current:  $current_hash"
-        verbose_log "Manifest: $manifest_hash"
+        verbose_log "$mismatched of $checked files differ from the manifest"
     fi
 }
 check_manifest
