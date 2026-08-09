@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guix System on Oracle Cloud's free tier</title>
+<meta name="description" content="How to get a declarative, reproducible Guix System running on an Oracle Cloud Always Free VM. Presentation only — this page deploys nothing.">
+<meta name="color-scheme" content="light dark">
+<style>
+  /* ------------------------------------------------------------------
+     Everything is inline and self-contained on purpose. This page is
+     meant to open from a file:// URL with no network at all — no fonts,
+     no stylesheets, no scripts, no analytics. If you are editing it and
+     reach for a CDN, don't; see web/README.md.
+     ------------------------------------------------------------------ */
+
+  :root {
+    --bg:        #fbfaf8;
+    --surface:   #ffffff;
+    --surface-2: #f2efe9;
+    --text:      #1c1a17;
+    --text-dim:  #5c574f;
+    --rule:      #ddd7cc;
+    --accent:    #7a4b1e;
+    --accent-dim:#f0e6d8;
+    --code-bg:   #17150f;
+    --code-fg:   #ece5d8;
+    --warn-bg:   #fdf3e0;
+    --warn-rule: #d9a441;
+    --ok:        #2f6b3a;
+    --no:        #9c3b2c;
+    --shadow:    0 1px 2px rgba(28,26,23,.06), 0 6px 20px rgba(28,26,23,.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14130f;
+      --surface:   #1c1a16;
+      --surface-2: #24211b;
+      --text:      #ece7dc;
+      --text-dim:  #a49d90;
+      --rule:      #34302a;
+      --accent:    #e0a869;
+      --accent-dim:#2c2419;
+      --code-bg:   #0c0b08;
+      --code-fg:   #e4ddcf;
+      --warn-bg:   #2a2213;
+      --warn-rule: #9c7526;
+      --ok:        #7bbd86;
+      --no:        #e08c7b;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    /* A page that never scrolls sideways. Wide things scroll inside
+       their own box instead — see .scroll below. */
+    overflow-x: hidden;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 5rem;
+  }
+
+  /* ---- masthead ---- */
+
+  header.masthead {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 1.75rem;
+    margin-bottom: 2.25rem;
+  }
+
+  .eyebrow {
+    font-size: .78rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 .6rem;
+  }
+
+  h1 {
+    font-size: clamp(1.75rem, 6vw, 2.6rem);
+    line-height: 1.15;
+    margin: 0 0 .75rem;
+    letter-spacing: -.02em;
+  }
+
+  .lede {
+    font-size: 1.1rem;
+    color: var(--text-dim);
+    margin: 0;
+  }
+
+  h2 {
+    font-size: 1.35rem;
+    letter-spacing: -.01em;
+    margin: 3rem 0 .9rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  h2:first-of-type { border-top: 0; padding-top: 0; }
+
+  h3 {
+    font-size: 1.02rem;
+    margin: 1.75rem 0 .5rem;
+  }
+
+  p { margin: 0 0 1rem; }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: .18em;
+    text-decoration-thickness: 1px;
+  }
+  a:hover { text-decoration-thickness: 2px; }
+
+  ul, ol { padding-left: 1.3rem; margin: 0 0 1rem; }
+  li { margin-bottom: .5rem; }
+
+  strong { font-weight: 650; }
+
+  code, pre, kbd, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                 "Liberation Mono", monospace;
+  }
+
+  /* Inline code */
+  p code, li code, td code, dd code {
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: .08em .34em;
+    font-size: .875em;
+    /* long store paths must not widen the page */
+    overflow-wrap: anywhere;
+  }
+
+  kbd {
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: .05em .35em;
+    font-size: .85em;
+  }
+
+  /* ---- command blocks ----
+     .scroll is the container that scrolls; the page never does. */
+  .cmd {
+    margin: 1.1rem 0 1.4rem;
+  }
+
+  .cmd-label {
+    display: block;
+    font-size: .74rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: .4rem;
+  }
+
+  .scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--code-bg);
+    border-radius: 8px;
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow);
+  }
+
+  .scroll pre {
+    margin: 0;
+    padding: .95rem 1.05rem;
+    color: var(--code-fg);
+    font-size: .875rem;
+    line-height: 1.6;
+    /* Preserve the command exactly; no soft wrapping that could make a
+       copied line ambiguous. */
+    white-space: pre;
+    tab-size: 2;
+  }
+
+  .scroll pre::selection, .scroll pre ::selection {
+    background: #7a4b1e; color: #fff;
+  }
+
+  .cmd-note {
+    font-size: .85rem;
+    color: var(--text-dim);
+    margin: .45rem 0 0;
+  }
+
+  /* ---- callout ---- */
+
+  .callout {
+    background: var(--warn-bg);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--warn-rule);
+    border-radius: 6px;
+    padding: .9rem 1.1rem;
+    margin: 1.4rem 0;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .tag {
+    display: block;
+    font-size: .74rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: .35rem;
+  }
+
+  /* ---- numbered steps ---- */
+
+  ol.steps {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0 0;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 1.5rem 3rem;
+    margin: 0;
+    border-left: 1px solid var(--rule);
+    margin-left: 1rem;
+  }
+
+  ol.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: -1rem;
+    top: -.1rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .9rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  ol.steps h3 { margin-top: .1rem; }
+
+  /* ---- status table ---- */
+
+  .status {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0;
+    font-size: .93rem;
+  }
+  .status th, .status td {
+    text-align: left;
+    padding: .6rem .7rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  .status th {
+    font-size: .78rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .status td:first-child { width: 8.5rem; white-space: nowrap; }
+
+  .badge {
+    display: inline-block;
+    font-size: .74rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: .12rem .45rem;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+  }
+  .badge.yes { color: var(--ok); }
+  .badge.no  { color: var(--no); }
+
+  .table-scroll { overflow-x: auto; }
+
+  /* ---- links list ---- */
+
+  dl.links { margin: 1rem 0 0; }
+  dl.links dt { font-weight: 650; margin-top: 1rem; }
+  dl.links dd { margin: .15rem 0 0; color: var(--text-dim); font-size: .93rem; }
+
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-size: .88rem;
+    color: var(--text-dim);
+  }
+
+  @media (max-width: 34rem) {
+    body { font-size: 16px; }
+    .wrap { padding: 1.75rem 1rem 3.5rem; }
+    ol.steps > li { padding-left: 2.4rem; }
+    .scroll pre { font-size: .8rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">guix-platform-install &middot; oracle</p>
+  <h1>Guix System on Oracle Cloud's free tier</h1>
+  <p class="lede">A whole Linux machine whose entire configuration is one file you
+  can read, on a VM that costs nothing per month. This page explains how — it is
+  a description of the flow, not a button. It deploys nothing and asks you for
+  nothing.</p>
+</header>
+
+<div class="callout">
+  <span class="tag">Read this first</span>
+  <p>Parts of this flow are <strong>not finished yet</strong>. The published,
+  ready-to-import image does not exist, and one piece of it has never been run on
+  a real Oracle instance. The <a href="#status">status section</a> at the bottom
+  says exactly which parts, and this page does not pretend otherwise anywhere
+  above it.</p>
+</div>
+
+<h2 id="what">What this is</h2>
+
+<p><a href="https://guix.gnu.org/">Guix System</a> is a Linux distribution where
+the machine is described by a file rather than assembled by a sequence of
+commands you have to remember. You write down the services, users and packages
+you want; <code>guix system reconfigure</code> makes the machine match. Every
+change becomes a new generation you can boot back into from the GRUB menu, so a
+bad change is a reboot rather than a reinstall.</p>
+
+<p><a href="https://www.oracle.com/cloud/free/">Oracle Cloud's Always Free
+tier</a> includes VM shapes that stay free indefinitely rather than for a trial
+period, which makes it a reasonable place to keep a small always-on machine.
+The relevant shape here is <code>VM.Standard.E2.1.Micro</code>: 1 OCPU, 1&nbsp;GiB
+of RAM. That is enough to run the system and to do a <code>guix pull</code>, but
+the 1&nbsp;GiB is the constraint you will actually feel — the image ships a swap
+file specifically so that a reconfigure has somewhere to spill.</p>
+
+<p>Oracle cannot boot an installer ISO the way a laptop can; it only accepts a
+disk image you upload. So there is no interactive installer in this flow at all.
+The system is built as a QCOW2 image from
+<code>oracle/image/oracle-image.scm</code>, imported as a custom image, and
+launched. Everything personal happens afterwards, over SSH.</p>
+
+<h2 id="need">What you need</h2>
+
+<ul>
+  <li>An <a href="https://www.oracle.com/cloud/free/">Oracle Cloud account</a>.
+  Signing up requires a credit card for identity verification; Always Free
+  resources are not billed to it.</li>
+  <li>An <strong>SSH key pair</strong>. You will paste the <em>public</em> half
+  into Oracle's console. If you do not have one:
+  <code>ssh-keygen -t ed25519</code>, then use
+  <code>~/.ssh/id_ed25519.pub</code>.</li>
+  <li>A terminal that can run <code>ssh</code>. Nothing else is installed on your
+  machine — you do <em>not</em> need Guix locally for the console path below.</li>
+  <li>About <strong>20 minutes</strong>, most of it waiting on the image import.</li>
+</ul>
+
+<div class="callout">
+  <span class="tag">Expect this, it is normal</span>
+  <p><strong>Always Free capacity runs out.</strong> Launching
+  <code>VM.Standard.E2.1.Micro</code> in a busy region frequently answers
+  <em>"Out of host capacity"</em>. This is not a mistake you made and not
+  something a retry loop fixes reliably. The usual remedies are to try a
+  different availability domain in your region, or to use the ARM
+  <code>VM.Standard.A1.Flex</code> shape, which is also Always Free and often has
+  room. Oracle's free tier is genuinely free, and the price of that is that you
+  are last in line for hardware.</p>
+</div>
+
+<h2 id="steps">The steps</h2>
+
+<p>This is the console-only path: everything up to the SSH login happens in
+Oracle's own web console, which is the only thing that ever sees your Oracle
+credentials.</p>
+
+<ol class="steps">
+
+  <li>
+    <h3>Get the image</h3>
+    <p>The intent is that you import a published, generic Guix image straight
+    from a URL. <strong>That image is not published yet</strong>, so there is no
+    URL to give you and this page will not invent one.</p>
+    <p>Until it exists, the image has to be built once by someone who already
+    runs Guix, using
+    <a href="https://github.com/durantschoon/guix-platform-install/blob/main/oracle/README.md">oracle/README.md</a>,
+    and uploaded to an Object Storage bucket you can read. The build is a single
+    declarative file and the whole upload/import/launch sequence is scripted
+    there.</p>
+  </li>
+
+  <li>
+    <h3>Import it as a custom image</h3>
+    <p>In the OCI console: <strong>Compute &rarr; Custom Images &rarr; Import
+    image</strong>, pointing at the object in Object Storage. Two fields are not
+    optional:</p>
+    <ul>
+      <li><strong>Image type: QCOW2</strong></li>
+      <li><strong>Launch mode: Paravirtualized</strong> — it has to match the
+      BIOS/MBR layout the image is built with. Choosing <em>Native</em> (UEFI)
+      gives you an instance that never boots.</li>
+    </ul>
+    <p>Import is asynchronous; wait for the image to reach <strong>Available</strong>.
+    This is the slow part.</p>
+  </li>
+
+  <li>
+    <h3>Launch, pasting your public key</h3>
+    <p>Create an instance from that custom image on shape
+    <code>VM.Standard.E2.1.Micro</code>, in a VCN with a public subnet — the
+    console's <strong>Create VCN with Internet Connectivity</strong> wizard makes
+    one correctly. Assign a public IP.</p>
+    <p>Paste the contents of your <code>.pub</code> file into the console's
+    <strong>Add SSH keys</strong> box. That box writes the key into the
+    instance's metadata, and a small service in the image reads it at boot and
+    installs it. This is what lets one published image serve everybody instead of
+    one build per person.</p>
+    <p>Then open <strong>port 22</strong> in the subnet's security list, which is
+    not open by default.</p>
+    <p class="cmd-note">The metadata key service is the part that has never been
+    exercised on a live instance — see <a href="#status">status</a>.</p>
+  </li>
+
+  <li>
+    <h3>Log in</h3>
+    <div class="cmd">
+      <span class="cmd-label">on your machine</span>
+      <div class="scroll"><pre>ssh guix@&lt;public-ip&gt;</pre></div>
+      <p class="cmd-note">The user is <code>guix</code>. Password authentication
+      is disabled by design, so this succeeds or it does not — there is no
+      password to fall back on. If it does not, Oracle's serial console
+      (<em>Instance &rarr; Console connection</em>) works: the image deliberately
+      puts GRUB and a login prompt on <code>ttyS0</code> for exactly this
+      moment.</p>
+    </div>
+  </li>
+
+  <li>
+    <h3>Make it yours</h3>
+    <p>What you are logged into is deliberately bare: no <code>git</code>, no
+    editor beyond <code>nano</code> and <code>mg</code>, bash as the login shell.
+    One command turns it into your machine — that is the next section.</p>
+  </li>
+
+</ol>
+
+<h2 id="oneliner">The one command</h2>
+
+<p>Run this on the instance, over that SSH session:</p>
+
+<div class="cmd">
+  <span class="cmd-label">on the instance</span>
+  <div class="scroll"><pre>wget -qO- https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm \
+  | guile --no-auto-compile -s /dev/stdin</pre></div>
+  <p class="cmd-note">Nothing has to be installed first. A fresh Guix System
+  already has <code>wget</code>, <code>guile</code> and <code>nss-certs</code>;
+  the script installs <code>git</code> itself, into your user profile rather than
+  the system, so it takes seconds instead of a rebuild.</p>
+</div>
+
+<p>It asks for your configuration repository's URL, sets up an SSH key and
+<em>pauses</em> while you register that key with GitHub or wherever your
+repository lives — no script can paste a key into a web page for you, so it stops
+there deliberately instead of failing later at <code>git clone</code> with
+<code>Permission denied (publickey)</code>. Then it clones, shows you a plan, and
+runs each step with a yes/no prompt and the exact shell command echoed first.</p>
+
+<p>Piping a script into <code>guile</code> like this is safe here for a specific
+reason: every prompt in it reads from <code>/dev/tty</code>, not stdin — stdin is
+the script itself, arriving down the pipe.</p>
+
+<h2 id="byoc">Bring your own config</h2>
+
+<p>What that command <em>runs</em> is not decided by this repository. It is
+decided by a file named <code>guix-personal.scm</code> at the root of your own
+configuration repository. Your dotfiles repo declares what a new machine needs;
+the installer stays generic. Nothing personal — no URL, no username, no Makefile
+target — is hardcoded anywhere in the installer.</p>
+
+<div class="cmd">
+  <span class="cmd-label">guix-personal.scm</span>
+  <div class="scroll"><pre>(personal-config
+  (version 1)
+  (name "dot_files")
+  (description "Durant's personal configuration")
+
+  ;; Installed into the user profile before any step runs.
+  (requires "git" "gnu-make" "zsh")
+
+  ;; Optional: copied to ~/.config/guix/channels.scm, with confirmation.
+  (channels "channels.scm")
+
+  (steps
+    (step (name "links")
+          (run "make set_up_links")
+          (description "Symlink dotfiles into $HOME")
+          (default? #t))
+    (step (name "home")
+          (run "make apply")
+          (description "guix home reconfigure")
+          (default? #t))
+    (step (name "keyd")
+          (run "make setup-keyd")
+          (description "Key remapping; physical machines only")))
+
+  (notes "Log out and back in for the login shell change to take effect."))</pre></div>
+</div>
+
+<p>Steps marked <code>(default? #t)</code> are the ones "the one command" runs;
+the rest are offered and default to no. Unknown keys are a hard error rather than
+being silently ignored, because a typo'd <code>(require "git")</code> that is
+quietly dropped becomes a step failing on a machine you are reaching over a
+serial console.</p>
+
+<p>Write the file before you need it, and check it on a machine you can actually
+debug:</p>
+
+<div class="cmd">
+  <span class="cmd-label">on your workstation, in a checkout of this repo</span>
+  <div class="scroll"><pre>guile --no-auto-compile -s postinstall/recipes/add/personal-config.scm \
+      --plan ~/dot_files</pre></div>
+  <p class="cmd-note">Prints the full plan and exits non-zero if the contract is
+  malformed. <code>--init ~/dot_files</code> will generate a starting point from
+  your existing <code>Makefile</code>.</p>
+</div>
+
+<p>The full specification — every key, what is required, what the failure modes
+are — is in
+<a href="https://github.com/durantschoon/guix-platform-install/blob/main/docs/PERSONAL_CONFIG_CONTRACT.md">docs/PERSONAL_CONFIG_CONTRACT.md</a>.</p>
+
+<h2 id="status">Status: what is verified and what is not</h2>
+
+<p>This section exists so the rest of the page can be read at face value. Two
+things this flow depends on are not done, and both are load-bearing for the
+console-only path above.</p>
+
+<div class="table-scroll">
+<table class="status">
+  <thead>
+    <tr><th>Verified?</th><th>What</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge yes">yes</span></td>
+      <td>Building the image, the local QEMU smoke test, uploading, importing,
+      and launching an instance with sshd answering on its public IP. Done
+      end-to-end on 2026-08-08 with a key baked into the image.</td>
+    </tr>
+    <tr>
+      <td><span class="badge no">no</span></td>
+      <td><strong>The published generic image does not exist yet.</strong> There
+      is no URL to import from, and this page does not link to one. Someone with
+      Guix installed must build and share the image until it is published. This
+      is step 2 of the roadmap.</td>
+    </tr>
+    <tr>
+      <td><span class="badge no">no</span></td>
+      <td><strong>The metadata SSH key service has never run on a live
+      instance.</strong> Pasting your key into the console's <strong>Add SSH
+      keys</strong> box is supposed to be what gets you in at step 3 above. The
+      service is implemented and the "no metadata available" path is covered by
+      the local QEMU test — but QEMU has no instance metadata service, so the
+      path that actually matters has only been reasoned about, not observed.
+      Until one live launch confirms it, assume you may need a key baked into the
+      image instead.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>Everything downstream is gated on that second item. If a launch with a
+metadata-only key lets you <code>ssh guix@&lt;ip&gt;</code>, the rest of the
+roadmap is unlocked; if it does not, the serial console log lines beginning
+<code>metadata-ssh-keys:</code> name the failure.</p>
+
+<h2 id="more">Where to read further</h2>
+
+<dl class="links">
+  <dt><a href="https://github.com/durantschoon/guix-platform-install/blob/main/oracle/README.md">oracle/README.md</a></dt>
+  <dd>The full build-upload-import-launch reference, the scripted path, and what
+  to do when it does not boot.</dd>
+
+  <dt><a href="https://github.com/durantschoon/guix-platform-install/blob/main/oracle/postinstall/README.md">oracle/postinstall/README.md</a></dt>
+  <dd>First boot on an Oracle instance: the memory constraint, egress rules, and
+  why the key you generate there points the opposite way from the one that got
+  you in.</dd>
+
+  <dt><a href="https://github.com/durantschoon/guix-platform-install/blob/main/docs/PERSONAL_CONFIG_CONTRACT.md">docs/PERSONAL_CONFIG_CONTRACT.md</a></dt>
+  <dd>The <code>guix-personal.scm</code> specification in full.</dd>
+
+  <dt><a href="https://github.com/durantschoon/guix-platform-install/blob/main/docs/ORACLE_ONE_CLICK_ROADMAP.md">docs/ORACLE_ONE_CLICK_ROADMAP.md</a></dt>
+  <dd>What remains between here and "a friend clicks a button", in order, with
+  what each step is blocked by.</dd>
+
+  <dt><a href="https://guix.gnu.org/manual/en/html_node/">The GNU Guix manual</a></dt>
+  <dd>For everything about Guix itself.</dd>
+</dl>
+
+<footer>
+  <p>Part of
+  <a href="https://github.com/durantschoon/guix-platform-install">guix-platform-install</a>.
+  This page is static and self-contained: no scripts, no fonts, no trackers, no
+  network requests, and no field anywhere on it that accepts a credential. It
+  will never ask you for an Oracle API key, a tenancy OCID, or a private key —
+  nothing in this project should, and if something claiming to be part of it
+  does, that is your signal to stop.</p>
+</footer>
+
+</div>
+</body>
+</html>

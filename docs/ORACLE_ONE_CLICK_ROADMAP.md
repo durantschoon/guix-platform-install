@@ -1,7 +1,8 @@
 # Roadmap: "My Friend Clicks a Button and Has Guix on Oracle"
 
 **Status: approved future work.** Recorded 2026-08-08. Step 1 is implemented;
-steps 2-6 are not started.
+step 6 is implemented in its presentation-only form (`web/index.html`); steps
+2-5 are not started.
 
 ## The target
 
@@ -126,8 +127,19 @@ guidance simply stops.
 
 ## Step 6 — Web UI
 
-A page to show friends, and to drive the flow. Scope deliberately unresolved —
-decide before building:
+**Status: presentation-only version DONE** (`web/index.html`, stage 02). The
+scope question below is therefore settled in favour of the first bullet: the
+page explains the flow, shows the commands, links the docs, and deploys
+nothing. It has no form, input, or textarea anywhere in it, and makes no
+network request at runtime. The "driving the deployment" bullet remains
+**not started and not approved**.
+
+Because steps 2 and 3 are still open, the page states in its own status section
+that the published generic image does not exist and that the metadata SSH key
+service has not been verified on a live instance. Those two sentences come out
+of the page when — and only when — the corresponding steps are actually done.
+
+The original scoping question, kept because it is why the answer is what it is:
 
 - **Presentation only** (static, safe): explains the steps, generates the exact
   commands to paste, links the published image. No credentials, no backend.
@@ -150,6 +162,6 @@ authenticated UI.
 | 3. Console-only path docs | Small | Step 2 |
 | 4. Preferences at first boot | Medium | Step 1 verified |
 | 5. Capacity handling | Small | — (independent) |
-| 6. Web UI (presentation) | Medium | Step 3 |
+| 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; hedges on steps 2-3 until they land |
 
 Everything is downstream of one live-instance test.
