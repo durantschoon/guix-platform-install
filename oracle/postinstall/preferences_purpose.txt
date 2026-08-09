@@ -1,0 +1,322 @@
+preferences_purpose.txt
+=======================
+
+Why oracle/postinstall/preferences.scm exists and why each part of it is the
+way it is. Follows the flow of the code. Statements of omission are marked
+OMITTED and are as important as the rest -- several of them are things it is
+very tempting to add.
+
+ASCII only, like the script. This file is read on the same serial console.
+
+
+0. WHY THE FILE EXISTS AT ALL
+-----------------------------
+
+oracle/image/oracle-image.scm contains:
+
+    (define %host-name "guix-oracle")
+    (define %timezone "America/New_York")
+
+Baking those was correct while every user built their own image from source.
+It stops being correct at roadmap step 2, where ONE image is published for
+everyone: you cannot bake a stranger's timezone into an image they download,
+and asking every user to rebuild a 2 GiB image to change one string defeats
+the point of publishing it.
+
+So the preferences move out of the build and into first boot. The image keeps
+its defaults -- they are what an unattended first boot needs -- and this script
+changes them afterwards.
+
+This is roadmap step 4, and it is NOT gated on the live-instance verification
+that blocks steps 2 and 3, because preferences never touch the metadata
+service at 169.254.169.254.
+
+
+1. WHAT IS SETTABLE, AND WHAT IS NOT
+------------------------------------
+
+Settable: host name, timezone, login shell.
+
+OMITTED: the user name.
+
+This one is listed in the roadmap's "minimum useful set", so leaving it out is
+a deliberate reversal and needs a reason.
+
+Renaming an account after first boot moves its home directory. The home
+directory contains ~/.ssh/authorized_keys, which is the file the image's
+metadata service wrote your public key into during boot. Move the home
+directory and that file is either left behind at the old path or moved to a
+path sshd is no longer told to look in -- and on an OCI instance the only way
+in is SSH to that one account. The account also has no password by design
+(oracle-image.scm sets none, so the password is locked), so there is no
+fallback credential; the serial console would be the only recovery path, and
+it needs a password to be useful.
+
+The gain is cosmetic: a prompt that says "guix@" instead of "you@". The loss
+is the machine. That trade is why guardrail 8 exists -- destructive behaviour
+is ceremony, not a side effect of a preferences script.
+
+The script says this when asked (`--help`), rather than silently not offering
+it, because a user who came looking for the option deserves to know it was a
+decision and not an oversight.
+
+The supported alternative, also in --help: add a SECOND user-account to the
+configuration, give it your key, verify you can log in as it, and only then
+remove the first. That sequence is recoverable at every step. A rename is not.
+
+
+2. WHERE THE CONFIGURATION COMES FROM
+-------------------------------------
+
+The script does NOT assume /etc/config.scm exists.
+
+`guix system image` builds a system; it does not promise to ship the source
+that produced it at a conventional path. On a freshly booted instance from the
+published image, /etc/config.scm may simply not be there, and a script that
+opens it and fails is a script that looks broken on the one machine it was
+written for.
+
+What is always there on a running Guix system is the generation's provenance:
+
+    /run/current-system/configuration.scm -> /gnu/store/...-configuration.scm
+
+Resolution order, implemented in ensure-config-file:
+
+  1. /etc/config.scm if it exists -- the user may already be maintaining it,
+     and clobbering it from the store would throw away their edits.
+  2. otherwise copy the provenance file to /etc/config.scm.
+  3. otherwise fail loudly.
+
+Step 2 has a detail that is easy to miss and fatal to skip: the provenance
+file is a STORE path, and the store is read-only. The copy inherits mode 444.
+So the script copies with `cp -L` (the target is a symlink) and then chmods
+the copy to 644. Without the chmod every subsequent write fails with EACCES on
+a file that looks perfectly ordinary in `ls`.
+
+OMITTED in step 3: generating a config from scratch. It is tempting -- the
+running system's fields are all introspectable -- but an approximation that
+drops, say, the serial console kernel arguments or the swap file service would
+reconfigure successfully and leave an instance that boots to nothing you can
+reach. Failing with an explanation is strictly better than producing a config
+nobody asked for.
+
+
+3. HOW THE CONFIGURATION IS EDITED
+----------------------------------
+
+Through lib/guile-config-helper.scm, which parses the file into S-expressions,
+transforms them, and writes them back.
+
+OMITTED: sed. Emphatically. A sed path was removed from this repository on
+2026-08-03 in 954bb8b and must not come back. `s/(host-name [^)]*)/.../` cannot
+distinguish the field from the same text inside a comment or a string literal,
+and it cannot see that (host-name %host-name) is the same field as
+(host-name "guix-oracle"). Its failure mode is a config that no longer parses,
+discovered on a machine whose only access path is SSH.
+
+The transformation is a pure function from S-expression to S-expression. That
+is not stylistic: it is what allows oracle/tests/test-oracle-preferences.scm to
+assert on it directly, offline, with no config file and no guix.
+
+THE GEXP READER. Guile's stock reader cannot read a real Guix config:
+
+    oracle/image/oracle-image.scm:89:9: Unknown # object: "#~"
+
+#~ / #$ / #$@ / #+ / #+@ are reader macros installed by (guix gexp), which a
+plain `guile -s` has never loaded. The helper installs equivalents that read
+them into the very forms Guix expands them to -- #~x IS (gexp x) -- so gexps
+survive a read/write round trip as ordinary S-expressions and the written
+config still evaluates. Verified by round-tripping oracle-image.scm and
+evaluating the result under `guix repl`: still an <operating-system>.
+
+They are installed on demand, from the new subcommands only, so add-service /
+check-service / switch-to-desktop keep exactly the behaviour they had.
+
+KNOWN COST, not a bug: writing back uses pretty-print, so the whole file is
+reflown and every COMMENT IN IT IS LOST. This is pre-existing behaviour of the
+parsed-S-expression approach that add-service and switch-to-desktop already
+have; it is the price of not using sed. It is mitigated two ways: a timestamped
+backup is taken before any write, and a preference that is already set writes
+nothing at all (see section 5).
+
+
+4. THE LOGIN SHELL, AND WHY BASH OMITS THE FIELD
+------------------------------------------------
+
+zsh and fish are written as
+
+    (shell (file-append zsh "/bin/zsh"))
+
+bash writes NOTHING. The shell field is omitted entirely, and an existing one
+is removed.
+
+Why not write (shell (file-append bash "/bin/bash")) for symmetry? Because:
+
+  - bash is already the default. user-account's shell field defaults to bash,
+    so the explicit field expresses exactly what its absence expresses.
+  - The explicit field pins one particular bash store path into the account
+    for no benefit.
+  - "Set it back to bash" then has to mean "remove the field", so the removal
+    code has to exist anyway. Writing the field only adds a second
+    representation of the same state, which is a thing to get out of sync.
+
+The absence IS the setting. Test 5 in the suite enforces both halves: bash
+writes no field, and bash removes one that is there.
+
+THE PACKAGE IS NOT OPTIONAL. Any non-bash choice also adds that shell's
+package to the system `packages` field, and its module to `use-modules`.
+Skipping either is a broken login on a machine reachable only by SSH:
+
+  - no module import  -> "zsh: unbound variable", reconfigure aborts. Noisy,
+                         but at least it aborts before changing anything.
+  - no package        -> the config builds, the system boots, and file-append
+                         points at a store path outside the closure. sshd
+                         execs a shell that is not there. This one is silent
+                         until you try to log in.
+
+The second is the dangerous one, which is why set-os-login-shell does both
+halves in a single pure function rather than leaving the package to a separate
+call that someone can forget.
+
+OMITTED: removing the package when switching back to bash. Switching zsh ->
+bash leaves zsh in the system packages. Removing it would be destructive -- by
+then the user may be using zsh for other things, or have written config that
+assumes it -- and guardrail 7 says do not remove what you were not asked to
+remove. An unused package costs disk. A removed one can cost a working setup.
+
+OMITTED: shells beyond bash / zsh / fish. The table in the helper
+(%login-shells) is four columns and adding a row is a one-line change; the
+short list is a starting point, not a limit.
+
+
+5. WHY AN UNCHANGED PREFERENCE WRITES NOTHING
+---------------------------------------------
+
+run-config-edit compares the transformed S-expressions to the originals and
+skips the write when they are equal.
+
+This is not an optimisation. Because writing reflows the file (section 3),
+a needless write would destroy the user's comments and formatting for a change
+that was not a change. Running the script twice, or pressing Enter through
+every prompt to see what it would ask, must be free.
+
+Test 6 checks this at the file level -- the bytes, not the S-expressions --
+because "equal S-expressions" would pass even if the file were rewritten.
+
+
+6. WHY THE EDIT GOES THROUGH A TEMPORARY COPY
+---------------------------------------------
+
+apply-preferences copies /etc/config.scm to a temp file, applies all three
+edits there, and copies back only if every one of them succeeded. This mirrors
+call-guile-helper in postinstall/lib.scm.
+
+The failure being avoided: three edits applied in place, the second one fails,
+and /etc/config.scm now has a new host name and the old timezone and no
+indication of which. On a remote machine that is discovered at reconfigure
+time, or later.
+
+The helper additionally never writes on a refusal -- the transform runs to
+completion before write-config is called -- so the guarantee holds at both
+layers. Test 9 checks the file is byte-identical after a failed edit.
+
+
+7. WHY RECONFIGURE IS OFFERED AND NEVER RUN AUTOMATICALLY
+---------------------------------------------------------
+
+Two reasons, and the second is the real one.
+
+Cost: on VM.Standard.E2.1.Micro (1 GiB of RAM) `guix system reconfigure` is
+slow and leans on the swap file that oracle-image.scm sets up. The user is the
+one who knows whether the instance can lose its attention for that long.
+
+Risk: reconfigure is the step that can break the boot. A script that triggers
+it as a side effect of a question about timezones is a script that should not
+be run. Guardrail 8: destructive or outward-facing behaviour is ceremony.
+
+So the script prints the exact command, explains what it will cost, notes that
+older generations remain bootable through the OCI serial console, and asks.
+The prompt defaults to NO -- every yes/no prompt here does, because nothing
+that writes to /etc or rebuilds the system should happen because someone hit
+Enter.
+
+The script also states what takes effect when: host name and timezone are live
+after the reconfigure, a new login shell applies to the NEXT login. Users
+otherwise reasonably conclude the shell change failed.
+
+
+8. WHY EVERY PROMPT READS /dev/tty
+----------------------------------
+
+Repository code pattern, and it matters here specifically. oracle/postinstall's
+other entry point is documented as runnable straight from a pipe:
+
+    wget -qO- .../personal-config.scm | guile --no-auto-compile -s /dev/stdin
+
+In that shape stdin is the script's own text. A prompt reading stdin would
+consume the rest of the script and read whatever came next as an answer.
+/dev/tty always refers to the actual terminal.
+
+Enforced by the test suite, which checks the string /dev/tty is present and
+that no prompt reads (current-input-port).
+
+
+9. WHY THE SCRIPT NEEDS THE REPOSITORY ON DISK
+----------------------------------------------
+
+Unlike personal-config.scm, this script cannot be run from a bare pipe: it
+shells out to lib/guile-config-helper.scm, which has to exist as a file.
+
+find-config-helper looks in GUIX_PLATFORM_INSTALL_ROOT, INSTALL_ROOT, two
+directories up from the script, the working directory, and
+~/guix-platform-install. If none has it, the script says so and prints the
+clone command rather than failing on an open().
+
+OMITTED: downloading the helper itself. It would restore the one-line
+invocation, but it means fetching and executing code over the network from a
+script whose whole job is editing /etc, without the manifest verification that
+bootstrap-installer.sh does for exactly this reason. If the one-liner is
+wanted, it should go through the same verification path, which is more than
+this stage should decide on its own.
+
+
+10. WHY VALIDATION HAPPENS BEFORE THE WRITE
+-------------------------------------------
+
+Host names are checked against RFC 1123 (ASCII letters, digits, hyphens; no
+leading or trailing hyphen; 1 to 63 characters). char-alphabetic? is
+deliberately NOT used -- it accepts non-ASCII letters, and a host name with a
+non-ASCII character is the sort of thing that works until something else reads
+it.
+
+Timezones are checked against the real zoneinfo tree, found by resolving
+/etc/localtime (a symlink into the store: .../share/zoneinfo/Area/Location).
+If the tree cannot be located the value is accepted with a [WARN] rather than
+refused -- refusing on our own inability to check would be worse.
+
+The point of both is that the alternative place to discover a typo is a
+reconfigure, which on this instance size is a long wait for the news that you
+typed a slash in a host name.
+
+
+11. WHAT THE TESTS DO NOT COVER
+-------------------------------
+
+oracle/tests/test-oracle-preferences.scm is fully offline: no `guix system`,
+no `guix repl`, no network, and no contact with the real /etc/config.scm --
+every config it touches is a fixture in a temporary directory.
+
+That leaves genuinely untested, and it is listed here so nobody mistakes green
+tests for a verified feature:
+
+  - the reconfigure path. Never executed by the suite, by design.
+  - ensure-config-file's recovery branch, which needs a real
+    /run/current-system/configuration.scm and a real /etc.
+  - the sudo path, which needs a machine where the user is not root.
+  - whether the rewritten config actually BUILDS. The suite checks it parses
+    and that gexps survive; that oracle-image.scm round-trips to something
+    `guix repl` still evaluates to an <operating-system> was checked by hand,
+    once, and is not re-checked automatically.
+
+Guardrail 10: unverified claims stay labelled unverified. None of the above
+has been run on a live Oracle instance.

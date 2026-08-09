@@ -77,6 +77,20 @@ if command -v guile &> /dev/null; then
     fi
     echo
 
+    # Oracle first-boot preferences (host name, timezone, login shell).
+    # Also outside the `command -v guix` guard: the transformation under test
+    # is a pure S-expression rewrite, so these tests need no guix, no network,
+    # and -- deliberately -- never touch the real /etc/config.scm.
+    echo -e "${YELLOW}Testing Oracle First-Boot Preferences...${NC}"
+    echo "----------------------------------------"
+    if guile --no-auto-compile -s oracle/tests/test-oracle-preferences.scm; then
+        echo -e "${GREEN}[OK] Oracle preference tests passed${NC}"
+    else
+        echo -e "${RED}[FAIL] Oracle preference tests failed${NC}"
+        exit 1
+    fi
+    echo
+
     # Test converted scripts (if any)
     CONVERTED_TESTS_DIR="tools/converted-scripts"
     if [ -d "$CONVERTED_TESTS_DIR" ]; then
