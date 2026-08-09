@@ -109,5 +109,5 @@ stop and report **Blocked** rather than decide.
 
 | NN | Title | Status |
 |---|---|---|
-| 01 | OCI capacity handling in `04-deploy.scm` | authored |
-| 02 | Presentation-only web page for the Oracle flow | authored |
+| 01 | OCI capacity handling in `04-deploy.scm` | merged (`5d0e976`) |
+| 02 | Presentation-only web page for the Oracle flow | merged (`ec5eeee`) |

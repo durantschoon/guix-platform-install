@@ -571,6 +571,11 @@ Approved by the user; step 1 is implemented, steps 2-6 are not started.
 makes an Oracle free-tier account, chooses a few preferences, waits, and is up
 and running.
 
+**Steps 1, 5 and 6 are DONE.** Step 1 (`59987c9`) is the unlock; steps 5
+(capacity handling) and 6 (presentation-only web page at `web/index.html`) were
+built through the stage pipeline — see [docs/stages/](docs/stages/). Steps 2-4
+remain blocked on the gate below.
+
 **Step 1 — Instance-metadata SSH keys — DONE (`59987c9`).** The unlock. Without
 it a key could only be baked in, so a published image could serve nobody but its
 builder, so every user needed their own build, so every user needed Guix. Now
@@ -586,11 +591,11 @@ everyone**.
 
 | Step | Effort | Blocked by |
 |---|---|---|
-| 2. Publish one generic image (release + checksum, import from URL) | Small | step 1 verified |
+| 2. Publish one generic image (release + checksum, import from URL) | Small | **step 1 verified** |
 | 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | step 2 |
-| 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | step 1 verified |
-| 5. Capacity handling ("Out of host capacity" is common on E2.1.Micro) | Small | independent |
-| 6. Web UI to show friends | Medium | step 3 |
+| 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | **step 1 verified** |
+| 5. Capacity handling | Small | ✅ **DONE** (stage 01) — reasoned, never seen a real refusal |
+| 6. Web UI to show friends | Medium | ✅ **DONE** presentation-only (stage 02) — hedges until 2-3 land |
 
 **On step 4:** `oracle-image.scm` hardcodes `%user-name`, `%host-name`,
 `%timezone` and locale. With a shared image these *must* move to first

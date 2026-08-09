@@ -1,8 +1,8 @@
 # Roadmap: "My Friend Clicks a Button and Has Guix on Oracle"
 
 **Status: approved future work.** Recorded 2026-08-08. Step 1 is implemented;
-step 6 is implemented in its presentation-only form (`web/index.html`); steps
-2-5 are not started.
+step 5 (stage 01) and step 6 in its presentation-only form (`web/index.html`,
+stage 02) are implemented; steps 2-4 are not started.
 
 ## The target
 
@@ -117,13 +117,22 @@ R1 — likely the same prompt-and-apply mechanism.
 
 Minimum useful set: hostname, timezone, login shell, user name.
 
-## Step 5 — Capacity handling
+## Step 5 — Capacity handling (DONE, stage 01)
 
-`VM.Standard.E2.1.Micro` frequently answers "Out of host capacity" in popular
-regions. This cannot be fixed, only handled: detect the error in
-`04-deploy.scm`, and suggest another availability domain or the ARM
-`VM.Standard.A1.Flex` shape. A novice who hits a raw capacity error and no
-guidance simply stops.
+`04-deploy.scm` now classifies launch failures (`capacity` / `limit` / `other` /
+`none`), walks the remaining availability domains on a capacity refusal — a
+bounded one-pass walk, **not** a retry loop — and on exhaustion exits 1 with
+advice naming `VM.Standard.A1.Flex`, a different region, and retrying later.
+
+**Reasoned, not observed.** The 2026-08-08 deployment got capacity on the first
+AD, so this path has never run against a real refusal. The fixtures in
+`oracle/tests/test-oracle-capacity.scm` (24 checks, offline) are hand-written
+from Oracle's documented error forms, not from transcripts. Failure directions
+are safe: the script stops with the CLI's own text and never launches twice.
+
+The A1.Flex advice is a **pointer, not a flag** — this repo's image is x86_64
+and will not boot on ARM. Making that advice actionable needs an aarch64 image,
+which is not staged.
 
 ## Step 6 — Web UI
 
@@ -161,7 +170,7 @@ authenticated UI.
 | 2. Publish generic image | Small | Step 1 verified |
 | 3. Console-only path docs | Small | Step 2 |
 | 4. Preferences at first boot | Medium | Step 1 verified |
-| 5. Capacity handling | Small | — (independent) |
+| 5. Capacity handling | Small | **DONE** — stage 01; reasoned, never seen a real refusal |
 | 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; hedges on steps 2-3 until they land |
 
 Everything is downstream of one live-instance test.

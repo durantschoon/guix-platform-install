@@ -328,8 +328,18 @@ output rather than assumed to be the whole string."
 new instance OCID or #f, and the combined output for classification.
 2>&1 is required -- the CLI writes ServiceError to stderr, and without it
 the capacity message never reaches launch-error-kind."
-  ;; No --metadata ssh_authorized_keys: that needs cloud-init, which
-  ;; Guix does not run.  The key is already baked into the image.
+  ;; No --metadata ssh_authorized_keys here, but the reason changed: it is no
+  ;; longer that Guix cannot consume it.  %metadata-ssh-key-service in
+  ;; image/oracle-image.scm reads that exact field at boot, so passing it WOULD
+  ;; work -- and is how a published generic image is meant to be launched (see
+  ;; docs/ORACLE_ONE_CLICK_ROADMAP.md steps 2-3).
+  ;;
+  ;; This script still relies on the baked-in key because that is what it
+  ;; builds: 02-build-image.scm bakes image/authorized-key.pub, and this deploy
+  ;; path has been verified end to end that way.  Adding --metadata here is
+  ;; deliberately deferred until the metadata service has been confirmed on a
+  ;; live instance; until then, switching to it would replace a mechanism known
+  ;; to work with one that is only reasoned to work.
   (call-with-values
       (lambda ()
         (oci/status
