@@ -169,11 +169,28 @@
                           (reverse lines)
                           (loop (cons line lines))))))))
 
+            ;; Leaf values may come back JSON-quoted ("ssh-ed25519 AAAA...")
+            ;; rather than raw.  Probed on a live instance 2026-08-08 via
+            ;; /opc/v2/instance/shape, but an instance WITHOUT keys cannot
+            ;; demonstrate the keys endpoint specifically -- so strip a
+            ;; surrounding pair of quotes rather than depend on the answer.
+            ;; Getting this wrong is invisible: every real key would be
+            ;; rejected and the service would log "no usable public keys"
+            ;; while looking perfectly healthy.
+            (define (unquote-value line)
+              (let* ((trimmed (string-trim-both line))
+                     (n (string-length trimmed)))
+                (if (and (>= n 2)
+                         (char=? (string-ref trimmed 0) #\")
+                         (char=? (string-ref trimmed (- n 1)) #\"))
+                    (substring trimmed 1 (- n 1))
+                    trimmed)))
+
             ;; Only lines that actually look like a public key are installed.
             ;; The metadata endpoint returns an HTML error body in some failure
             ;; modes, and writing that into authorized_keys would be silent.
             (define (key-line? line)
-              (let ((trimmed (string-trim line)))
+              (let ((trimmed (unquote-value line)))
                 (and (> (string-length trimmed) 0)
                      (or (string-prefix? "ssh-" trimmed)
                          (string-prefix? "ecdsa-" trimmed)
@@ -206,7 +223,11 @@
                         (fetch! (string-append
                                  "http://169.254.169.254/opc/v1/instance/"
                                  "metadata/ssh_authorized_keys")))
-                    (let ((keys (filter key-line? (read-scratch))))
+                    ;; map unquote-value, not just filter: accepting a quoted
+                    ;; line and then WRITING it with its quotes intact would
+                    ;; produce an authorized_keys sshd silently ignores.
+                    (let ((keys (map unquote-value
+                                     (filter key-line? (read-scratch)))))
                       (if (null? keys)
                           (log "metadata returned no usable public keys")
                           (install! keys)))

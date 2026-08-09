@@ -338,7 +338,33 @@ Decisions that are load-bearing and non-obvious:
     behaviour is exactly as before.  Both were verified to evaluate to an
     <operating-system>.
 
-NOT YET VERIFIED ON A LIVE INSTANCE
+PARTIALLY VERIFIED ON A LIVE INSTANCE (2026-08-08)
+    Probed from the running guix-oracle instance:
+      - wget present at /run/current-system/profile/bin/wget       [OK]
+      - IMDSv2 WITH the Bearer header answers (returned {})        [OK]
+      - IMDSv2 WITHOUT the header fails                            [OK -- proves
+        the header is genuinely required, so sending it is correct]
+      - IMDSv1 also answers on this tenancy, so the fallback is live
+      - .../metadata/ssh_authorized_keys 404s, because that instance was
+        launched without --metadata.  This is exactly the path the service
+        treats as "no metadata available".
+
+    So the endpoint, the header and the tool are confirmed.  What remains
+    unconfirmed is the behaviour when keys ARE present.
+
+LEAF VALUE QUOTING -- the silent failure this guards against
+    A leaf key might be returned JSON-quoted ("ssh-ed25519 AAAA...") rather
+    than raw.  If so, a bare (string-prefix? "ssh-" ...) filter rejects every
+    real key and the service logs "no usable public keys" while looking
+    perfectly healthy -- an instance nobody can log into, with a reassuring
+    log.  unquote-value strips one surrounding pair of quotes, and the result
+    is what gets WRITTEN (map, not just filter): accepting a quoted line and
+    then writing it with its quotes intact would produce an authorized_keys
+    that sshd silently ignores.  Handled defensively rather than by depending
+    on the probe, because an instance with no keys cannot demonstrate the keys
+    endpoint specifically.
+
+STILL NOT VERIFIED ON A LIVE INSTANCE
     QEMU has no metadata service, so 03-smoke-test.scm exercises only the
     "no metadata available" path.  The real test is launching with
     --metadata ssh_authorized_keys=... and NO baked-in key, then logging in.
