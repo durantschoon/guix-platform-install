@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile
 !#
 ;;; Script to fix network configuration on fresh Guix install
 ;;; Run this on the installed Guix system

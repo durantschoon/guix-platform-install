@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile
 !#
 ;;; 02-build-image.scm --- build the Oracle QCOW2 image locally.
 ;;;

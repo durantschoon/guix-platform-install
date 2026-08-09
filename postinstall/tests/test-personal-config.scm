@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile -s
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile -s
 !#
 
 ;;; test-personal-config.scm -- tests for the personal configuration contract.

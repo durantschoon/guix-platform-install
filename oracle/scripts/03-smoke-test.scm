@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile
 !#
 ;;; 03-smoke-test.scm --- boot the built image in QEMU and prove SSH works.
 ;;;

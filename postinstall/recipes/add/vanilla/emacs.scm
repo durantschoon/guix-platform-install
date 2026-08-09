@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile -s
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile -s
 !#
 
 ;;; add-vanilla-emacs.scm --- Install vanilla Emacs with minimal configuration

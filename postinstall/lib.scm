@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile -s
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile -s
 !#
 
 ;;; postinstall/lib.scm - Shared functions for post-installation customization scripts

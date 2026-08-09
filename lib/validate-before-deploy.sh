@@ -285,6 +285,40 @@ check_shebangs() {
             continue
         fi
 
+        # Guile shebang FORM, not just the path.
+        #
+        # Linux passes everything after the interpreter as a SINGLE argument, so
+        #     #!/run/current-system/profile/bin/guile --no-auto-compile -s
+        # hands guile the literal string "--no-auto-compile -s" and it dies with
+        #     error: unrecognized switch --no-auto-compile -s
+        # Guile's answer is the meta-switch: end the shebang with a backslash and
+        # put the arguments on the next line.
+        #
+        #     #!/run/current-system/profile/bin/guile \
+        #     --no-auto-compile -s
+        #     !#
+        #
+        # This is invisible while every caller invokes `guile -s file.scm`, which
+        # is how the repo's scripts are called internally -- so it only breaks
+        # for the person who runs ./script.scm as the docs instruct.
+        #
+        # '#!/usr/bin/env -S guile ...' is FINE: -S splits the arguments itself.
+        if [[ "$first_line" == *guile* \
+              && "$first_line" != *"\\" \
+              && "$first_line" != *"/usr/bin/env -S"* ]]; then
+            # Any argument after the interpreter means the single-argument trap.
+            guile_args="${first_line##*guile}"
+            if [[ -n "${guile_args// /}" ]]; then
+                log_test FAIL "$script shebang cannot be executed directly: $first_line"
+                verbose_log "Linux passes '${guile_args# }' as ONE argument"
+                verbose_log "Use the meta-switch form:"
+                verbose_log "  $required_guile \\"
+                verbose_log "  ${guile_args# }"
+                ((broken++))
+                continue
+            fi
+        fi
+
         # Same two tiers for Guile scripts.
         if [[ "$first_line" == *guile* && "$first_line" != "$required_guile"* ]]; then
             if [[ "$first_line" == *"/usr/bin/env"* ]]; then

@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile -s
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile -s
 !#
 
 ;;; personal-config.scm -- bootstrap the user's OWN configuration repository on

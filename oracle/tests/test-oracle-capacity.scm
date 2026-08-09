@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile -s
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile -s
 !#
 
 ;;; test-oracle-capacity.scm --- offline tests for OCI capacity handling.

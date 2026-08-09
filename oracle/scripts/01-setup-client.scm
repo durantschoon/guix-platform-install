@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile
 !#
 ;;; 01-setup-client.scm --- install and configure the OCI CLI on Guix.
 ;;;

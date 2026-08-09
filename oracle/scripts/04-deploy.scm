@@ -1,4 +1,5 @@
-#!/run/current-system/profile/bin/guile --no-auto-compile
+#!/run/current-system/profile/bin/guile \
+--no-auto-compile
 !#
 ;;; 04-deploy.scm --- upload, import, network, launch on OCI.
 ;;;
