@@ -111,4 +111,4 @@ stop and report **Blocked** rather than decide.
 |---|---|---|
 | 01 | OCI capacity handling in `04-deploy.scm` | merged (`5d0e976`) |
 | 02 | Presentation-only web page for the Oracle flow | merged (`ec5eeee`) |
-| 03 | Oracle first-boot preferences (hostname, timezone, shell) | authored |
+| 03 | Oracle first-boot preferences (hostname, timezone, shell) | merged (`f9dff27`) |
