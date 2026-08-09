@@ -63,11 +63,30 @@ Design points worth not re-deriving:
   HTML error body in some failure modes, and writing that into
   `authorized_keys` would fail silently and confusingly.
 
+### Verified on the live instance (2026-08-08)
+
+Probed from the running `guix-oracle` box with `oracle-verify-metadata`:
+
+| Probe | Result |
+|---|---|
+| `wget` present | OK — `/run/current-system/profile/bin/wget` |
+| IMDSv2 **with** the Bearer header | OK — endpoint answers |
+| IMDSv2 **without** the header | fails — the header is genuinely required |
+| IMDSv1 fallback | OK — live on this tenancy |
+| `.../metadata/ssh_authorized_keys` | 404 — instance launched without `--metadata`; the service's "no metadata" path |
+| leaf value format (`/opc/v2/instance/shape`) | **raw**, `VM.Standard.E2.1.Micro`, no JSON quotes |
+
+So the endpoint, the header, the tool and the value format are measured, not
+assumed. The `unquote-value` guard turns out to be a no-op on this format and
+is kept as cheap insurance.
+
 ### The one thing still unverified
 
-**This has never run on a live OCI instance.** QEMU has no metadata service, so
-the local smoke test exercises only the "no metadata available" path. Before
-anything downstream is built:
+**The service has never run at boot.** Everything it depends on is confirmed
+above, but whether shepherd starts it at the right point and whether the
+installed key actually admits a login is untested — QEMU has no metadata
+service, so the local smoke test only reaches the "no metadata available" path.
+Before anything downstream is built:
 
 ```sh
 # Launch with a key supplied ONLY via metadata -- no baked-in key in the image

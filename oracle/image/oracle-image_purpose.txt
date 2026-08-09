@@ -352,17 +352,29 @@ PARTIALLY VERIFIED ON A LIVE INSTANCE (2026-08-08)
     So the endpoint, the header and the tool are confirmed.  What remains
     unconfirmed is the behaviour when keys ARE present.
 
-LEAF VALUE QUOTING -- the silent failure this guards against
-    A leaf key might be returned JSON-quoted ("ssh-ed25519 AAAA...") rather
-    than raw.  If so, a bare (string-prefix? "ssh-" ...) filter rejects every
-    real key and the service logs "no usable public keys" while looking
-    perfectly healthy -- an instance nobody can log into, with a reassuring
-    log.  unquote-value strips one surrounding pair of quotes, and the result
-    is what gets WRITTEN (map, not just filter): accepting a quoted line and
-    then writing it with its quotes intact would produce an authorized_keys
-    that sshd silently ignores.  Handled defensively rather than by depending
-    on the probe, because an instance with no keys cannot demonstrate the keys
-    endpoint specifically.
+LEAF VALUE QUOTING -- measured RAW, guard kept anyway
+    Settled on the live instance 2026-08-08: /opc/v2/instance/shape returned
+
+        VM.Standard.E2.1.Micro
+
+    with NO surrounding quotes, so leaf values come back raw and the plain
+    (string-prefix? "ssh-" ...) filter would have worked.  unquote-value is
+    therefore a no-op on the observed format, and is kept as cheap insurance:
+    it strips nothing when there is nothing to strip, and the failure it
+    prevents is invisible if it ever does occur.
+
+    The failure it guards against, for the record: if a leaf key were returned
+    JSON-quoted ("ssh-ed25519 AAAA...") rather than raw, then a bare (string-prefix? "ssh-" ...) filter rejects every
+    every real key would be rejected and the service would log "no usable
+    public keys" while looking perfectly healthy -- an instance nobody can log
+    into, with a reassuring log.  The unquoted form is also what gets WRITTEN
+    (map, not just filter): accepting a quoted line and then writing it with
+    its quotes intact would produce an authorized_keys that sshd silently
+    ignores -- the same class of invisible failure, one step later.
+
+    Note the probe used 'shape' rather than 'ssh_authorized_keys': an instance
+    with no keys cannot demonstrate the keys endpoint itself, so the format is
+    inferred from a sibling leaf.  That is why the guard stays.
 
 STILL NOT VERIFIED ON A LIVE INSTANCE
     QEMU has no metadata service, so 03-smoke-test.scm exercises only the
