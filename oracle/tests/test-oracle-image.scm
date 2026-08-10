@@ -62,6 +62,45 @@ look for the config under /tmp."
 (define* (check text ok? #:optional (detail ""))
   (if ok? (pass text) (fail text detail)))
 
+(define (authorized-keys-verdict)
+  "Inspect the openssh service's authorized-keys VALUE, keyless.
+
+Evaluation is not enough here, and that gap cost a full image build on
+2026-08-09.  Making %authorized-key optional without also making the
+authorized-keys FIELD conditional emitted
+
+    ((\"guix\" #f))
+
+which evaluates to a perfectly good <operating-system> and then dies an hour
+later inside the builder:
+
+    ERROR: In procedure open-file: Wrong type (expecting string): #f
+
+The builder only runs at BUILD time, so `guix system image` was the first thing
+to notice.  Reading the service's value catches it in seconds.  Returns
+\"clean\", \"HAS-FALSE\", or an error string."
+  (let ((program-file (string-append "/tmp/oracle-keys-probe-"
+                                     (number->string (getpid)) ".scm")))
+    (call-with-output-file program-file
+      (lambda (port)
+        (format port "(use-modules (gnu system) (gnu services) (gnu services ssh) (srfi srfi-1))\n")
+        (format port "(let* ((os (load ~s))\n" image-config)
+        (format port "       (svcs (operating-system-user-services os))\n")
+        (format port "       (ssh (find (lambda (s) (eq? (service-kind s) openssh-service-type)) svcs)))\n")
+        (format port "  (if (not ssh) (display \"NO-SSH-SERVICE\")\n")
+        (format port "      (let ((keys (openssh-configuration-authorized-keys (service-value ssh))))\n")
+        (format port "        (display (if (any (lambda (e) (any not e)) keys) \"HAS-FALSE\" \"clean\"))))\n")
+        (format port "  (newline))\n")))
+    (let* ((command (format #f "guix repl -q ~s 2>&1" program-file))
+           (port (open-input-pipe command))
+           (output (get-string-all port)))
+      (close-pipe port)
+      (delete-file program-file)
+      (cond ((not (string? output)) "no output")
+            ((string-contains output "HAS-FALSE") "HAS-FALSE")
+            ((string-contains output "clean") "clean")
+            (else (string-trim-both output))))))
+
 (define (evaluate-config)
   "Load the image config through 'guix repl' and report whether it yields an
 <operating-system>.  Returns (success? . output).
@@ -106,10 +145,16 @@ whose error message ('\\n: unbound variable') points nowhere near the cause."
   ;; cannot be built and nobody notices until an image build fails an hour in.
   (let ((stashed (string-append authorized-key ".test-stash")))
     (rename-file authorized-key stashed)
-    (let ((result (evaluate-config)))
+    (let ((result (evaluate-config))
+          (keys (authorized-keys-verdict)))
       (rename-file stashed authorized-key)
       (check "evaluates with NO authorized-key.pub (generic published image)"
-             (car result) (cdr result))))
+             (car result) (cdr result))
+      ;; The check evaluation CANNOT make: a #f where a filename belongs.
+      ;; See authorized-keys-verdict for the hour this cost.
+      (check "keyless config emits no #f into authorized-keys"
+             (string=? keys "clean")
+             (format #f "verdict: ~a (expected \"clean\")" keys))))
 
   (unless had-key?
     (delete-file authorized-key)))

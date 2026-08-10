@@ -341,8 +341,21 @@
               (openssh openssh-sans-x)
               (permit-root-login #f)
               (password-authentication? #f)
+              ;; Conditional, because %authorized-key is #f when
+              ;; authorized-key.pub is absent (the generic published image).
+              ;; An unconditional `((,%user-name ,%authorized-key)) emits
+              ;; ((guix #f)), and the authorized-keys builder then calls
+              ;; (open-file #f "r") and dies with
+              ;;   ERROR: In procedure open-file: Wrong type (expecting string): #f
+              ;; That failure is invisible to `guix system` EVALUATION -- the
+              ;; builder only runs at BUILD time -- so it cost a full image
+              ;; build to discover (2026-08-09).  See the regression test in
+              ;; oracle/tests/test-oracle-image.scm, which inspects the
+              ;; service's value instead of building it.
               (authorized-keys
-               `((,%user-name ,%authorized-key)))))
+               (if %authorized-key
+                   `((,%user-name ,%authorized-key))
+                   '()))))
 
     %swapfile-service
     %metadata-ssh-key-service)
