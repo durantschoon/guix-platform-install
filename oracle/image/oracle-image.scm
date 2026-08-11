@@ -151,14 +151,39 @@
               (apply format (current-error-port)
                      (string-append "metadata-ssh-keys: " fmt "~%") args))
 
-            (define (fetch! url . extra)
-              ;; Short timeouts: on a machine with no metadata service (a local
-              ;; QEMU smoke test) this must fail in seconds, not stall boot.
+            (define (fetch-once! url . extra)
               (and (zero? (apply system* wget "-q" "-O" scratch
-                                 "--timeout=5" "--tries=2"
+                                 "--timeout=5" "--tries=1"
                                  (append extra (list url))))
                    (file-exists? scratch)
                    (> (stat:size (stat scratch)) 0)))
+
+            (define (fetch! url . extra)
+              "Try URL for up to ~2 minutes before giving up.
+
+The first version failed after ~10 seconds, which lost a race it could not
+win: shepherd's 'networking' is provided when dhcpcd STARTS, not when it has a
+lease, so the link-local metadata address at 169.254.169.254 may not be
+routable yet.  Boot on the first real instance reached a login prompt with no
+key installed (2026-08-10), and the fast failure is the most likely reason.
+
+Still bounded, and still never fatal: a machine with no metadata service (a
+local QEMU smoke test) costs 2 minutes of retries at boot and then proceeds.
+Each attempt is logged, so the next failure is diagnosable from
+/var/log/messages instead of being a silent absence."
+              (let loop ((attempt 1))
+                (cond
+                 ((apply fetch-once! url extra)
+                  (log "reached ~a on attempt ~a" url attempt)
+                  #t)
+                 ((>= attempt 24)
+                  (log "gave up on ~a after ~a attempts (~~2 min)" url attempt)
+                  #f)
+                 (else
+                  (when (= attempt 1)
+                    (log "~a not reachable yet; retrying for ~~2 min" url))
+                  (sleep 5)
+                  (loop (+ attempt 1))))))
 
             (define (read-scratch)
               (call-with-input-file scratch
