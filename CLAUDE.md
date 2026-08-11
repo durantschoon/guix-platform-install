@@ -39,6 +39,40 @@ The Guix ISO terminal has limited Unicode support and will display broken charac
 - `**/postinstall/**` scripts (run after booting into installed Guix system)
 - Scripts run on modern terminals outside the ISO
 
+**When the Unicode is input, not output:**
+
+The rule above is about what the ISO terminal *renders*. Some ISO tools *emit*
+non-ASCII that we then have to parse — `lsblk` draws its device tree with
+box-drawing characters, and stripping them is how a partition name becomes a
+`/dev` path. Deleting those characters does not fix a display problem; it
+breaks parsing, on the code path that decides which disk gets written.
+
+Write them as `\u` escapes. The compiled string is byte-identical to the
+literal, and the source file stays pure ASCII, so the validator passes
+honestly rather than by not looking:
+
+```go
+// Not this -- validate-before-deploy.sh will fail the file:
+partName = strings.TrimLeft(partName, "├─└│ ")
+
+// This -- same bytes at runtime, ASCII on disk:
+const lsblkTreePrefixCutset = "\u251c\u2500\u2514\u2502 " // |- - |_ |
+partName = strings.TrimLeft(partName, lsblkTreePrefixCutset)
+```
+
+Put the escapes in one named constant with a comment naming the codepoints, so
+someone debugging a parsing failure can see what the bytes are without running
+`hexdump`. Worked example, including how to inspect what `lsblk` is really
+emitting: `lsblkTreePrefixCutset` in
+`framework-dual/install/01-partition-check.go`.
+
+**Scope of the check:** `lib/validate-before-deploy.sh` scans
+`bootstrap-installer.sh`, `run-remote-steps.go`, and every `install/*.sh` *and*
+`install/*.go`. The `.go` half is the part that matters — the install
+directories contain no `.sh` files at all, so a `.sh`-only glob silently
+scanned one file for years. If you add a platform directory, confirm the
+scanned-file count in the `--verbose` output goes up.
+
 ## Code Patterns
 
 ### Reading User Input

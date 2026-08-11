@@ -194,11 +194,11 @@ func (s *Step04SystemInit) RunClean(state *State) error {
 	fmt.Println("========================================")
 	fmt.Println()
 	fmt.Println("All steps completed successfully:")
-	fmt.Println("  ✓ System initialized")
+	fmt.Println("  [OK] System initialized")
 	if passwordSet {
-		fmt.Println("  ✓ User password set")
+		fmt.Println("  [OK] User password set")
 	}
-	fmt.Println("  ✓ Installation verified")
+	fmt.Println("  [OK] Installation verified")
 	fmt.Println()
 	fmt.Println("Ready to reboot into your new Guix system!")
 	fmt.Println()

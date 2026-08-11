@@ -129,10 +129,12 @@ func TestRefactoredFunctionCalls(t *testing.T) {
 // TestStringOperations tests string operations that were fixed in refactoring
 func TestStringOperations(t *testing.T) {
 	// Test the string trimming operation that was causing linter errors
-	testString := "├─nvme0n1p1"
-	
-	// This is the corrected version without duplicate characters
-	trimmed := strings.TrimLeft(testString, "├─└│ ")
+	// "\u251c\u2500" is the lsblk tree prefix, written as escapes so this
+	// file stays ASCII. See lsblkTreePrefixCutset in 01-partition-check.go
+	// for why -- do not replace these with the literal characters.
+	testString := "\u251c\u2500nvme0n1p1"
+
+	trimmed := strings.TrimLeft(testString, lsblkTreePrefixCutset)
 	expected := "nvme0n1p1"
 	
 	if trimmed != expected {
@@ -140,7 +142,7 @@ func TestStringOperations(t *testing.T) {
 	}
 	
 	// Test that we don't have duplicate characters in the cutset
-	cutset := "├─└│ "
+	cutset := lsblkTreePrefixCutset
 	seen := make(map[rune]bool)
 	for _, char := range cutset {
 		if seen[char] {

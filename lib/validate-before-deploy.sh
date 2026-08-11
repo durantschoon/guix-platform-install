@@ -161,20 +161,47 @@ echo
 echo "Checking for Unicode in ISO scripts..."
 check_unicode() {
     local unicode_found=0
+    local scanned=0
+    local rc
 
-    # Check all install scripts for Unicode
-    for script in lib/bootstrap-installer.sh cloudzy/install/*.sh framework*/install/*.sh; do
-        if [[ -f "$script" ]]; then
-            if grep -P '[^\x00-\x7F]' "$script" >/dev/null 2>&1; then
-                log_test FAIL "Unicode found in $script (will break on Guix ISO)"
-                verbose_log "Use [OK] instead of ✓, [ERROR] instead of ❌"
-                ((unicode_found++))
-            fi
+    # Scope comes from CLAUDE.md: bootstrap-installer.sh, run-remote-steps.go,
+    # and every install/*.sh or install/*.go. The .go half is the important
+    # part -- the install directories contain no .sh files at all, so the
+    # earlier .sh-only glob scanned exactly one file and then reported PASS
+    # for the whole rule.
+    #
+    # "Unicode" here means any byte >= 0x80, written as a literal byte range
+    # under LC_ALL=C. The earlier form, grep -P, is GNU-only: BSD grep (macOS)
+    # rejects -P, the error was sent to /dev/null, and the check silently
+    # passed on any non-GNU host without reading a file.
+    #
+    # If you need a real non-ASCII character as INPUT rather than as terminal
+    # output, write it as a \u escape so the source stays ASCII. Worked
+    # example: lsblkTreePrefixCutset in
+    # framework-dual/install/01-partition-check.go.
+    for script in lib/bootstrap-installer.sh run-remote-steps.go \
+                  cloudzy/install/*.sh cloudzy/install/*.go \
+                  framework*/install/*.sh framework*/install/*.go; do
+        [[ -f "$script" ]] || continue
+        scanned=$((scanned + 1))
+        LC_ALL=C grep -q $'[\x80-\xff]' "$script"
+        rc=$?
+        if [[ $rc -eq 0 ]]; then
+            log_test FAIL "Unicode found in $script (will break on Guix ISO)"
+            verbose_log "Use [OK] instead of ✓, [ERROR] instead of ❌"
+            verbose_log "If the character is parsed input, not output, use a \u escape"
+            unicode_found=$((unicode_found + 1))
+        elif [[ $rc -gt 1 ]]; then
+            # grep itself failed. A check that cannot run must never pass.
+            log_test FAIL "Unicode check could not run on $script (grep exit $rc)"
+            unicode_found=$((unicode_found + 1))
         fi
     done
 
-    if [[ $unicode_found -eq 0 ]]; then
-        log_test PASS "No Unicode characters in ISO scripts"
+    if [[ $scanned -eq 0 ]]; then
+        log_test FAIL "Unicode check scanned no files -- globs matched nothing"
+    elif [[ $unicode_found -eq 0 ]]; then
+        log_test PASS "No Unicode characters in ISO scripts ($scanned files scanned)"
     fi
 }
 check_unicode
@@ -394,11 +421,18 @@ check_compilation
 echo
 echo "Running unit tests..."
 check_tests() {
-    if go test ./lib/... 2>&1 | grep -q "ok"; then
+    local output
+    # Gate on go test's exit status. The earlier form piped output into
+    # `grep -q "ok"`, which matched a single passing package -- or any path
+    # containing the substring "ok" -- even when other packages failed.
+    if output=$(go test ./lib/... 2>&1); then
         log_test PASS "Unit tests pass"
     else
         log_test FAIL "Unit tests failed"
         verbose_log "Run: go test -v ./lib/..."
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "$output"
+        fi
     fi
 }
 check_tests

@@ -267,6 +267,42 @@ func (s *Step01PartitionCheck) checkPopOS(state *State) {
 }
 
 
+// lsblkTreePrefixCutset is the set of characters lsblk uses to draw its device
+// tree, plus the trailing space. A child partition arrives from lsblk looking
+// like "|-nvme0n1p1" -- drawn with box-drawing characters, not ASCII pipes --
+// and that prefix has to come off before the name can become a /dev path.
+//
+// The characters are written as Go \u escapes rather than as literals so that
+// this source file contains no non-ASCII byte. That is deliberate, and it is
+// not cosmetic. Two rules collide here:
+//
+//   - CLAUDE.md forbids Unicode in code that runs on the Guix ISO, because the
+//     ISO terminal renders it as garbage. lib/validate-before-deploy.sh
+//     enforces this by scanning these files for any byte >= 0x80.
+//   - But this Unicode is INPUT, not output. It is never printed. lsblk emits
+//     these bytes and we consume them, so they cannot simply be removed --
+//     deleting them silently breaks partition-name parsing, and this is the
+//     code path that decides which device gets written to.
+//
+// The \u form satisfies both: the compiled string is byte-identical to the
+// literal, while the file itself stays pure ASCII.
+//
+// If you are debugging partition detection, these are the real characters
+// (shown as ASCII approximations so this comment stays ASCII too):
+//
+//	\u251c  drawn as  |-   BOX DRAWINGS LIGHT VERTICAL AND RIGHT
+//	\u2500  drawn as  -    BOX DRAWINGS LIGHT HORIZONTAL
+//	\u2514  drawn as  |_   BOX DRAWINGS LIGHT UP AND RIGHT
+//	\u2502  drawn as  |    BOX DRAWINGS LIGHT VERTICAL
+//
+// To see what lsblk is actually emitting on a machine that is misparsing:
+//
+//	lsblk -n -o NAME,LABEL /dev/nvme0n1 | hexdump -C | head
+//
+// Do not rewrite this as a literal string: validate-before-deploy.sh will fail
+// it. Do not drop the characters: partition parsing will break.
+const lsblkTreePrefixCutset = "\u251c\u2500\u2514\u2502 "
+
 func (s *Step01PartitionCheck) findHomePartition(state *State) {
 	// Search for partition with filesystem label "DATA"
 	cmd := exec.Command("lsblk", "-n", "-o", "NAME,LABEL", state.Device)
@@ -278,7 +314,7 @@ func (s *Step01PartitionCheck) findHomePartition(state *State) {
 			if len(fields) >= 2 && fields[1] == "DATA" {
 				// Extract full device path from partition name (strip tree characters)
 				partName := fields[0]
-				partName = strings.TrimLeft(partName, "├─└│ ")
+				partName = strings.TrimLeft(partName, lsblkTreePrefixCutset)
 				state.HomePartition = "/dev/" + partName
 				homeSize := lib.GetPartitionSizeGiB(state.HomePartition)
 				fmt.Printf("Found DATA partition: %s\n", state.HomePartition)
