@@ -1,5 +1,11 @@
 # Development Notes for Claude Code
 
+> **New session? Read [AGENTS.md](AGENTS.md) first** — it is the short
+> orientation map: current project state, the one test blocking the work in
+> flight, what is machine-local and therefore missing on another machine, and
+> the reading order for the rest. This file holds the *rules*; AGENTS.md says
+> *where things stand*. It is vendor-neutral, so it serves any assistant.
+
 This document contains important notes for AI assistants (like Claude Code) working on this repository.
 
 ## Expected behavior when updating the code

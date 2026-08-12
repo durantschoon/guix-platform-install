@@ -1,0 +1,98 @@
+# Start here
+
+Orientation for any AI agent working in this repository. Vendor-neutral: the
+rules below apply whichever assistant you are.
+
+**Written 2026-08-11.** Anything about *current state* rots; the "Conventions"
+section does not. When they disagree, trust `git log` and `CHECKLIST.md` over
+this file, and fix this file.
+
+## Read in this order
+
+| Read | For |
+|---|---|
+| **`CLAUDE.md`** | The full operating rules. Despite the name these are **not Claude-specific** — language policy, shebang paths, ASCII constraints, testing workflow. Read it before writing code. |
+| **`CHECKLIST.md`** | What is done and what is next. The five most recent completions are at the top; older ones are in `archive/CHECKLIST_COMPLETED.md`. |
+| **`docs/ORACLE_ONE_CLICK_ROADMAP.md`** | The work currently in flight, and the single gate blocking it. |
+| **`docs/stages/README.md`** | How delegated implementation works here — numbered stage prompts, isolated worktrees, review gates. Four stages are merged. |
+| **`docs/STORY.md`** | Narrative of how the hard problems were actually diagnosed. The one doc that inverts the usual technical/narrative ratio. Optional, but it explains *why* several odd-looking decisions are correct. |
+
+## Where the project is (2026-08-11)
+
+The goal: someone with no Guix experience gets a free always-on Guix machine on
+Oracle Cloud, configured the way they like.
+
+- **Done**: the personal-config contract (`docs/PERSONAL_CONFIG_CONTRACT.md`),
+  instance-metadata SSH keys, capacity handling, first-boot preferences, and a
+  published walkthrough at
+  <https://durantschoon.github.io/guix-platform-install/>.
+- **Blocked**: publishing one generic image, and the console-only path. Both
+  wait on a single test.
+- **The gate**: launch an instance whose SSH key arrives *only* via
+  `--metadata ssh_authorized_keys`, and log in. Everything underneath it —
+  endpoint, auth header, fallback, value format, DHCP timing — is measured. Two
+  bugs have been found and fixed by running it; it has not yet passed.
+
+## Not in git, and easy to miss
+
+Several things this work depends on are machine-local. An agent on a different
+machine does not have them and should not assume they exist:
+
+- `~/.local/bin/oracle-*` — helper scripts (`oracle-ssh`,
+  `oracle-verify-metadata`, `oracle-metadata-gate`)
+- `~/.oci/` — Oracle CLI credentials
+- `.claude/` — gitignored, including the permission allowlist
+- The assistant's own memory directory, if it has one
+
+Also: **`guix` only exists on the Guix machine.** Nothing involving
+`guix system image`, `guix repl`, or the Oracle image build can run on macOS.
+Go tests and documentation work fine anywhere.
+
+## Conventions that are load-bearing
+
+These are the ones most often violated by someone new. `CLAUDE.md` has the full
+set and the reasoning.
+
+1. **Guile for anything that runs on Guix.** Bash only for what must run before
+   Guix exists, or on a non-Guix machine.
+2. **Shebangs.** `#!/run/current-system/profile/bin/bash` (or `.../guile`) on
+   Guix targets; `#!/usr/bin/env bash` for developer tooling. Never
+   `#!/bin/bash` — Guix's `/bin` contains only `sh`.
+3. **Guile has no octal string escape.** `"\033["` reads as NUL followed by the
+   characters `3`, `3`. Use `"\x1b["`.
+4. **A directly-executable Guile script needs the meta-switch shebang** —
+   backslash at the end of the first line, arguments on the second. A shebang
+   passes everything after the interpreter as ONE argument.
+5. **ASCII only** in anything read over the Guix ISO terminal or an OCI serial
+   console: `[OK]`, `[WARN]`, `[ERROR]`. Unicode that is *parsed input* rather
+   than output is the exception — write it as `\u` escapes and see
+   `lsblkTreePrefixCutset`.
+6. **Read prompts from `/dev/tty`, never stdin.** Some entry points are piped
+   into the interpreter, so stdin is the script itself.
+7. **Every unit of code states its purpose** in a matching `*_purpose.txt`,
+   including statements of omission ("tempting to add X; left out because Y").
+8. **Do not remove code you were not asked to remove.** Flag it instead.
+
+## Before you commit
+
+```sh
+lib/validate-before-deploy.sh --verbose   # exit 0; "Failed:" must be 0
+./run-tests.sh                            # exit 0
+./update-manifest.sh                      # if it covers a file you changed
+```
+
+Inherited state, not your breakage: about 15 validation warnings, and
+`run-tests.sh` reports 14/14 converted-script tests failing. Those are
+auto-generated, have never passed, and are deliberately non-gating. Do not
+"fix" them as part of unrelated work.
+
+## A warning this repository earned
+
+Several of its checks used to pass **by not looking**: a shebang rule nothing
+enforced, a manifest check that verified 1 file of 54, a Unicode check that
+scanned 1 file and only on GNU hosts, and a test suite whose `set -e` killed it
+before its own failure-tolerance ran. Each was invisible precisely because it
+was green.
+
+If you add a check, make it report what it inspected — a count, a list, the
+command it ran. A gate that cannot say what it looked at is not a gate.
