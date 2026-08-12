@@ -86,6 +86,57 @@ Inherited state, not your breakage: about 15 validation warnings, and
 auto-generated, have never passed, and are deliberately non-gating. Do not
 "fix" them as part of unrelated work.
 
+## When to verify instead of trust
+
+Much of this project runs on machines that are slow or awkward to reach: an
+image build, an upload, an import, a boot. A wrong assumption is not found in
+seconds — it is found in half an hour, on a box you may not be able to log into.
+That asymmetry, not diligence, is what the rule below is about.
+
+**The trigger is a ratio.** If discovering a mistake would take roughly ten
+times longer than checking for it, check. Every expensive failure in this
+repository's history cost a 30–60 minute cloud cycle; every check that would
+have caught it cost under two minutes.
+
+**Verify when your belief came from somewhere else.** The failures here were not
+carelessness; each was a confident model of *another system's* behaviour that
+had never been tested against that system:
+
+| Assumed | The boundary not crossed |
+|---|---|
+| "the config evaluates" ⇒ it builds | evaluation → **build** (the builder only runs at build time) |
+| a flag valid on `image import` is valid on `instance launch` | one API verb → **another** |
+| a helper returns an exit status | your code → **the helper's actual contract** |
+| `read-line` exists | Guile core → **the shepherd gexp's module set** |
+
+Each was cheap to check and expensive to discover. So: **verify at boundaries
+you have not personally crossed** — a library's internals, a CLI's accepted
+flags, a runtime's available modules, another layer's return contract. Trust
+your own code within a layer you just wrote and can see fail immediately.
+
+**Name the phase your evidence comes from.** "Verified" is not a claim until it
+says *verified how far*. Evaluating is not building; building is not booting;
+booting is not logging in. Writing "both paths verified to evaluate" and
+treating it as "both paths work" is exactly how the `#f`-in-authorized-keys bug
+reached a real image build. If something has not been run on real hardware or a
+live instance, the docs and the report say so.
+
+**Design the test so failure teaches.** The first gate attempt built an image
+with no key, so a failure meant no key → no login → no logs → the reason
+stranded on the machine. Two rounds later the same test kept a baked key purely
+so the failure could be *read*, and the very next run produced a timestamped
+`Unbound variable: read-line`. Prefer a test that is slightly less pure and
+actually diagnosable. Ask before running it: *if this fails, what will I know?*
+
+**A report is a claim; a diff and a rerun are evidence.** When a subagent says
+its work is clean, check the changed files against its allow-list, read the
+diff, and re-run the gates yourself in its worktree. One stage's report was
+accurate and still understated what it had done — it had also fixed two latent
+bugs that would have silently dropped a NetworkManager DNS block.
+
+**Trust freely where failure is immediate and loud.** A typo in a test file
+surfaces in seconds. Re-checking that costs more than the failure does.
+
 ## A warning this repository earned
 
 Several of its checks used to pass **by not looking**: a shebang rule nothing
