@@ -186,13 +186,28 @@ Each attempt is logged, so the next failure is diagnosable from
                   (loop (+ attempt 1))))))
 
             (define (read-scratch)
-              (call-with-input-file scratch
-                (lambda (port)
-                  (let loop ((lines '()))
-                    (let ((line (read-line port)))
-                      (if (eof-object? line)
-                          (reverse lines)
-                          (loop (cons line lines))))))))
+              "Read the fetched file into a list of lines, using ONLY core Guile.
+
+read-line lives in (ice-9 rdelim), which a shepherd service gexp does not have.
+The first version used it and died at exactly this point, AFTER a successful
+fetch (2026-08-11):
+
+  metadata-ssh-keys: reached http://169.254.169.254/... on attempt 4
+  metadata-ssh-keys: failed: (unbound-variable #f \"Unbound variable: ~S\"
+                              (read-line) #f)
+
+Adding (modules '((ice-9 rdelim))) to the shepherd-service would also work, but
+it replaces the default module set rather than extending it, so it trades one
+unbound-variable risk for another. read-char, list->string and string-split are
+all core and cannot be missing."
+              (let ((port (open-input-file scratch)))
+                (let loop ((chars '()))
+                  (let ((ch (read-char port)))
+                    (if (eof-object? ch)
+                        (begin
+                          (close-port port)
+                          (string-split (list->string (reverse chars)) #\newline))
+                        (loop (cons ch chars)))))))
 
             ;; Leaf values may come back JSON-quoted ("ssh-ed25519 AAAA...")
             ;; rather than raw.  Probed on a live instance 2026-08-08 via
