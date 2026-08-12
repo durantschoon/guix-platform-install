@@ -376,7 +376,24 @@ LEAF VALUE QUOTING -- measured RAW, guard kept anyway
     with no keys cannot demonstrate the keys endpoint itself, so the format is
     inferred from a sibling leaf.  That is why the guard stays.
 
-STILL NOT VERIFIED ON A LIVE INSTANCE
+VERIFIED ON A LIVE INSTANCE (2026-08-11)
+    A launch with the key supplied only via --metadata ssh_authorized_keys
+    installed it and the login worked:
+
+      metadata-ssh-keys: reached .../ssh_authorized_keys on attempt 4
+      metadata-ssh-keys: installed 1 key(s) into /home/guix/.ssh/authorized_keys
+
+    Attempt 4, about 20 seconds in -- which is why the retry exists.  The
+    original ~10s budget could never have won that race, and did not: the first
+    real instance booted with no key at all.
+
+    Caveat kept deliberately: the confirming image ALSO carried a baked-in key.
+    A keyless image that fails leaves no way in to read /var/log/messages, which
+    is exactly why two earlier attempts produced no information.  The service is
+    verified; the keyless image is confirmed to build; publishing it exercises
+    the last inch.
+
+FORMER NOTE, kept because the reasoning still applies to the next such service
     QEMU has no metadata service, so 03-smoke-test.scm exercises only the
     "no metadata available" path.  The real test is launching with
     --metadata ssh_authorized_keys=... and NO baked-in key, then logging in.

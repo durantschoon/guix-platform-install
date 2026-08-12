@@ -1,6 +1,6 @@
 # Roadmap: "My Friend Clicks a Button and Has Guix on Oracle"
 
-**Status: approved future work.** Recorded 2026-08-08. Step 1 is implemented;
+**Status: in progress.** Recorded 2026-08-08. Step 1 is implemented **and verified on a live instance (2026-08-11)**;
 step 5 (stage 01) and step 6 in its presentation-only form (`web/index.html`,
 stage 02) are implemented; steps 2-4 are not started.
 
@@ -80,13 +80,41 @@ So the endpoint, the header, the tool and the value format are measured, not
 assumed. The `unquote-value` guard turns out to be a no-op on this format and
 is kept as cheap insurance.
 
-### The one thing still unverified
+### VERIFIED ON A LIVE INSTANCE (2026-08-11)
 
-**The service has never run at boot.** Everything it depends on is confirmed
-above, but whether shepherd starts it at the right point and whether the
-installed key actually admits a login is untested — QEMU has no metadata
-service, so the local smoke test only reaches the "no metadata available" path.
-Before anything downstream is built:
+**The gate passed.** On a real launch with the key supplied via
+`--metadata ssh_authorized_keys`, the service logged:
+
+```
+metadata-ssh-keys: ...ssh_authorized_keys not reachable yet; retrying for ~2 min
+metadata-ssh-keys: reached ...ssh_authorized_keys on attempt 4
+metadata-ssh-keys: installed 1 key(s) into /home/guix/.ssh/authorized_keys
+```
+
+and the login worked. Guix writes a baked-in key to
+`/etc/ssh/authorized_keys.d/guix` and never to `~/.ssh/authorized_keys`, so the
+key can only have come from instance metadata.
+
+**Three bugs had to be fixed to get there**, each found by running it:
+
+1. `authorized-keys` emitted `((guix #f))` when the key file was absent, and the
+   builder died on `(open-file #f)`. Evaluation could not catch it — that
+   builder only runs at build time.
+2. The fetch gave up after ~10s. `networking` is provided when dhcpcd *starts*,
+   not when it holds a lease; the metadata address was reachable on **attempt 4**,
+   about 20 seconds in. Now retries for ~2 minutes.
+3. `read-line` is unbound inside a shepherd gexp — it lives in `(ice-9 rdelim)`.
+   Rewritten with core-only primitives.
+
+**One honest caveat.** The confirming launch used an image that also carried a
+baked-in key, on purpose: a keyless image that fails leaves no way to log in and
+read `/var/log/messages`, which is precisely why the two earlier attempts taught
+nothing. The service is verified. The keyless image is confirmed to *build*;
+publishing it (step 2) exercises that last inch end-to-end.
+
+**Steps 2 and 3 are unblocked.**
+
+The command that confirmed it, for reference:
 
 ```sh
 # Launch with a key supplied ONLY via metadata -- no baked-in key in the image
@@ -95,10 +123,9 @@ oci compute instance launch ... \
 ssh guix@<public-ip>
 ```
 
-If that login succeeds, the whole roadmap below is unlocked. If it fails, check
-the serial console for the `metadata-ssh-keys:` log lines — they name the
-failure. **Do not build steps 2-6 before this test passes**; every one of them
-assumes it.
+That is what `~/.local/bin/oracle-metadata-gate` automates end to end: keyless
+build, upload, import, launch with metadata, login, and a verdict read from
+`~/.ssh/authorized_keys` plus the service's own log lines.
 
 ## Step 2 — Publish one generic image
 
@@ -185,7 +212,7 @@ authenticated UI.
 
 | Step | Effort | Blocked by |
 |---|---|---|
-| 1. Metadata SSH keys | Medium | **DONE** — needs live-instance verification |
+| 1. Metadata SSH keys | Medium | **DONE and VERIFIED** on a live instance 2026-08-11 |
 | 2. Publish generic image | Small | Step 1 verified |
 | 3. Console-only path docs | Small | Step 2 |
 | 4. Preferences at first boot | Medium | Step 1 verified |

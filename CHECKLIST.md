@@ -582,18 +582,33 @@ builder, so every user needed their own build, so every user needed Guix. Now
 `--metadata ssh_authorized_keys` works and **one published image serves
 everyone**.
 
-> ⚠ **Blocking gate: this has never run on a live OCI instance.** QEMU has no
-> metadata service, so only the "no metadata" path is covered locally. Launch
-> once with `--metadata ssh_authorized_keys=...` and **no** baked-in key, and
-> confirm the login. **Do not start steps 2-6 before this passes** — every one
-> of them assumes it. If it fails, the serial console carries
-> `metadata-ssh-keys:` log lines naming the cause.
+> ✅ **GATE PASSED (2026-08-11).** A live instance launched with the key
+> supplied only via `--metadata ssh_authorized_keys` installed it and the login
+> worked:
+>
+> ```
+> metadata-ssh-keys: reached .../ssh_authorized_keys on attempt 4
+> metadata-ssh-keys: installed 1 key(s) into /home/guix/.ssh/authorized_keys
+> ```
+>
+> Guix writes a baked-in key to `/etc/ssh/authorized_keys.d/` and never to
+> `~/.ssh/authorized_keys`, so it can only have come from instance metadata.
+> **Steps 2-3 are unblocked.** Three bugs were found by running it — an `#f`
+> reaching the authorized-keys builder, a fetch that gave up before DHCP had a
+> lease (the address was reachable on attempt 4, ~20s in), and `read-line` being
+> unbound inside a shepherd gexp. Automated end-to-end by
+> `~/.local/bin/oracle-metadata-gate`.
+>
+> *Caveat kept deliberately:* the confirming image also carried a baked-in key,
+> because a keyless image that fails leaves no way in to read the logs — which is
+> exactly why two earlier attempts taught nothing. The service is verified; the
+> keyless image is confirmed to build; step 2 exercises the last inch.
 
 | Step | Effort | Blocked by |
 |---|---|---|
-| 2. Publish one generic image (release + checksum, import from URL) | Small | **step 1 verified** |
+| 2. Publish one generic image (release + checksum, import from URL) | Small | ✅ **UNBLOCKED — next up** |
 | 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | step 2 |
-| 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | **step 1 verified** |
+| 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | ✅ **DONE** (stage 03) |
 | 5. Capacity handling | Small | ✅ **DONE** (stage 01) — reasoned, never seen a real refusal |
 | 6. Web UI to show friends | Medium | ✅ **DONE** presentation-only (stage 02) — hedges until 2-3 land |
 

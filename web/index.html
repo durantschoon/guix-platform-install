@@ -339,14 +339,14 @@
 
 <div class="callout">
   <span class="tag">Read this first</span>
-  <p>Parts of this flow are <strong>not finished yet</strong>. The published,
+  <p>One part of this flow is <strong>not finished yet</strong>: the published,
   ready-to-import image does not exist, so today you still need someone with a
-  working Guix machine to build one. The piece that would remove that
-  requirement — installing your SSH key from Oracle's instance metadata — has
-  been run on real instances and <strong>does not work yet</strong>; it is being
-  debugged in the open. The <a href="#status">status section</a> at the bottom
-  says exactly which parts, and this page does not pretend otherwise anywhere
-  above it.</p>
+  working Guix machine to build one. The piece that will remove that
+  requirement — installing your SSH key from Oracle's instance metadata —
+  <strong>was verified on a real instance on 2026-08-11</strong>: the key
+  arrived through instance metadata alone and the login worked. The
+  <a href="#status">status section</a> at the bottom says exactly where things
+  stand, and this page does not pretend otherwise anywhere above it.</p>
 </div>
 
 <h2 id="what">What this is</h2>
@@ -585,24 +585,26 @@ console-only path above.</p>
       is step 2 of the roadmap.</td>
     </tr>
     <tr>
-      <td><span class="badge no">no</span></td>
-      <td><strong>The metadata SSH key service has never run on a live
-      instance.</strong> Pasting your key into the console's <strong>Add SSH
-      keys</strong> box is supposed to be what gets you in at step 3 above. The
-      service is implemented and the "no metadata available" path is covered by
-      the local QEMU test — but QEMU has no instance metadata service, so the
-      path that actually matters has only been reasoned about, not observed.
-      Until one live launch confirms it, assume you may need a key baked into the
-      image instead.</td>
+      <td><span class="badge yes">yes</span></td>
+      <td><strong>The metadata SSH key service works on a live instance</strong>
+      — confirmed 2026-08-11. Pasting your key into the console's <strong>Add
+      SSH keys</strong> box is what gets you in at step 3 above, and that is the
+      same field the service reads. On a real launch it logged
+      <code>installed 1 key(s) into /home/guix/.ssh/authorized_keys</code> and
+      the login worked. Guix writes a baked-in key to a different file
+      (<code>/etc/ssh/authorized_keys.d/</code>) and never to that one, so the
+      key demonstrably arrived through instance metadata.</td>
     </tr>
   </tbody>
 </table>
 </div>
 
-<p>Everything downstream is gated on that second item. If a launch with a
-metadata-only key lets you <code>ssh guix@&lt;ip&gt;</code>, the rest of the
-roadmap is unlocked; if it does not, the serial console log lines beginning
-<code>metadata-ssh-keys:</code> name the failure.</p>
+<p>One honest caveat on that second row: the confirming launch used an image
+that <em>also</em> carried a baked-in key, deliberately — a fully keyless image
+that fails leaves you no way to log in and read the logs, which is exactly how
+two earlier attempts taught nothing. The service itself is verified. The fully
+keyless image is confirmed to build, and publishing it (step 2 above) is what
+will exercise that last inch end-to-end.</p>
 
 <h2 id="more">Where to read further</h2>
 

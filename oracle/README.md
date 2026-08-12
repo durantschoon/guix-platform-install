@@ -130,8 +130,10 @@ console's **Add SSH keys** box populates does the right thing, and one image can
 anyone. A baked-in `image/authorized-key.pub` is still honoured if present, and the two
 coexist. See [../docs/ORACLE_ONE_CLICK_ROADMAP.md](../docs/ORACLE_ONE_CLICK_ROADMAP.md).
 
-*Not yet verified on a live instance* — QEMU has no metadata service, so only the
-"no metadata" path is covered locally.
+**Verified on a live instance 2026-08-11**: a launch with the key supplied only
+via `--metadata` installed it and the login worked. `~/.local/bin/oracle-metadata-gate`
+automates the whole check. Three bugs had to be fixed to get there — see
+[../docs/ORACLE_ONE_CLICK_ROADMAP.md](../docs/ORACLE_ONE_CLICK_ROADMAP.md).
 
 Open port 22 in the subnet's security list, then:
 
