@@ -339,14 +339,13 @@
 
 <div class="callout">
   <span class="tag">Read this first</span>
-  <p>One part of this flow is <strong>not finished yet</strong>: the published,
-  ready-to-import image does not exist, so today you still need someone with a
-  working Guix machine to build one. The piece that will remove that
-  requirement — installing your SSH key from Oracle's instance metadata —
-  <strong>was verified on a real instance on 2026-08-11</strong>: the key
-  arrived through instance metadata alone and the login worked. The
-  <a href="#status">status section</a> at the bottom says exactly where things
-  stand, and this page does not pretend otherwise anywhere above it.</p>
+  <p>As of <strong>2026-08-11</strong> the whole path works and has been run
+  end to end: a published image you import without building anything, your own
+  SSH key supplied at launch, and a login that succeeds. What is still missing
+  is the <em>hand-holding</em> — this page describes the flow accurately, but
+  there are no console screenshots yet, and the OCI console is where a newcomer
+  is most likely to get lost. The <a href="#status">status section</a> says
+  exactly what has been verified and how.</p>
 </div>
 
 <h2 id="what">What this is</h2>
@@ -409,15 +408,16 @@ credentials.</p>
 
   <li>
     <h3>Get the image</h3>
-    <p>The intent is that you import a published, generic Guix image straight
-    from a URL. <strong>That image is not published yet</strong>, so there is no
-    URL to give you and this page will not invent one.</p>
-    <p>Until it exists, the image has to be built once by someone who already
-    runs Guix, using
-    <a href="https://github.com/durantschoon/guix-platform-install/blob/main/oracle/README.md">oracle/README.md</a>,
-    and uploaded to an Object Storage bucket you can read. The build is a single
-    declarative file and the whole upload/import/launch sequence is scripted
-    there.</p>
+    <p>Download the published image — you need neither Guix nor a build:</p>
+    <p><a href="https://github.com/durantschoon/guix-platform-install/releases/tag/oracle-image-20260811">guix-oracle-generic.qcow2</a>
+    &nbsp;·&nbsp; 585 MB &nbsp;·&nbsp; sha256
+    <code>327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592</code></p>
+    <p>Then upload it to an Object Storage bucket in your own tenancy, from the
+    OCI console: <strong>Storage &rarr; Buckets</strong>, create one, and upload
+    the file. Oracle's importer only reads from <em>its own</em> Object Storage,
+    so it cannot fetch the GitHub link directly — that hop is unavoidable.</p>
+    <p>No SSH key is baked into this image. That is the whole point of it: yours
+    arrives at launch, in step 3.</p>
   </li>
 
   <li>
@@ -578,11 +578,18 @@ console-only path above.</p>
       end-to-end on 2026-08-08 with a key baked into the image.</td>
     </tr>
     <tr>
-      <td><span class="badge no">no</span></td>
-      <td><strong>The published generic image does not exist yet.</strong> There
-      is no URL to import from, and this page does not link to one. Someone with
-      Guix installed must build and share the image until it is published. This
-      is step 2 of the roadmap.</td>
+      <td><span class="badge yes">yes</span></td>
+      <td><strong>The generic image is published</strong> — released 2026-08-11,
+      then imported from its URL, launched, and logged into, in that order.
+      <a href="https://github.com/durantschoon/guix-platform-install/releases/tag/oracle-image-20260811">guix-oracle-generic.qcow2</a>,
+      585 MB, sha256
+      <code>327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592</code>.
+      You do not need Guix, or a build, to use it.
+      <br><br>
+      One wrinkle worth knowing: OCI's <code>import from-object-uri</code> only
+      accepts <em>its own</em> Object Storage URLs, so you cannot hand it the
+      GitHub link directly. Download it, upload it to a bucket in your tenancy,
+      then import from there.</td>
     </tr>
     <tr>
       <td><span class="badge yes">yes</span></td>
@@ -599,12 +606,18 @@ console-only path above.</p>
 </table>
 </div>
 
-<p>One honest caveat on that second row: the confirming launch used an image
-that <em>also</em> carried a baked-in key, deliberately — a fully keyless image
-that fails leaves you no way to log in and read the logs, which is exactly how
-two earlier attempts taught nothing. The service itself is verified. The fully
-keyless image is confirmed to build, and publishing it (step 2 above) is what
-will exercise that last inch end-to-end.</p>
+<p>How the second row was proved, since "it worked" is easy to claim: the
+published image was launched with the key passed only as instance metadata, and
+on the running machine <code>~/.ssh/authorized_keys</code> held that key while
+<code>/etc/ssh/authorized_keys.d/</code> — the directory Guix uses for a key
+baked in at build time — was <strong>empty</strong>. An empty directory there is
+the difference between "no key is baked in" as a claim and as an observation.</p>
+
+<p>What is left is step 3 of the
+<a href="https://github.com/durantschoon/guix-platform-install/blob/main/docs/ORACLE_ONE_CLICK_ROADMAP.md">roadmap</a>:
+screenshots of the OCI console for the import and the <strong>Add SSH keys</strong>
+box. Those two screens are where someone new is most likely to get stuck, and no
+amount of prose substitutes for a picture of them.</p>
 
 <h2 id="more">Where to read further</h2>
 

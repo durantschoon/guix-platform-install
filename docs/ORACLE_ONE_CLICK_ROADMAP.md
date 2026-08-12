@@ -1,8 +1,8 @@
 # Roadmap: "My Friend Clicks a Button and Has Guix on Oracle"
 
-**Status: in progress.** Recorded 2026-08-08. Step 1 is implemented **and verified on a live instance (2026-08-11)**;
-step 5 (stage 01) and step 6 in its presentation-only form (`web/index.html`,
-stage 02) are implemented; steps 2-4 are not started.
+**Status: in progress.** Recorded 2026-08-08. Steps 1, 2, 4, 5 and 6 are done —
+step 1 and step 2 both **verified on live instances (2026-08-11)**. Only step 3
+(the console-only walkthrough, documentation plus screenshots) remains.
 
 ## The target
 
@@ -127,12 +127,56 @@ That is what `~/.local/bin/oracle-metadata-gate` automates end to end: keyless
 build, upload, import, launch with metadata, login, and a verdict read from
 `~/.ssh/authorized_keys` plus the service's own log lines.
 
-## Step 2 — Publish one generic image
+## Step 2 — Publish one generic image (DONE, 2026-08-11)
 
-Build once with no `authorized-key.pub` present, publish the qcow2 (GitHub
-release or a public Object Storage bucket) with a checksum, and document
-importing it straight from that URL. Removes the multi-hour build and the
-upload from the user's machine.
+Published, imported from its URL, launched, and logged into.
+
+| | |
+|---|---|
+| Release | <https://github.com/durantschoon/guix-platform-install/releases/tag/oracle-image-20260811> |
+| File | `guix-oracle-generic.qcow2`, 585,105,408 bytes (sparse; 50 GB virtual) |
+| sha256 | `327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592` |
+| Built from | `oracle/image/oracle-image.scm` with `authorized-key.pub` **absent** |
+
+**This closed the "last inch" left open by step 1.** A launch from the published
+image with the key supplied only via `--metadata` produced:
+
+```
+--- ~/.ssh/authorized_keys ---
+# Installed from OCI instance metadata.
+ssh-ed25519 AAAA... durant@pop-os
+--- /etc/ssh/authorized_keys.d/ ---
+total 8            <- empty
+```
+
+An empty `authorized_keys.d` is the direct artifact proof that no key is baked
+in, which the config-level checks could only infer. The image is genuinely
+generic.
+
+### Two traps this step hit
+
+**`import from-object-uri` rejects external URLs.** It accepts only OCI Object
+Storage URIs, so the GitHub release URL is refused outright
+(`InvalidParameter: Invalid sourceUri`). Two paths therefore exist, and both are
+documented:
+
+- **GitHub release** — canonical, checksummed, works for anyone in any tenancy.
+  Download, upload to your own bucket, import.
+- **Pre-authenticated Object Storage URL** — one-step
+  `import from-object-uri`, but tied to this tenancy's bucket and egress.
+
+**A debug image nearly got published.** The build immediately before this one
+carried a baked-in key, because the gate had been switched to keep one so its
+failures could be read (see step 1's caveat). Publishing *that* would have
+authorized one person's key on every instance any stranger launched from it.
+Rebuild with `authorized-key.pub` stashed, and verify:
+`/etc/ssh/authorized_keys.d/` must be **empty** on a booted instance. Do not
+rely on the store hash differing — check the artifact.
+
+**Free-tier limit, not capacity.** Launching a third `E2.1.Micro` returns
+`LimitExceeded: standard-e2-micro-core-count` — two are allowed. That is a
+different failure from `Out of host capacity` and needs different advice, which
+is why `04-deploy.scm`'s `launch-error-kind` distinguishes them.
 
 ## Step 3 — The console-only path
 
@@ -213,8 +257,8 @@ authenticated UI.
 | Step | Effort | Blocked by |
 |---|---|---|
 | 1. Metadata SSH keys | Medium | **DONE and VERIFIED** on a live instance 2026-08-11 |
-| 2. Publish generic image | Small | Step 1 verified |
-| 3. Console-only path docs | Small | Step 2 |
+| 2. Publish generic image | Small | ✅ **DONE** 2026-08-11 — released, imported, launched, verified keyless |
+| 3. Console-only path docs | Small | **UNBLOCKED — the only step left** |
 | 4. Preferences at first boot | Medium | Step 1 verified |
 | 5. Capacity handling | Small | **DONE** — stage 01; reasoned, never seen a real refusal |
 | 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; hedges on steps 2-3 until they land |

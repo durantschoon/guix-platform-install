@@ -7,6 +7,39 @@
 ([`../web/index.html`](../web/index.html)) — the same flow written for someone
 who has never used Guix, with an explicit list of which parts are not finished.
 
+## Just want the image? It is published
+
+You do not need Guix, or this repository, to run Guix System on Oracle.
+
+| | |
+|---|---|
+| Download | [`guix-oracle-generic.qcow2`](https://github.com/durantschoon/guix-platform-install/releases/tag/oracle-image-20260811) |
+| Size | 585,105,408 bytes (sparse; 50 GB virtual) |
+| sha256 | `327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592` |
+| Baked-in SSH key | **none** — you supply yours at launch |
+
+Verify it, upload it to a bucket in your own tenancy, import with
+**QCOW2 + PARAVIRTUALIZED**, and launch with your public key in
+`--metadata ssh_authorized_keys` (or the console's **Add SSH keys** box):
+
+```bash
+sha256sum guix-oracle-generic.qcow2   # must match the sha256 above
+```
+
+`sha256sum FILE` takes no flags here; it prints `<hash>  <name>`.
+
+**OCI's `import from-object-uri` will not accept the GitHub URL** — it reads
+only from its own Object Storage (`InvalidParameter: Invalid sourceUri`). Hence
+the upload-to-your-own-bucket hop.
+
+Verified end to end on 2026-08-11: imported from a URL, launched with a
+metadata-only key, logged in, and confirmed `/etc/ssh/authorized_keys.d/` was
+empty on the running machine — so the key demonstrably came from instance
+metadata and nothing was baked in.
+
+Then set your own host name, timezone and shell with
+[`postinstall/README.md`](postinstall/README.md).
+
 ## How this platform differs from the others
 
 Every other platform in this repo boots the Guix live ISO and runs `guix system init`. **OCI cannot boot an ISO** — it only accepts QCOW2/VMDK custom images uploaded to Object Storage.
@@ -41,9 +74,18 @@ guest-computed sentinels) are documented in
 
 - Guix on x86_64 (verified with `17c2142`)
 - `oci` CLI configured — `oci iam region-subscription list` should return your regions
-- Your SSH **public** key at `oracle/image/authorized-key.pub`
+- Optionally, your SSH **public** key at `oracle/image/authorized-key.pub`
 
-**The SSH key is baked into the image.** Guix has no cloud-init, so there is no way to inject a key at launch. Get it wrong and the instance is unreachable except via the serial console — password auth is disabled by design.
+**The baked-in key is now optional**, and for a shareable image it must be
+absent. Leave the file out and the image is built with no key at all; supply
+yours at launch via `--metadata ssh_authorized_keys`, which
+`%metadata-ssh-key-service` installs at first boot. Leave it in and the key is
+baked in as before — convenient for a personal instance, but **never publish
+such an image**: everyone who launches it grants you SSH access.
+
+Both mechanisms coexist. Guix writes a baked-in key to
+`/etc/ssh/authorized_keys.d/guix`; the service writes to
+`~/.ssh/authorized_keys`; sshd reads both.
 
 ```bash
 cp ~/.ssh/id_ed25519.pub oracle/image/authorized-key.pub
