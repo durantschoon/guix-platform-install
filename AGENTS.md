@@ -139,11 +139,38 @@ surfaces in seconds. Re-checking that costs more than the failure does.
 
 ## A warning this repository earned
 
-Several of its checks used to pass **by not looking**: a shebang rule nothing
-enforced, a manifest check that verified 1 file of 54, a Unicode check that
-scanned 1 file and only on GNU hosts, and a test suite whose `set -e` killed it
-before its own failure-tolerance ran. Each was invisible precisely because it
-was green.
+**Seven of its checks passed by not looking.** Not one bug seven times — seven
+separate gates, found over two days in 2026-08, each reporting success while
+inspecting almost nothing. Three of them lived in the same file,
+`lib/validate-before-deploy.sh`, the script `CLAUDE.md` calls CRITICAL and tells
+you to run before every commit.
 
-If you add a check, make it report what it inspected — a count, a list, the
-command it ran. A gate that cannot say what it looked at is not a gate.
+| The gate | What it actually did |
+|---|---|
+| Shebang rule | Nothing enforced it. 8 scripts carried `#!/bin/bash`, which cannot run on Guix (`/bin` holds only `sh`) — including `run-tests.sh` itself, so the mandated pre-commit command was unrunnable on the development machine. It "worked" only because everyone typed `bash run-tests.sh`, which bypasses the shebang. |
+| Manifest check | Hashed **1 file of 54**. Any other file could drift forever. It was also a `WARN`, so it never gated. |
+| Unicode check | Scanned **1 file**, and used GNU-only `grep -P` whose error went to `/dev/null` — so on macOS it passed **without reading anything**. |
+| Unit-test check | Piped `go test` into `grep -q "ok"`. That matches one passing package — or any path containing the substring `ok` — while other packages fail. A partially failing suite reported PASS. |
+| `run-tests.sh` | `set -e` aborted the suite on the first *deliberately tolerated* failure, defeating an explicit `# Don't fail the entire test suite` decision three lines below it. |
+| Device-detection tests | Asserted the *environment* ("no devices here") rather than the contract, so they failed on any real machine and passed only in an empty container. One condition was inverted: the success case was reported as failure. |
+| Evaluation tests | Structurally unable to catch a build-time fault. "Both paths verified to evaluate" was read as "both paths work"; the failing builder only runs at build time, and the bug reached a real image build. |
+
+Every one was invisible **precisely because it was green**. A red check gets
+fixed; a green one that inspects nothing is trusted for years.
+
+Three habits follow, and they are cheap:
+
+1. **Make a check report what it inspected** — a count, a list, the command it
+   ran. `21 files scanned` and `54 files verified` are what turn a silent glob
+   failure into an obvious one. A gate that cannot say what it looked at is not
+   a gate.
+2. **Gate on exit status, not on matching text.** `grep -q "ok"` asks whether a
+   reassuring word appeared. `if output=$(go test ./lib/...)` asks whether it
+   passed.
+3. **A check that cannot run must fail, never pass.** If the tool is missing,
+   the glob matched nothing, or the flag was rejected, that is a FAIL. Silence
+   is not success.
+
+When you add or touch a gate, prove it fails: break the thing on purpose, watch
+it go red, then fix it back. Several of the above would never have shipped if
+anyone had done that once.
