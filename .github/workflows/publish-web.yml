@@ -1,0 +1,78 @@
+# Publish web/index.html to GitHub Pages.
+#
+# Deploys ONLY the web/ directory, via the Pages artifact API, for two reasons:
+#
+#   - Branch-based Pages would have to serve /docs or the repo root. Both would
+#     publish this repository's ~40 markdown reference documents as a website,
+#     and run them through Jekyll, which is not what any of them are for.
+#   - The artifact path bypasses Jekyll entirely, so no .nojekyll file and no
+#     surprises about underscore-prefixed names.
+#
+# The source layout stays as it is: web/index.html is a self-contained page that
+# also opens correctly from file://, which is how it is normally reviewed.
+#
+# One-time manual prerequisite: Settings -> Pages -> Source -> "GitHub Actions".
+# Without it this workflow runs and fails at the deploy step. It can also be set
+# via the API:
+#   gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow
+
+name: Publish web page
+
+on:
+  push:
+    branches: [main]
+    # Only redeploy when the page itself changes. This repository has days with
+    # ~30 commits that touch no HTML; none of them need a deployment.
+    paths: ['web/**', '.github/workflows/publish-web.yml']
+  # Lets you deploy by hand from the Actions tab without pushing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: read      # check out the repository
+  pages: write        # publish to Pages
+  id-token: write     # OIDC handshake the deploy action requires
+
+# Never cancel an in-flight deployment: a half-finished Pages publish is worse
+# than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Guard rail, not decoration. The page's whole claim is that it collects
+      # nothing and calls out to nothing, and that claim is easy to break with
+      # one well-meaning edit. Fail the deploy rather than publish a page that
+      # quietly gained a form or a third-party script.
+      - name: Refuse to publish a page that collects input or phones home
+        run: |
+          set -euo pipefail
+          page=web/index.html
+          fail=0
+          for pattern in '<form' '<input' '<textarea' '<script' 'src="http' '@import'; do
+            if grep -qiF "$pattern" "$page"; then
+              echo "FAIL: '$pattern' present in $page"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "See .github/workflows/publish-web.yml for why this is enforced."
+            exit 1
+          fi
+          echo "OK: no forms, inputs, scripts, or external resource loads"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

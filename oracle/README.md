@@ -2,6 +2,11 @@
 
 ✅ **Status: verified end-to-end on 2026-08-08.** The image built, passed the QEMU smoke test, uploaded, imported, and launched as a running instance with sshd answering on its public IP. The whole flow is scripted in `scripts/` (see below); the manual commands in this file are kept as the reference for what the scripts do.
 
+**For a newcomer's walkthrough** rather than this reference, see
+[the web page](https://durantschoon.github.io/guix-platform-install/)
+([`../web/index.html`](../web/index.html)) — the same flow written for someone
+who has never used Guix, with an explicit list of which parts are not finished.
+
 ## How this platform differs from the others
 
 Every other platform in this repo boots the Guix live ISO and runs `guix system init`. **OCI cannot boot an ISO** — it only accepts QCOW2/VMDK custom images uploaded to Object Storage.

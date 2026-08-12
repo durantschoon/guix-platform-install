@@ -7,6 +7,12 @@ automated hardware detection, safety checks, and guided workflows.
 
 buymeacoffee.com/durantschoon (🙏 help support my LLM habit)
 
+**New to Guix?** [Guix System on Oracle Cloud's free tier](https://durantschoon.github.io/guix-platform-install/)
+walks through getting a free always-on Guix machine, written for someone who has
+never used Guix. It is a description of the flow, not a button — it deploys
+nothing and asks you for nothing. Parts are still unfinished, and the page says
+which. Source: [`web/index.html`](web/index.html).
+
 ## ⚠️ Choose Your Platform
 
 **Pick the right installer for your use case:**
