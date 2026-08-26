@@ -579,6 +579,17 @@ You can override with: `GUIX_PLATFORM="framework"` or `GUIX_PLATFORM="framework-
 
 For detailed testing information, see [`docs/TESTING.md`](docs/TESTING.md).
 
+Common development tasks have stable GNU Make entry points:
+
+```bash
+make test
+make manifest
+make oracle-help
+```
+
+The underlying scripts remain directly executable; Make is a documented
+interface, not a second implementation.
+
 **Local Testing** (requires Go 1.21+):
 
 ```bash

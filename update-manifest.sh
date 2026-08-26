@@ -172,6 +172,20 @@ find postinstall/recipes -name "*.scm" -type f | sort | while read -r file; do
     echo "$hash  $file" >> "$MANIFEST_FILE"
 done
 
+echo "" >> "$MANIFEST_FILE"
+echo "## Oracle Cloud Scripts and Tests" >> "$MANIFEST_FILE"
+echo "" >> "$MANIFEST_FILE"
+
+find oracle -name "*.scm" -type f | sort | while read -r file; do
+    hash=$(shasum -a 256 "$file" | awk '{print $1}')
+    echo "$hash  $file" >> "$MANIFEST_FILE"
+done
+
+find oracle/scripts -name "*.sh" -type f | sort | while read -r file; do
+    hash=$(shasum -a 256 "$file" | awk '{print $1}')
+    echo "$hash  $file" >> "$MANIFEST_FILE"
+done
+
 echo ""
 echo "Manifest written to $MANIFEST_FILE"
 echo ""
@@ -179,8 +193,11 @@ echo ""
 # Calculate and display the manifest checksum itself
 MANIFEST_HASH=$(shasum -a 256 "$MANIFEST_FILE" | awk '{print $1}')
 
-# Convert hash to human-readable words
-MANIFEST_WORDS=$(go run cmd/hash-to-words/main.go "$MANIFEST_HASH" 2>/dev/null)
+# Convert hash to human-readable words when the local Go toolchain works.
+# The words are a convenience; the SHA256 manifest and its hash remain the
+# authority, so an incomplete/missing Go installation must not make generation
+# fail after the manifest was successfully written.
+MANIFEST_WORDS=$(go run cmd/hash-to-words/main.go "$MANIFEST_HASH" 2>/dev/null || true)
 
 echo "================================================================"
 echo "MANIFEST CHECKSUM (verify this on Guix ISO before running):"

@@ -38,3 +38,6 @@ tools/.magit-diff-backup/
 # Oracle: the SSH public key baked into the OCI image is per-user.
 # Copy authorized-key.pub.example and drop your own key in.
 oracle/image/authorized-key.pub
+
+# Disposable Oracle validation state, snapshots, and ephemeral SSH keys.
+.oracle-validation/

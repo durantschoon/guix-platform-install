@@ -44,6 +44,26 @@ This checklist tracks remaining work for the guix-platform-install project.
 
 ## 🔄 Currently Working On
 
+### Oracle disposable Guix validation
+
+- Restart checkpoint: `docs/ORACLE_VALIDATION_CHECKPOINT.md` (update after
+  every meaningful live-cloud action)
+- Staged plan: `docs/ORACLE_VALIDATION_STAGES.md`
+- ✅ Mixed planner/executor policy recorded in `MODEL.md`
+- ✅ Stage 0 metadata-only SSH probe implemented with offline coverage
+- ✅ OV-0 controller foundation and measured live failure preserved; diagnostic
+  instance and boot volume terminated
+- ✅ OV-1 reliable guest metadata-key installation: bounded retry, serial
+  outcomes, permission enforcement, offline coverage, and OCI client timeouts
+- ⏳ OV-2 live metadata-only SSH acceptance (active: build/import revised
+  generic image, update `.env`, run `make oracle-stage0`)
+- ✅ Stage 1 one-shot snapshot/upload/run/log/terminate controller implemented
+  with offline coverage
+- ⏸ OV-3 executable `IN_TEST` ownership gate
+- ⏸ OV-4 Stage 1 live passing and failing validation runs
+- ⏸ OV-5 resilient telemetry, reconnect/replay, and console capture
+- ⏸ OV-6 handoff and operational hardening
+
 **Primary Focus: Cloudzy Installation Testing**
 
 ### Cloudzy Installation Testing (CURRENT PRIORITY)

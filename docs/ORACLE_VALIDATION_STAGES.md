@@ -1,0 +1,177 @@
+# Oracle validation staged work plan
+
+These `OV-*` stages are the canonical execution order for the disposable OCI
+validator.  They are distinct from the repository-wide delegated stages under
+`docs/stages/` and from the validator's user-facing `Stage 0` probe and
+`Stage 1` one-shot command names.
+
+Only one `OV-*` stage is active at a time.  Every live action updates
+`ORACLE_VALIDATION_CHECKPOINT.md`.  Live artifacts follow
+`ORACLE_TEST_ARTIFACT_LIFECYCLE.md`.
+
+## Status
+
+| Stage | Outcome | Status |
+|---|---|---|
+| OV-0 | Controller foundation and measured failure | complete |
+| OV-1 | Reliable guest metadata-key installation | complete |
+| OV-2 | Live metadata-only SSH acceptance | active |
+| OV-3 | Executable `IN_TEST` ownership gate | pending |
+| OV-4 | Live one-shot validation acceptance | pending |
+| OV-5 | Resilient telemetry and recovery | pending |
+| OV-6 | Handoff and operational hardening | pending |
+
+## OV-0 — Controller foundation and measured failure
+
+Delivered:
+
+- Stage 0 metadata-only probe and Stage 1 one-shot controller.
+- Offline validation suite, local state, evidence capture, and cleanup policy.
+- macOS OCI CLI discovery, Make targets, ignored `.env` defaults, and restart
+  checkpoint.
+- `IN_TEST` / `HANDED_OFF` lifecycle design.
+- Two live failures with evidence.  The latest proved OCI held the exact
+  intended public key and IMDSv2 was enforced, but SSH returned `Permission
+  denied (publickey)`.
+- Latest diagnostic instance and boot volume terminated successfully.
+
+Exit gate: measured failure is locally preserved and no diagnostic instance is
+left running.  **Passed 2026-08-25.**
+
+## OV-1 — Reliable guest metadata-key installation
+
+Objective: make the image install OCI metadata keys after networking is truly
+usable and leave enough serial evidence to diagnose every outcome.
+
+Work:
+
+1. Replace the single metadata fetch attempt with bounded retry/backoff.
+2. Log attempt count and the final outcome without logging key material.
+3. Make service completion mean either a key was installed or the bounded
+   policy was exhausted; do not silently turn a failed OCI fetch into success.
+4. Verify ownership and modes for `/home/guix`, `.ssh`, and
+   `.ssh/authorized_keys`.
+5. Add offline tests for retry policy, JSON/raw leaf normalization, key
+   filtering, destination, permissions, and secret-free logging.
+6. Add an explicit timeout to reusable OCI status operations observed to hang.
+
+Constraints:
+
+- No live instance is launched in this stage.
+- No private key or OCI credential enters the image, repository, logs, or
+  guest.
+- Preserve the baked-key path for personal images.
+
+Exit gates:
+
+```sh
+make oracle-test
+./run-tests.sh
+git diff --check
+```
+
+The image configuration must evaluate both with and without
+`oracle/image/authorized-key.pub`.  Runtime success remains labelled unverified
+until OV-2.
+
+**Passed 2026-08-25.** Host pre-deploy validation reported 6 passed, 15
+warnings, 0 failures with a sandbox-safe Go cache. Go suites passed locally.
+Because macOS bare Guile lacks Guix modules and the local Guix container lacks
+Go, the full gate was executed as an equivalent split: every Guile/Guix suite
+passed in the existing local Guix container. The literal host
+`./run-tests.sh` remains environment-blocked at `(guix read-print)`; this is not
+an OV-1 regression.
+
+## OV-2 — Live metadata-only SSH acceptance
+
+Entry gate: OV-1 is complete and a generic keyless image has been built and
+imported.  Update `ORACLE_IMAGE_ID` in `.env` before launch.
+
+Work:
+
+1. Run `make oracle-stage0` with a fresh ephemeral SSH key.
+2. Capture instance, VNIC, serial-console, SSH, result, and termination
+   evidence locally.
+3. Prove `guix` login and passwordless sudo with the supplied key.
+4. Confirm password authentication is disabled and IMDSv1 remains disabled.
+5. Terminate the exact test OCID and its boot volume after evidence collection.
+
+Exit gate: a live run returns status 0, the evidence identifies the image and
+source state, and OCI confirms `TERMINATED`.  Otherwise return to OV-1 with the
+new measured failure; do not advance.
+
+## OV-3 — Executable `IN_TEST` ownership gate
+
+Entry gate: OV-2 passes, so lifecycle automation can be tested on a working
+disposable path.
+
+Work:
+
+1. Extend local state with `managed-by`, `artifact-state`, `run-id`, resource
+   type, exact OCID, and declared operation scope.
+2. Add fresh OCI-tag reads and a pure comparison function.
+3. Permit mutation/deletion only when local and OCI ownership facts all match.
+4. Implement fail-safe `handoff`: local `HANDED_OFF` first, OCI tag second,
+   confirmation third.
+5. Add human-facing `make oracle-handoff` and narrowly scoped cleanup/status
+   targets.  Do not add a generic name-based destroy target.
+6. Test absent tags, mismatched run IDs, stale state, interrupted handoff,
+   already-terminated resources, and protected resources.
+
+Exit gate: offline tests prove every mismatch blocks mutation, followed by one
+live `IN_TEST` cleanup and one live `HANDED_OFF` refusal.  The unrelated Oracle
+Linux instance must never be used as a fixture.
+
+## OV-4 — Live one-shot validation acceptance
+
+Entry gates: OV-2 passes and OV-3 cleanup protection is executable.
+
+Work:
+
+1. Run `make oracle-stage1 COMMAND='./run-tests.sh'` and record a passing run.
+2. Run a declared failing command and prove its nonzero status is preserved.
+3. Verify both instances terminate by default and their boot volumes are not
+   preserved.
+4. Verify source manifest/run ID/command are written before remote execution.
+5. Verify no OCI credential path or content reaches the guest.
+
+Exit gate: passing and failing live evidence satisfies every Stage 1 criterion
+in `ORACLE_VALIDATION_RUNNER.md`.
+
+## OV-5 — Resilient telemetry and recovery
+
+Work:
+
+- Sequenced JSONL remote journal and local event stream.
+- Heartbeats, bounded OCI lifecycle polling, and periodic console capture.
+- SSH reconnect/replay without event gaps.
+- `status`, `logs`, `collect`, and `stop` commands with Make entry points.
+- Explicit timeouts for every network wait.
+
+Exit gate: force an SSH interruption during a live validation, reconnect, and
+prove contiguous event sequence numbers.  Force permanent guest loss and prove
+local evidence remains actionable.
+
+## OV-6 — Handoff and operational hardening
+
+Work:
+
+- Stable result schema and documented human/LLM interfaces.
+- Resource, duration, output, shape, and cost policies.
+- Allowlisted commands/artifacts where appropriate.
+- Expired `IN_TEST` review/reaper flow using the OV-3 ownership gate.
+- One instance can validate multiple explicitly hashed snapshots without
+  misattributing results.
+
+Exit gate: perform a live handoff, verify automation refuses subsequent
+mutation, and complete a restart-from-checkpoint exercise without chat history.
+
+## Stage transition rule
+
+At each transition:
+
+1. Preserve evidence and update the checkpoint.
+2. Run the stage's local gates.
+3. Regenerate `SOURCE_MANIFEST.txt` if covered files changed.
+4. Mark exactly one next stage active here and in `CHECKLIST.md`.
+5. Commit a coherent checkpoint before starting a costly live operation.

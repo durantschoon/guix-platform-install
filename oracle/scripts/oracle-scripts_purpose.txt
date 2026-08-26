@@ -31,6 +31,24 @@ poll-until          all long waits go through one helper so every
                     is identical.
 
 ========================================================================
+oci-inspect.scm
+========================================================================
+Stable read-only operations interface
+    `auth`, `inventory`, `instance`, and `evidence` replace improvised OCI
+    command strings during diagnostics.  This is useful both to a human
+    operator and to an LLM resuming from the restart checkpoint.
+
+No lifecycle mutation
+    The script deliberately contains no launch, stop, or terminate command.
+    Mutation remains in the purpose-specific controllers, where resource
+    ownership and cleanup policy are explicit.
+
+Evidence keyed by exact OCID
+    Instance diagnostics require an `ocid1.instance.*` argument and write
+    instance, VNIC, and serial-console evidence beneath a caller-selected
+    local directory.  Display names are never accepted as cleanup identity.
+
+========================================================================
 01-setup-client.scm
 ========================================================================
 python via `guix install python`
@@ -250,3 +268,39 @@ Known open question carried in the final output: the boot volume may be
 (targets ...) in oracle-image.scm must be fixed BEFORE the first
 `guix system reconfigure`.  First boot is unaffected (GRUB was written
 at image-build time).
+
+DISPOSABLE VALIDATION (05-verify-metadata-ssh.scm, validation-common.scm,
+validate.scm)
+
+The validator is intentionally separate from 04-deploy.scm.  The deploy script
+owns stable, idempotently named installation resources; validation instances
+are unique, disposable, and always cleaned up by the OCID recorded locally.
+Reusing a display name as the cleanup key would risk terminating the wrong
+machine after a partial or repeated run.
+
+The Stage 0 probe exists because QEMU cannot prove the OCI metadata service
+installs an SSH key early enough for a real login.  It launches with an
+ephemeral public key in ssh_authorized_keys metadata, disables legacy IMDS
+endpoints, performs a full key-authenticated login, captures serial-console
+history, and terminates the instance and boot volume.  Offline construction
+tests never count as that live proof.
+
+validate.scm archives the selected working directory rather than using git
+archive: an LLM's code is commonly dirty or untracked, and omitting precisely
+those changes would validate the wrong source.  The archive excludes .git and
+.oracle-validation, preserves symlinks without dereferencing them, and records
+a sorted manifest and SHA-256 before upload.  The requested command is sent as
+a file, never interpolated through nested local/SSH shell quoting.
+
+Remote stdout and stderr are merged and copied character-by-character to both
+the terminal and a flushed local log.  This preserves everything already
+received if SSH or the instance disappears.  Reconnect/replay, heartbeats, and
+continuous console capture require a sequenced remote journal and deliberately
+remain Stage 2 work.
+
+OCI credentials and the ephemeral private SSH key never enter the guest.  The
+private key is removed only after termination succeeds; if cleanup fails it is
+retained with the recorded instance OCID so the operator can collect evidence
+or terminate manually.  A failed validation is terminated by default.
+--keep-on-failure is opt-in because an unenforced promise to clean up later is
+not a lifecycle policy.

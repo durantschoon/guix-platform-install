@@ -62,6 +62,13 @@
   (and (file-exists? %authorized-key-path)
        (local-file "authorized-key.pub")))
 
+(define %metadata-key-helper-path
+  (string-append (dirname (or (current-filename) "."))
+                 "/metadata-ssh-keys.scm"))
+
+(define %metadata-key-helper
+  (local-file %metadata-key-helper-path))
+
 ;; VM.Standard.E2.1.Micro has 1 GiB of RAM.  'guix pull' and 'guix system
 ;; reconfigure' are memory-hungry and get OOM-killed without swap.
 (define %swapfile "/swapfile")
@@ -140,150 +147,29 @@
      (one-shot? #t)
      (start
       #~(lambda _
-          (let* ((user #$%user-name)
-                 (home (string-append "/home/" user))
-                 (ssh-dir (string-append home "/.ssh"))
-                 (target (string-append ssh-dir "/authorized_keys"))
-                 (scratch "/run/metadata-ssh-keys")
-                 (wget #$(file-append wget "/bin/wget")))
-
-            (define (log fmt . args)
-              (apply format (current-error-port)
-                     (string-append "metadata-ssh-keys: " fmt "~%") args))
-
-            (define (fetch-once! url . extra)
-              (and (zero? (apply system* wget "-q" "-O" scratch
-                                 "--timeout=5" "--tries=1"
-                                 (append extra (list url))))
-                   (file-exists? scratch)
-                   (> (stat:size (stat scratch)) 0)))
-
-            (define (fetch! url . extra)
-              "Try URL for up to ~2 minutes before giving up.
-
-The first version failed after ~10 seconds, which lost a race it could not
-win: shepherd's 'networking' is provided when dhcpcd STARTS, not when it has a
-lease, so the link-local metadata address at 169.254.169.254 may not be
-routable yet.  Boot on the first real instance reached a login prompt with no
-key installed (2026-08-10), and the fast failure is the most likely reason.
-
-Still bounded, and still never fatal: a machine with no metadata service (a
-local QEMU smoke test) costs 2 minutes of retries at boot and then proceeds.
-Each attempt is logged, so the next failure is diagnosable from
-/var/log/messages instead of being a silent absence."
-              (let loop ((attempt 1))
-                (cond
-                 ((apply fetch-once! url extra)
-                  (log "reached ~a on attempt ~a" url attempt)
-                  #t)
-                 ((>= attempt 24)
-                  (log "gave up on ~a after ~a attempts (~~2 min)" url attempt)
-                  #f)
-                 (else
-                  (when (= attempt 1)
-                    (log "~a not reachable yet; retrying for ~~2 min" url))
-                  (sleep 5)
-                  (loop (+ attempt 1))))))
-
-            (define (read-scratch)
-              "Read the fetched file into a list of lines, using ONLY core Guile.
-
-read-line lives in (ice-9 rdelim), which a shepherd service gexp does not have.
-The first version used it and died at exactly this point, AFTER a successful
-fetch (2026-08-11):
-
-  metadata-ssh-keys: reached http://169.254.169.254/... on attempt 4
-  metadata-ssh-keys: failed: (unbound-variable #f \"Unbound variable: ~S\"
-                              (read-line) #f)
-
-Adding (modules '((ice-9 rdelim))) to the shepherd-service would also work, but
-it replaces the default module set rather than extending it, so it trades one
-unbound-variable risk for another. read-char, list->string and string-split are
-all core and cannot be missing."
-              (let ((port (open-input-file scratch)))
-                (let loop ((chars '()))
-                  (let ((ch (read-char port)))
-                    (if (eof-object? ch)
-                        (begin
-                          (close-port port)
-                          (string-split (list->string (reverse chars)) #\newline))
-                        (loop (cons ch chars)))))))
-
-            ;; Leaf values may come back JSON-quoted ("ssh-ed25519 AAAA...")
-            ;; rather than raw.  Probed on a live instance 2026-08-08 via
-            ;; /opc/v2/instance/shape, but an instance WITHOUT keys cannot
-            ;; demonstrate the keys endpoint specifically -- so strip a
-            ;; surrounding pair of quotes rather than depend on the answer.
-            ;; Getting this wrong is invisible: every real key would be
-            ;; rejected and the service would log "no usable public keys"
-            ;; while looking perfectly healthy.
-            (define (unquote-value line)
-              (let* ((trimmed (string-trim-both line))
-                     (n (string-length trimmed)))
-                (if (and (>= n 2)
-                         (char=? (string-ref trimmed 0) #\")
-                         (char=? (string-ref trimmed (- n 1)) #\"))
-                    (substring trimmed 1 (- n 1))
-                    trimmed)))
-
-            ;; Only lines that actually look like a public key are installed.
-            ;; The metadata endpoint returns an HTML error body in some failure
-            ;; modes, and writing that into authorized_keys would be silent.
-            (define (key-line? line)
-              (let ((trimmed (unquote-value line)))
-                (and (> (string-length trimmed) 0)
-                     (or (string-prefix? "ssh-" trimmed)
-                         (string-prefix? "ecdsa-" trimmed)
-                         (string-prefix? "sk-ssh-" trimmed)
-                         (string-prefix? "sk-ecdsa-" trimmed)))))
-
-            (define (install! keys)
-              (let* ((pw (getpwnam user))
-                     (uid (passwd:uid pw))
-                     (gid (passwd:gid pw)))
-                (unless (file-exists? ssh-dir)
-                  (mkdir ssh-dir))
-                (chmod ssh-dir #o700)
-                (chown ssh-dir uid gid)
-                (call-with-output-file target
-                  (lambda (port)
-                    (format port "# Installed from OCI instance metadata.~%")
-                    (format port "# Rewritten on every boot -- edit the instance metadata, not this file.~%")
-                    (for-each (lambda (key) (format port "~a~%" key)) keys)))
-                (chmod target #o600)
-                (chown target uid gid)
-                (log "installed ~a key(s) into ~a" (length keys) target)))
-
+          (define (console-log fmt . args)
             (catch #t
               (lambda ()
-                (if (or (fetch! (string-append
-                                 "http://169.254.169.254/opc/v2/instance/"
-                                 "metadata/ssh_authorized_keys")
-                                "--header=Authorization: Bearer Oracle")
-                        (fetch! (string-append
-                                 "http://169.254.169.254/opc/v1/instance/"
-                                 "metadata/ssh_authorized_keys")))
-                    ;; map unquote-value, not just filter: accepting a quoted
-                    ;; line and then WRITING it with its quotes intact would
-                    ;; produce an authorized_keys sshd silently ignores.
-                    (let ((keys (map unquote-value
-                                     (filter key-line? (read-scratch)))))
-                      (if (null? keys)
-                          (log "metadata returned no usable public keys")
-                          (install! keys)))
-                    (log "no instance metadata available (not on OCI?)")))
-              (lambda args
-                (log "failed: ~s" args)))
-
-            (when (file-exists? scratch)
-              (delete-file scratch))
-
-            ;; Always report success.  A one-shot that returns #f is marked
-            ;; failed and shows up as a scary red line at boot -- but "no
-            ;; metadata" is the normal, correct state during a local QEMU smoke
-            ;; test, and on OCI an image that also has a baked-in key is still
-            ;; perfectly reachable.  The log line above is the real signal.
-            #t)))))))
+                (call-with-output-file "/dev/console"
+                  (lambda (port)
+                    (apply format port
+                           (string-append "metadata-ssh-keys: " fmt "~%")
+                           args))))
+              (lambda _ #f)))
+          (console-log "service starting")
+          (catch #t
+            (lambda ()
+              ;; The service is compiled before it runs.  A direct call to a
+              ;; name introduced dynamically by `load' compiles as an unbound
+              ;; reference, so resolve it explicitly after loading the helper.
+              (load #$%metadata-key-helper)
+              ((module-ref (current-module) 'metadata-install-from-oci!)
+               #$%user-name
+               #$(file-append wget "/bin/wget")
+               #$(not %authorized-key)))
+            (lambda args
+              (console-log "ERROR: runtime exception: ~s" args)
+              #f))))))))
 
 
 ;;;

@@ -27,7 +27,7 @@ run_tests() {
         echo -e "${GREEN}✓ $description tests passed${NC}"
     else
         echo -e "${RED}✗ $description tests failed${NC}"
-        return 1
+        exit 1
     fi
     echo
 }
@@ -73,6 +73,18 @@ if command -v guile &> /dev/null; then
         echo -e "${GREEN}[OK] Oracle capacity handling tests passed${NC}"
     else
         echo -e "${RED}[FAIL] Oracle capacity handling tests failed${NC}"
+        exit 1
+    fi
+    echo
+
+    # Disposable Oracle validation helpers/controllers. Fully offline: the
+    # suite loads only side-effect-free helpers and inspects live controllers.
+    echo -e "${YELLOW}Testing Oracle Validation Helpers...${NC}"
+    echo "----------------------------------------"
+    if guile --no-auto-compile -s oracle/tests/test-oracle-validation.scm; then
+        echo -e "${GREEN}[OK] Oracle validation tests passed${NC}"
+    else
+        echo -e "${RED}[FAIL] Oracle validation tests failed${NC}"
         exit 1
     fi
     echo

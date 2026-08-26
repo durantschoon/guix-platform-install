@@ -43,6 +43,10 @@ look for the config under /tmp."
   (string-append repository-root "/oracle/image/oracle-image.scm"))
 (define authorized-key
   (string-append repository-root "/oracle/image/authorized-key.pub"))
+(define metadata-helper
+  (string-append repository-root "/oracle/image/metadata-ssh-keys.scm"))
+
+(load metadata-helper)
 
 (define failures 0)
 (define checks 0)
@@ -127,6 +131,45 @@ whose error message ('\\n: unbound variable') points nowhere near the cause."
 (format #t "\x1b[1;34mTesting the Oracle image configuration\x1b[0m\n")
 (format #t "  Config: ~a\n\n" image-config)
 
+;; Metadata parsing and retry policy are pure when their effects are injected.
+(define fixture-key "ssh-ed25519 AAAATEST metadata@test")
+
+(check "metadata keys accept raw and JSON-quoted leaf values"
+       (equal? (metadata-usable-keys
+                (list fixture-key (string-append "  \"" fixture-key "\"  ")))
+               (list fixture-key fixture-key)))
+
+(check "metadata keys reject empty, HTML, and non-key lines"
+       (null? (metadata-usable-keys
+               '("" "<html>not found</html>" "AAAA only" "rsa-sha2-512 bad"))))
+
+(let ((calls 0) (waits '()) (messages '()))
+  (let ((result
+         (metadata-retry
+          (lambda ()
+            (set! calls (+ calls 1))
+            (if (= calls 3) (list fixture-key) #f))
+          (lambda (seconds) (set! waits (cons seconds waits)))
+          (lambda args (set! messages (cons args messages)))
+          5 3)))
+    (check "metadata retry succeeds after a delayed third response"
+           (and (eq? (car result) 'installed)
+                (= (cadr result) 3)
+                (equal? (cddr result) (list fixture-key))
+                (= calls 3)
+                (equal? (reverse waits) '(3 3))
+                (= (length messages) 2)))))
+
+(let ((calls 0) (waits 0))
+  (let ((result
+         (metadata-retry
+          (lambda () (set! calls (+ calls 1)) #f)
+          (lambda _ (set! waits (+ waits 1)))
+          (lambda _ #t)
+          4 1)))
+    (check "metadata retry exhaustion is bounded exactly"
+           (and (equal? result '(exhausted 4)) (= calls 4) (= waits 3)))))
+
 ;; 1. The normal case: a baked-in key is present.
 (let ((had-key? (file-exists? authorized-key)))
   (unless had-key?
@@ -168,6 +211,16 @@ whose error message ('\\n: unbound variable') points nowhere near the cause."
   (check "%metadata-ssh-key-service is in the services list"
          (string-contains source "    %metadata-ssh-key-service)") "")
 
+  (check "compiled service resolves the dynamically loaded helper at runtime"
+         (and (string-contains source
+                               "(module-ref (current-module) 'metadata-install-from-oci!)")
+              (not (string-contains source
+                                    "          (metadata-install-from-oci!"))) "")
+
+  (check "service start and runtime exceptions are visible on serial console"
+         (and (string-contains source "(console-log \"service starting\")")
+              (string-contains source "ERROR: runtime exception:")) "")
+
   ;; It must never write to /etc/ssh/authorized_keys.d: Guix deletes and
   ;; recreates that directory on every activation, so anything written there
   ;; disappears. This is the single easiest mistake to reintroduce.
@@ -177,12 +230,33 @@ whose error message ('\\n: unbound variable') points nowhere near the cause."
 
   ;; IMDSv2 refuses the request without this header.
   (check "sends the IMDSv2 Authorization header"
-         (string-contains source "Bearer Oracle") "")
+         (let ((helper-source (call-with-input-file metadata-helper get-string-all)))
+           (string-contains helper-source "Bearer Oracle")) "")
+
+  (let ((helper-source (call-with-input-file metadata-helper get-string-all)))
+    (check "metadata runtime has bounded retries and short fetch attempts"
+           (and (string-contains helper-source "%metadata-max-attempts 12")
+                (string-contains helper-source "%metadata-retry-delay 3")
+                (string-contains helper-source "\"--timeout=2\"")
+                (string-contains helper-source "\"--tries=1\"")))
+    (check "metadata outcomes are visible on the serial console"
+           (and (string-contains helper-source "\"/dev/console\"")
+                (string-contains helper-source "ERROR: no usable metadata key")))
+    (check "metadata install fixes directory/file ownership and modes"
+           (and (string-contains helper-source "(chmod ssh-dir #o700)")
+                (string-contains helper-source "(chmod target #o600)")
+                (string-contains helper-source "(chown ssh-dir uid gid)")
+                (string-contains helper-source "(chown target uid gid)")))
+    (check "runtime logs counts and outcomes, never public-key values"
+           (and (not (string-contains helper-source "(emit key"))
+                (not (string-contains helper-source "(emit keys"))
+                (string-contains helper-source "installed ~a key(s)"))))
 
   ;; ASCII only -- this config is read over the OCI serial console.
-  (let ((non-ascii (filter (lambda (c) (> (char->integer c) 127))
-                           (string->list source))))
-    (check "config is ASCII only"
+  (let* ((helper-source (call-with-input-file metadata-helper get-string-all))
+         (non-ascii (filter (lambda (c) (> (char->integer c) 127))
+                            (string->list (string-append source helper-source)))))
+    (check "config and metadata runtime are ASCII only"
            (null? non-ascii)
            (if (null? non-ascii) "" (format #f "found: ~s" non-ascii)))))
 

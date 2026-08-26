@@ -80,9 +80,26 @@ Stderr passes through to the terminal."
   "Join PARTS onto $HOME."
   (string-join (cons (getenv "HOME") parts) "/"))
 
-(define %oci-cli (home-path ".venvs" "oci-cli" "bin" "oci"))
+(define %oci-common-directory
+  (dirname (or (current-filename) ".")))
+
+(define (darwin?)
+  "Return #t only on macOS.  Mac-specific helpers are not loaded elsewhere."
+  (string=? (utsname:sysname (uname)) "Darwin"))
+
+(when (darwin?)
+  (load (string-append %oci-common-directory "/macos/oci-client.scm")))
+
+(define %oci-cli
+  (let ((override (getenv "OCI_CLI"))
+        (venv-cli (home-path ".venvs" "oci-cli" "bin" "oci")))
+    (cond ((and override (not (string-null? override))) override)
+          ((file-exists? venv-cli) venv-cli)
+          ((darwin?) (macos-resolve-oci-cli))
+          (else venv-cli))))
 (define %oci-venv-python (home-path ".venvs" "oci-cli" "bin" "python3"))
 (define %oci-config (home-path ".oci" "config"))
+(define %oci-global-options "--connection-timeout 10 --read-timeout 30")
 
 (define (oci-config-value key)
   "Read KEY from the [DEFAULT] section of ~/.oci/config, or #f."
@@ -97,19 +114,137 @@ Stderr passes through to the terminal."
   "Run an oci CLI subcommand string CMD, return trimmed stdout.
 SUPPRESS_LABEL_WARNING silences the key-label advice on every call."
   (run-command
-   (string-append "SUPPRESS_LABEL_WARNING=True " %oci-cli " " cmd)))
+   (string-append "SUPPRESS_LABEL_WARNING=True " %oci-cli " "
+                  %oci-global-options " " cmd)))
 
 (define (oci/status cmd)
   "Like `oci' but returns (values stdout exit-status)."
   (run-command/status
-   (string-append "SUPPRESS_LABEL_WARNING=True " %oci-cli " " cmd)))
+   (string-append "SUPPRESS_LABEL_WARNING=True " %oci-cli " "
+                  %oci-global-options " " cmd)))
 
 (define (oci-authenticated?)
   "Return #t if the oci CLI can make an authenticated API call."
   (command-succeeds?
    (string-append "SUPPRESS_LABEL_WARNING=True " %oci-cli
+                  " " %oci-global-options
                   " iam region-subscription list --output table"
                   " >/dev/null")))
+
+;;; ---------------------------------------------------------------------
+;;; Neutral Compute helpers
+;;;
+;;; These are deliberately parameterized: 04-deploy.scm owns its named,
+;;; idempotent installation resources, while disposable validation runs must
+;;; be identified by an OCID recorded locally rather than a display name.
+
+(define (oci-nonempty-or-false text)
+  "Return TEXT unless it is empty or OCI's raw-output spelling of null."
+  (and (not (string-null? text))
+       (not (string=? text "None"))
+       text))
+
+(define (oci-first-ocid-line text)
+  "Return the first OCID-looking line in TEXT, or #f.
+OCI errors are often combined with stdout, so successful raw output cannot be
+assumed to be the whole captured string."
+  (let loop ((lines (string-split text #\newline)))
+    (cond ((null? lines) #f)
+          ((string-prefix? "ocid1." (string-trim-both (car lines)))
+           (string-trim-both (car lines)))
+          (else (loop (cdr lines))))))
+
+(define (oci-compartment)
+  "Return the configured tenancy/root compartment, or #f."
+  (oci-config-value "tenancy"))
+
+(define (oci-availability-domain-at index)
+  "Return availability-domain INDEX, or #f when it is out of range."
+  (oci-nonempty-or-false
+   (oci (string-append "iam availability-domain list --query 'data["
+                       (number->string index) "].name' --raw-output 2>/dev/null"))))
+
+(define (oci-instance-state instance-ocid)
+  "Return INSTANCE-OCID's lifecycle state as OCI raw output."
+  (oci (string-append "compute instance get --instance-id "
+                      (sh-quote instance-ocid)
+                      " --query 'data.\"lifecycle-state\"' --raw-output")))
+
+(define (oci-instance-public-ip instance-ocid)
+  "Return INSTANCE-OCID's first VNIC public IP, or #f."
+  (oci-nonempty-or-false
+   (oci (string-append "compute instance list-vnics --instance-id "
+                       (sh-quote instance-ocid)
+                       " --query 'data[0].\"public-ip\"' --raw-output"))))
+
+(define (oci-terminate-command instance-ocid)
+  "Build the explicit disposable-instance termination command.
+The false preserve value matters: retaining a boot volume defeats the cleanup
+policy and can incur storage charges."
+  (string-append "compute instance terminate --instance-id "
+                 (sh-quote instance-ocid)
+                 " --preserve-boot-volume false --force"))
+
+(define (oci-terminate-instance/status instance-ocid)
+  "Terminate INSTANCE-OCID and return OCI output and exit status."
+  (oci/status (string-append (oci-terminate-command instance-ocid) " 2>&1")))
+
+(define (oci-capture-console-history instance-ocid output-path)
+  "Best-effort capture of INSTANCE-OCID's serial console into OUTPUT-PATH.
+Console-history failure must not prevent termination of a disposable instance."
+  (call-with-values
+      (lambda ()
+        (oci/status
+         (string-append
+          "compute console-history capture --instance-id "
+          (sh-quote instance-ocid)
+          " --query data.id --raw-output 2>&1")))
+    (lambda (capture-output capture-status)
+      (if (not (zero? capture-status))
+          (begin
+            (call-with-output-file output-path
+              (lambda (port)
+                (display "console-history capture failed:\n" port)
+                (display capture-output port)
+                (newline port)))
+            #f)
+          (let ((history-ocid (oci-first-ocid-line capture-output)))
+            (if (not history-ocid)
+                #f
+                (let ((ready?
+                       (poll-until
+                        "serial console history"
+                        (lambda ()
+                          (let ((state
+                                 (oci
+                                  (string-append
+                                   "compute console-history get"
+                                   " --instance-console-history-id "
+                                   (sh-quote history-ocid)
+                                   " --query 'data.\"lifecycle-state\"'"
+                                   " --raw-output 2>/dev/null"))))
+                            (and (string=? state "SUCCEEDED") #t)))
+                        5 60)))
+                  (if (not ready?)
+                      #f
+                      (call-with-values
+                          (lambda ()
+                            (oci/status
+                             (string-append
+                              "compute console-history get-content"
+                              " --instance-console-history-id "
+                              (sh-quote history-ocid) " --file "
+                              (sh-quote output-path) " 2>&1")))
+                        (lambda (output status)
+                          (if (zero? status)
+                              #t
+                              (begin
+                                (call-with-output-file output-path
+                                  (lambda (port)
+                                    (display "console-history retrieval failed:\n" port)
+                                    (display output port)
+                                    (newline port)))
+                                #f))))))))))))
 
 ;;; ---------------------------------------------------------------------
 ;;; Polling

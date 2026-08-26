@@ -2,44 +2,6 @@
 
 ✅ **Status: verified end-to-end on 2026-08-08.** The image built, passed the QEMU smoke test, uploaded, imported, and launched as a running instance with sshd answering on its public IP. The whole flow is scripted in `scripts/` (see below); the manual commands in this file are kept as the reference for what the scripts do.
 
-**For a newcomer's walkthrough** rather than this reference, see
-[the web page](https://durantschoon.github.io/guix-platform-install/)
-([`../web/index.html`](../web/index.html)) — the same flow written for someone
-who has never used Guix, with an explicit list of which parts are not finished.
-
-## Just want the image? It is published
-
-You do not need Guix, or this repository, to run Guix System on Oracle.
-
-| | |
-|---|---|
-| Download | [`guix-oracle-generic.qcow2`](https://github.com/durantschoon/guix-platform-install/releases/tag/oracle-image-20260811) |
-| Size | 585,105,408 bytes (sparse; 50 GB virtual) |
-| sha256 | `327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592` |
-| Baked-in SSH key | **none** — you supply yours at launch |
-
-Verify it, upload it to a bucket in your own tenancy, import with
-**QCOW2 + PARAVIRTUALIZED**, and launch with your public key in
-`--metadata ssh_authorized_keys` (or the console's **Add SSH keys** box):
-
-```bash
-sha256sum guix-oracle-generic.qcow2   # must match the sha256 above
-```
-
-`sha256sum FILE` takes no flags here; it prints `<hash>  <name>`.
-
-**OCI's `import from-object-uri` will not accept the GitHub URL** — it reads
-only from its own Object Storage (`InvalidParameter: Invalid sourceUri`). Hence
-the upload-to-your-own-bucket hop.
-
-Verified end to end on 2026-08-11: imported from a URL, launched with a
-metadata-only key, logged in, and confirmed `/etc/ssh/authorized_keys.d/` was
-empty on the running machine — so the key demonstrably came from instance
-metadata and nothing was baked in.
-
-Then set your own host name, timezone and shell with
-[`postinstall/README.md`](postinstall/README.md).
-
 ## How this platform differs from the others
 
 Every other platform in this repo boots the Guix live ISO and runs `guix system init`. **OCI cannot boot an ISO** — it only accepts QCOW2/VMDK custom images uploaded to Object Storage.
@@ -70,22 +32,108 @@ BatchMode-vs-passphrase false negative, 108-byte unix socket limit,
 guest-computed sentinels) are documented in
 `scripts/oracle-scripts_purpose.txt`.
 
+## Disposable validation instances
+
+From the repository root, run `make oracle-help` for the supported workflow.
+Copy `.env.example` to the gitignored `.env` once and set the current image,
+subnet, instance, and evidence-directory defaults.  These are non-secret OCI
+identifiers; OCI private keys and config do not belong in `.env`.  Explicit
+Make assignments override the defaults.
+
+The read-only/local targets are:
+
+```sh
+make oracle-test
+make oracle-auth
+make oracle-inventory
+make oracle-instance
+make oracle-evidence
+```
+
+Targets that create disposable `IN_TEST` resources are named by stage:
+
+```sh
+make oracle-build-generic
+make oracle-stage0
+make oracle-stage1 COMMAND='./run-tests.sh'
+```
+
+On macOS/ARM, `oracle-build-generic` targets `x86_64-linux` inside the existing
+Guix Docker image. It retains a named build container so a cancelled run can be
+restarted with its populated Guix store layer. It refuses to run while
+`oracle/image/authorized-key.pub` exists.
+
+They retain the controller's confirmation prompt.  Set `YES=--yes` only for
+an already-reviewed unattended run.  There is intentionally no generic
+destroy target until the ownership gate is enforced in executable code.
+
+`scripts/validate.scm` is a separate, one-shot path for code that must be
+validated on a real Guix System.  OCI credentials remain on the controller;
+the guest receives a fresh public SSH key and a source snapshot, then is
+terminated after the command finishes.
+
+Before relying on it, prove this image accepts a metadata-only key on a real
+instance (the image must contain no baked `image/authorized-key.pub`):
+
+```sh
+oracle/scripts/05-verify-metadata-ssh.scm \
+  --image-id ocid1.image... --subnet-id ocid1.subnet...
+```
+
+Then run a validation:
+
+```sh
+oracle/scripts/validate.scm start \
+  --image-id ocid1.image... \
+  --subnet-id ocid1.subnet... \
+  --source "$PWD" \
+  --command './run-tests.sh'
+```
+
+The source directory is explicit because the command uploads its complete
+working tree, including dirty and untracked files.  `.git` and
+`.oracle-validation` are excluded.  Results and incrementally received output
+are kept under `.oracle-validation/runs/<run-id>/`.  Failures terminate the VM
+by default; `--keep-on-failure` is an explicit debugging override and prints
+the exact cleanup command.
+
+See [the validation runner plan](../docs/ORACLE_VALIDATION_RUNNER.md) for the
+trust boundary, current verification status, and resilient-telemetry stages.
+See [the staged work plan](../docs/ORACLE_VALIDATION_STAGES.md) for the active
+stage, dependencies, and transition gates.
+
+Repeatable read-only inspection is available separately from the controllers:
+
+```sh
+guile --no-auto-compile -s oracle/scripts/oci-inspect.scm auth
+guile --no-auto-compile -s oracle/scripts/oci-inspect.scm inventory
+guile --no-auto-compile -s oracle/scripts/oci-inspect.scm instance \
+  --instance-id ocid1.instance...
+guile --no-auto-compile -s oracle/scripts/oci-inspect.scm evidence \
+  --instance-id ocid1.instance... --output-dir .oracle-validation/evidence/name
+```
+
+The inspection script cannot launch or terminate instances.  Its `evidence`
+command saves instance, VNIC, and best-effort serial-console records locally.
+
+New disposable resources use the [`IN_TEST` / `HANDED_OFF` artifact
+lifecycle](../docs/ORACLE_TEST_ARTIFACT_LIFECYCLE.md).  Automated destructive
+operations require matching OCI ownership tags and a matching local run record;
+missing or inconsistent ownership information always protects the resource.
+
 ## Prerequisites
 
 - Guix on x86_64 (verified with `17c2142`)
 - `oci` CLI configured — `oci iam region-subscription list` should return your regions
-- Optionally, your SSH **public** key at `oracle/image/authorized-key.pub`
+- For the original `02-build-image.scm` -> `04-deploy.scm` path, your SSH
+  **public** key at `oracle/image/authorized-key.pub`
 
-**The baked-in key is now optional**, and for a shareable image it must be
-absent. Leave the file out and the image is built with no key at all; supply
-yours at launch via `--metadata ssh_authorized_keys`, which
-`%metadata-ssh-key-service` installs at first boot. Leave it in and the key is
-baked in as before — convenient for a personal instance, but **never publish
-such an image**: everyone who launches it grants you SSH access.
-
-Both mechanisms coexist. Guix writes a baked-in key to
-`/etc/ssh/authorized_keys.d/guix`; the service writes to
-`~/.ssh/authorized_keys`; sshd reads both.
+The original deploy path still bakes that key into its personal image.  The
+image definition now also supports a generic build with no baked key: its
+metadata service consumes OCI's `ssh_authorized_keys` field at boot.  The
+disposable validator deliberately requires that generic form so every run can
+use a fresh key.  Get either mechanism wrong and the instance is unreachable
+except via the serial console — password auth is disabled by design.
 
 ```bash
 cp ~/.ssh/id_ed25519.pub oracle/image/authorized-key.pub
@@ -172,10 +220,8 @@ console's **Add SSH keys** box populates does the right thing, and one image can
 anyone. A baked-in `image/authorized-key.pub` is still honoured if present, and the two
 coexist. See [../docs/ORACLE_ONE_CLICK_ROADMAP.md](../docs/ORACLE_ONE_CLICK_ROADMAP.md).
 
-**Verified on a live instance 2026-08-11**: a launch with the key supplied only
-via `--metadata` installed it and the login worked. `~/.local/bin/oracle-metadata-gate`
-automates the whole check. Three bugs had to be fixed to get there — see
-[../docs/ORACLE_ONE_CLICK_ROADMAP.md](../docs/ORACLE_ONE_CLICK_ROADMAP.md).
+*Not yet verified on a live instance* — QEMU has no metadata service, so only the
+"no metadata" path is covered locally.
 
 Open port 22 in the subnet's security list, then:
 
