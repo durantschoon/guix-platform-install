@@ -3,13 +3,11 @@
 The ordered implementation and live-acceptance work is tracked in
 [`ORACLE_VALIDATION_STAGES.md`](ORACLE_VALIDATION_STAGES.md).
 
-**Status (2026-08-25): Stage 0 and Stage 1 are implemented and their offline
-tests pass. Three live Stage 0 attempts have failed safely and terminated. The
-latest failure exposed a compiled Shepherd reference to a helper definition
-introduced dynamically by `load`; OV-3 resolves it explicitly at runtime and
-adds serial-visible service boundaries. The corrected image is imported and
-awaiting another Stage 0 proof. The metadata-only SSH path must not be described
-as live-verified until that proof passes.**
+**Status (2026-08-26): Stage 0 metadata-only SSH and the Stage 1 pass/fail
+contract passed live acceptance; every disposable instance terminated. OV-5
+resilient telemetry is active offline. Its forced-disconnect live acceptance is
+pending, as is the OV-3 fresh-tag ownership gate required before another live
+cleanup mutation.**
 
 ## Timing and prediction
 

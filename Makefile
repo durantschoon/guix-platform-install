@@ -15,6 +15,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
 .PHONY: help test manifest oracle-help oracle-test oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
+.PHONY: oracle-run-status oracle-cleanup oracle-handoff
 .PHONY: oracle-build-generic oracle-upload-generic oracle-import-generic oracle-timings
 
 help:
@@ -44,6 +45,9 @@ oracle-help:
 	@echo "  make oracle-import-generic # resumable custom-image import and waiter"
 	@echo "  make oracle-stage0        # IMAGE_ID/SUBNET_ID default from .env"
 	@echo "  make oracle-stage1 COMMAND='./run-tests.sh'"
+	@echo "  make oracle-run-status RUN_DIR=.oracle-validation/runs/..."
+	@echo "  make oracle-cleanup RUN_DIR=.oracle-validation/runs/..."
+	@echo "  make oracle-handoff RUN_DIR=.oracle-validation/runs/..."
 	@echo ""
 	@echo "There is intentionally no generic destroy target."
 
@@ -96,6 +100,12 @@ oracle-stage1:
 	@test -n "$(IMAGE_ID)" || { echo "IMAGE_ID is required" >&2; exit 2; }
 	@test -n "$(SUBNET_ID)" || { echo "SUBNET_ID is required" >&2; exit 2; }
 	oracle/scripts/run-timed.sh stage1-total \
-		$(GUILE) --no-auto-compile -s oracle/scripts/validate.scm start \
+	$(GUILE) --no-auto-compile -s oracle/scripts/validate.scm start \
 		--image-id '$(IMAGE_ID)' --subnet-id '$(SUBNET_ID)' \
-		--source '$(SOURCE)' --command '$(COMMAND)' $(YES)
+		--source '$(SOURCE)' --command '$(COMMAND)' $(KEEP) $(YES)
+
+oracle-run-status oracle-cleanup oracle-handoff:
+	@test -n "$(RUN_DIR)" || { echo "RUN_DIR is required" >&2; exit 2; }
+	$(GUILE) --no-auto-compile -s oracle/scripts/validation-lifecycle.scm \
+		$(patsubst oracle-run-status,status,$(patsubst oracle-cleanup,cleanup,$(patsubst oracle-handoff,handoff,$@))) \
+		--run-dir '$(RUN_DIR)' $(YES)

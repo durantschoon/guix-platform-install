@@ -22,6 +22,9 @@
 (define (write-run-state path run-id phase options instance ip source-hash)
   (validation-write-state
    path `((schema . 1) (kind . oracle-validation) (run-id . ,run-id)
+          (managed-by . "guix-platform-install")
+          (artifact-state . "IN_TEST") (resource-type . "instance")
+          (operation-scope . (inspect collect-console terminate handoff))
           (phase . ,phase) (instance-ocid . ,instance) (public-ip . ,ip)
           (source . ,(validation-option-ref options 'source))
           (command . ,(validation-option-ref options 'command))
@@ -67,14 +70,24 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                  " -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
                  " guix@" (validation-sh-quote ip)))
 
-(define (cleanup-instance run-dir instance)
-  (when instance
-    (call-with-values
-        (lambda () (oci-terminate-instance/status instance))
-      (lambda (output status)
-        (call-with-output-file (string-append run-dir "/termination.log")
-          (lambda (port) (display output port) (newline port)))
-        (zero? status)))))
+(define (cleanup-instance run-dir state-path instance)
+  "Terminate only after the complete local/fresh-OCI ownership gate passes."
+  (and instance
+       (let* ((local (validation-read-state state-path))
+              (remote (oci-instance-ownership instance))
+              (handoff? (file-exists? (validation-handoff-marker-path state-path))))
+         (if (not (validation-ownership-authorized? local remote 'terminate handoff?))
+             (begin
+               (call-with-output-file (string-append run-dir "/termination.log")
+                 (lambda (port)
+                   (display "termination blocked: ownership facts did not match\n" port)))
+               #f)
+             (call-with-values
+                 (lambda () (oci-terminate-instance/status instance))
+               (lambda (output status)
+                 (call-with-output-file (string-append run-dir "/termination.log")
+                   (lambda (port) (display output port) (newline port)))
+                 (zero? status)))))))
 
 (define (transfer-and-execute key ip run-id archive command-file remote timeout log)
   "Create the remote staging area, copy files, and run the uploaded command.
@@ -196,7 +209,8 @@ contains the command text itself."
                             exit-status (validation-option-ref options 'keep-on-failure)))
                    (_console (oci-capture-console-history
                               instance (string-append run-dir "/console-history.log")))
-                   (clean? (or (eq? action 'keep) (cleanup-instance run-dir instance)))
+                   (clean? (or (eq? action 'keep)
+                               (cleanup-instance run-dir state-path instance)))
                    (final (if (and (zero? exit-status) clean?) 0 1)))
               (when (and clean? (eq? action 'terminate) (file-exists? key))
                 (delete-file key))

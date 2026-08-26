@@ -15,10 +15,10 @@ Only one `OV-*` stage is active at a time.  Every live action updates
 |---|---|---|
 | OV-0 | Controller foundation and measured failure | complete |
 | OV-1 | Reliable guest metadata-key installation | complete |
-| OV-2 | Live metadata-only SSH acceptance | active |
-| OV-3 | Executable `IN_TEST` ownership gate | pending |
-| OV-4 | Live one-shot validation acceptance | pending |
-| OV-5 | Resilient telemetry and recovery | pending |
+| OV-2 | Live metadata-only SSH acceptance | complete |
+| OV-3 | Executable `IN_TEST` ownership gate | complete |
+| OV-4 | Live one-shot validation acceptance | complete |
+| OV-5 | Resilient telemetry and recovery | active (offline implementation) |
 | OV-6 | Handoff and operational hardening | pending |
 
 ## OV-0 — Controller foundation and measured failure
@@ -100,7 +100,16 @@ Exit gate: a live run returns status 0, the evidence identifies the image and
 source state, and OCI confirms `TERMINATED`.  Otherwise return to OV-1 with the
 new measured failure; do not advance.
 
+**Passed 2026-08-26.** Run `20260826T040146Z-b39-9e2ba` accepted the key
+supplied only through instance metadata and the disposable instance terminated.
+
 ## OV-3 — Executable `IN_TEST` ownership gate
+
+**Passed 2026-08-26.** Run `20260826T103552Z-f33-2b88d` passed through the
+fresh ownership gate and its exact instance reached `TERMINATED`. Run
+`20260826T104020Z-34fa-6776a` was retained after a declared `exit 7`, handed
+off local-first, confirmed `HANDED_OFF` by fresh OCI read, and then rejected by
+guarded cleanup. The unrelated Oracle Linux instance was read only.
 
 Entry gate: OV-2 passes, so lifecycle automation can be tested on a working
 disposable path.
@@ -138,7 +147,18 @@ Work:
 Exit gate: passing and failing live evidence satisfies every Stage 1 criterion
 in `ORACLE_VALIDATION_RUNNER.md`.
 
+**Passed 2026-08-26 for the one-shot pass/fail contract.** Run
+`20260826T040957Z-556e-be8fb` passed; run
+`20260826T041155Z-5ed1-4bec7` preserved the declared `exit 7` failure. Both
+instances terminated. This evidence does not complete OV-3's fresh-tag
+ownership gate.
+
 ## OV-5 — Resilient telemetry and recovery
+
+Status: active for offline implementation. The JSONL event/replay layer now
+rejects malformed records and sequence gaps while allowing an overlapping
+prefix after reconnect. Live forced-disconnect acceptance must wait until the
+OV-3 ownership check protects cleanup with a fresh OCI tag read.
 
 Work:
 

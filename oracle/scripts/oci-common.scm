@@ -177,6 +177,36 @@ assumed to be the whole captured string."
                        (sh-quote instance-ocid)
                        " --query 'data[0].\"public-ip\"' --raw-output"))))
 
+(define (oci-instance-ownership instance-ocid)
+  "Freshly read the exact OCID and disposable ownership tags in one OCI call.
+The join/to_string query was verified against OCI CLI 2026-08-26.  Missing
+tags become the literal string null, which cannot authorize mutation."
+  (let* ((output
+          (oci
+           (string-append
+            "compute instance get --instance-id " (sh-quote instance-ocid)
+            " --query 'join(`|`, [data.id,"
+            " to_string(data.\"freeform-tags\".\"managed-by\"),"
+            " to_string(data.\"freeform-tags\".\"artifact-state\"),"
+            " to_string(data.\"freeform-tags\".\"run-id\"),"
+            " to_string(data.\"freeform-tags\".\"created-at\"),"
+            " to_string(data.\"freeform-tags\".\"expires-at\")])' --raw-output")))
+         (fields (string-split output #\|)))
+    (and (= (length fields) 6)
+         `((instance-ocid . ,(list-ref fields 0))
+           (managed-by . ,(list-ref fields 1))
+           (artifact-state . ,(list-ref fields 2))
+           (run-id . ,(list-ref fields 3))
+           (created-at . ,(list-ref fields 4))
+           (expires-at . ,(list-ref fields 5))))))
+
+(define (oci-update-instance-tags/status instance-ocid tags-json)
+  "Replace the validation instance's tags with the controller-built full set."
+  (oci/status
+   (string-append "compute instance update --instance-id "
+                  (sh-quote instance-ocid) " --freeform-tags "
+                  (sh-quote tags-json) " --force 2>&1")))
+
 (define (oci-terminate-command instance-ocid)
   "Build the explicit disposable-instance termination command.
 The false preserve value matters: retaining a boot volume defeats the cleanup

@@ -30,6 +30,8 @@
   (string-append repository-root "/oracle/scripts/05-verify-metadata-ssh.scm"))
 (define inspect-script
   (string-append repository-root "/oracle/scripts/oci-inspect.scm"))
+(define lifecycle-script
+  (string-append repository-root "/oracle/scripts/validation-lifecycle.scm"))
 (define macos-oci-client
   (string-append repository-root "/oracle/scripts/macos/oci-client.scm"))
 
@@ -64,6 +66,7 @@
 (define validate-source (read-text validate-script))
 (define probe-source (read-text probe-script))
 (define inspect-source (read-text inspect-script))
+(define lifecycle-source (read-text lifecycle-script))
 (define oci-common-source (read-text oci-common))
 (define macos-oci-source (read-text macos-oci-client))
 
@@ -233,6 +236,109 @@
 (check "failed validation keeps the instance only when requested"
        (and (eq? (validation-cleanup-action 1 #t) 'keep)
             (eq? (validation-cleanup-action 1 #f) 'terminate)))
+
+(define ownership-local
+  `((managed-by . "guix-platform-install") (artifact-state . "IN_TEST")
+    (run-id . ,run-id) (resource-type . "instance")
+    (instance-ocid . "ocid1.instance.fixture")
+    (operation-scope . (inspect collect-console terminate handoff))))
+(define ownership-remote
+  `((managed-by . "guix-platform-install") (artifact-state . "IN_TEST")
+    (run-id . ,run-id) (instance-ocid . "ocid1.instance.fixture")))
+
+(check "ownership gate permits an exact IN_TEST termination match"
+       (validation-ownership-authorized? ownership-local ownership-remote
+                                         'terminate #f))
+(check "ownership gate denies absent OCI tags"
+       (not (validation-ownership-authorized? ownership-local '() 'terminate #f)))
+(check "ownership gate denies mismatched run IDs"
+       (not (validation-ownership-authorized?
+             ownership-local
+             (acons 'run-id "20260823T120000Z-other-run" ownership-remote)
+             'terminate #f)))
+(check "ownership gate denies a mismatched exact OCID"
+       (not (validation-ownership-authorized?
+             ownership-local
+             (acons 'instance-ocid "ocid1.instance.other" ownership-remote)
+             'terminate #f)))
+(check "ownership gate denies operations outside declared scope"
+       (not (validation-ownership-authorized? ownership-local ownership-remote
+                                              'delete-image #f)))
+(check "ownership gate denies local HANDED_OFF state"
+       (not (validation-ownership-authorized?
+             (acons 'artifact-state "HANDED_OFF" ownership-local)
+             ownership-remote 'terminate #f)))
+(check "ownership gate denies remote HANDED_OFF state"
+       (not (validation-ownership-authorized?
+             ownership-local
+             (acons 'artifact-state "HANDED_OFF" ownership-remote)
+             'terminate #f)))
+(check "ownership gate denies an interrupted handoff marker"
+       (not (validation-ownership-authorized? ownership-local ownership-remote
+                                              'terminate #t)))
+(check "OCI ownership query is one fresh exact-instance read"
+       (let ((source oci-common-source))
+         (and (string-contains source "(define (oci-instance-ownership")
+              (string-contains source "to_string(data.\\\"freeform-tags\\\".\\\"managed-by\\\")")
+              (string-contains source "to_string(data.\\\"freeform-tags\\\".\\\"artifact-state\\\")")
+              (string-contains source "to_string(data.\\\"freeform-tags\\\".\\\"run-id\\\")"))))
+(check "both disposable controllers gate termination on fresh ownership"
+       (and (string-contains validate-source "oci-instance-ownership")
+            (string-contains validate-source "validation-ownership-authorized?")
+            (string-contains probe-source "oci-instance-ownership")
+            (string-contains probe-source "validation-ownership-authorized?")))
+(check "lifecycle handoff protects locally before OCI mutation"
+       (let ((local-write (string-contains lifecycle-source "validation-write-state"))
+             (oci-update (string-contains lifecycle-source
+                                          "oci-update-instance-tags/status")))
+         (and local-write oci-update (< local-write oci-update)
+              (string-contains lifecycle-source "local protection remains"))))
+(check "lifecycle cleanup and handoff both use the ownership gate"
+       (and (string-contains lifecycle-source "'terminate")
+            (string-contains lifecycle-source "'handoff")
+            (string-contains lifecycle-source "validation-ownership-authorized?")
+            (string-contains lifecycle-source "oci-instance-ownership")))
+(check "handoff confirmation requires exact OCID, run ID, and HANDED_OFF"
+       (and (string-contains lifecycle-source "'instance-ocid")
+            (string-contains lifecycle-source "'run-id")
+            (string-contains lifecycle-source "\"HANDED_OFF\"")))
+
+;;; ---------------------------------------------------------------------------
+;;; Resilient telemetry journal and replay
+
+(define event-1 (validation-event-json 1 "started" "fixture-time" "command"))
+(define event-2 (validation-event-json 2 "heartbeat" "fixture-time" "alive"))
+(define event-3 (validation-event-json 3 "output" "fixture-time" "a\"b\\c\n"))
+
+(check "telemetry events are single-line escaped JSON with a sequence"
+       (and (= (validation-event-sequence event-3) 3)
+            (not (string-contains event-3 "a\"b\\c\n"))
+            (string-contains event-3 "a\\\"b\\\\c\\n")))
+(check "telemetry parser rejects missing, zero, and nonnumeric sequences"
+       (and (not (validation-event-sequence "{}"))
+            (not (validation-event-sequence "{\"seq\":0,\"kind\":\"x\"}"))
+            (not (validation-event-sequence "{\"seq\":x,\"kind\":\"x\"}"))))
+
+(call-with-values
+    (lambda () (validation-replay-events (list event-1 event-2 event-3) 0))
+  (lambda (events last error)
+    (check "initial telemetry replay is contiguous"
+           (and (not error) (= last 3) (equal? events (list event-1 event-2 event-3))))))
+(call-with-values
+    (lambda () (validation-replay-events (list event-1 event-2 event-3) 2))
+  (lambda (events last error)
+    (check "reconnect replay ignores an overlapping prefix"
+           (and (not error) (= last 3) (equal? events (list event-3))))))
+(call-with-values
+    (lambda () (validation-replay-events (list event-1 event-3) 0))
+  (lambda (events last error)
+    (check "telemetry replay fails loudly on an event gap"
+           (and (not events) (= last 0) (string-contains error "expected 2")))))
+(call-with-values
+    (lambda () (validation-replay-events (list event-1 "not-json") 0))
+  (lambda (events last error)
+    (check "telemetry replay fails loudly on malformed input"
+           (and (not events) (= last 0) (string-contains error "malformed")))))
 (check "termination explicitly deletes the boot volume"
        (let ((command (oci-terminate-command "ocid1.instance.fixture")))
          (and (string-contains command "--preserve-boot-volume false")

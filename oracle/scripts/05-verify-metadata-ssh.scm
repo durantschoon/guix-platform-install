@@ -21,6 +21,9 @@
 (define (write-probe-state path run-id phase instance-ocid ip)
   (validation-write-state
    path `((schema . 1) (kind . metadata-ssh-probe) (run-id . ,run-id)
+          (managed-by . "guix-platform-install")
+          (artifact-state . "IN_TEST") (resource-type . "instance")
+          (operation-scope . (inspect collect-console terminate handoff))
           (phase . ,phase) (instance-ocid . ,instance-ocid) (public-ip . ,ip))))
 
 (define (first-domain-or-die)
@@ -101,8 +104,18 @@
                                              instance last-ip))
                         (oci-capture-console-history
                          instance (string-append run-dir "/console-history.log"))
-                        ;; The recorded OCID, rather than the display name, is the cleanup target.
-                        (call-with-values (lambda () (oci-terminate-instance/status instance))
+                        ;; The exact OCID plus matching local/fresh OCI ownership
+                        ;; facts are all required.  A name alone never authorizes cleanup.
+                        (call-with-values
+                          (lambda ()
+                            (let ((local (validation-read-state state-path))
+                                  (remote (oci-instance-ownership instance))
+                                  (handoff? (file-exists?
+                                             (validation-handoff-marker-path state-path))))
+                              (if (validation-ownership-authorized?
+                                   local remote 'terminate handoff?)
+                                  (oci-terminate-instance/status instance)
+                                  (values "termination blocked: ownership facts did not match" 1))))
                           (lambda (termination-output termination-status)
                             (call-with-output-file (string-append run-dir "/termination.log")
                               (lambda (port) (display termination-output port) (newline port)))

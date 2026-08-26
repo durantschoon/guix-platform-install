@@ -27,6 +27,11 @@ Inventory was read from OCI at the time above.
   - Shape: `VM.Standard.E2.1.Micro`
   - State: `RUNNING`
   - Ownership: pre-existing and unrelated.  Do not stop, modify, or terminate.
+- OV-3 handed-off fixture `20260826T104020Z-34fa-6776a`
+  - OCID: `ocid1.instance.oc1.iad.anuwcljth2vmswaccugdhkwcxdtnay2j3ryx4zdru5ih5vus3bw4kqwmzzhq`
+  - State: `RUNNING`; local and OCI artifact state both `HANDED_OFF`
+  - Ownership: protected after live handoff. Automation must not modify or
+    terminate it without a new explicit instruction.
 
 Never select a cleanup target by display name.  Re-read its OCID and lifecycle
 state before terminating it.
@@ -86,8 +91,21 @@ authorize unattended mutation or destruction.
 
 ## Exact next action
 
-OV-4 is complete for the one-shot pass/fail contract. Next is OV-5 planning
-for resilient telemetry and event replay.
+OV-4 is complete for the one-shot pass/fail contract. OV-5 offline
+implementation is active: the JSONL event/replay layer validates monotonic
+sequences, permits reconnect overlap, and fails on gaps or malformed records.
+Next, connect that layer to a durable guest journal and bounded reconnect loop.
+OV-3 now performs the required fresh OCI-tag ownership comparison before
+cleanup, so the OV-5 forced-disconnect live gate may proceed after its offline
+implementation passes.
+
+OV-3 is complete. It records the declared ownership/scope fields and gates
+both Stage 0 and Stage 1 termination on a fresh exact-instance OCI read. The
+OCI CLI `join`/`to_string` query shape was verified read-only against the
+protected Oracle Linux instance: its absent ownership tags returned `null`, so
+the pure gate denies mutation. Guarded `status`, `cleanup`, and fail-safe
+`handoff` commands pass 54 offline checks. Purpose-built live cleanup and
+handoff/refusal acceptance both passed. OV-5 durable guest telemetry is next.
 
 Preferred build entry point remains `make oracle-build-generic`; use an explicit
 `BUILD_NAME` for each diagnostic generation so prior artifacts remain intact.
@@ -111,6 +129,20 @@ artifact changes.  Never place OCI credentials or private-key paths there.
 
 ## Session log
 
+- 2026-08-26: Wired the OV-3 deny-by-default ownership gate into both
+  disposable controllers. The Oracle suite passes 51 checks, including absent
+  tags, stale run IDs, OCID mismatch, undeclared scope, both handoff states,
+  and an interrupted local handoff marker.
+- 2026-08-26: Added exact-run lifecycle commands. Handoff records local
+  protection before OCI mutation and confirms exact OCID/run/state afterward.
+  Syntax loading, 54 Oracle checks, and diff checks pass.
+- 2026-08-26: OV-3 live acceptance passed. Run
+  `20260826T103552Z-f33-2b88d` terminated through the fresh ownership gate and
+  OCI confirmed `TERMINATED`. Run `20260826T104020Z-34fa-6776a` was handed
+  off, confirmed by fresh OCI read, and guarded cleanup correctly refused it.
+- 2026-08-26: Began OV-5 offline. Added dependency-free sequenced JSONL event
+  encoding and replay validation. All 41 Oracle validation checks pass,
+  including deliberate gap, malformed-event, and reconnect-overlap cases.
 - 2026-08-26: OV-4 passing run `20260826T040957Z-556e-be8fb` completed in
   103s (prediction 89s); failing run `20260826T041155Z-5ed1-4bec7` correctly
   returned failure for `exit 7` in 119s. Both disposable instances terminated.

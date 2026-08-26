@@ -38,14 +38,17 @@
   (string-append "{\"ssh_authorized_keys\":"
                  (validation-json-string public-key) "}"))
 
-(define (validation-tags-json run-id created-at expires-at)
+(define (validation-tags-json/state run-id created-at expires-at artifact-state)
   "Return the disposable-run tags passed to OCI's --freeform-tags."
   (string-append "{\"managed-by\":\"guix-platform-install\","
-                 "\"artifact-state\":\"IN_TEST\","
+                 "\"artifact-state\":" (validation-json-string artifact-state) ","
                  "\"purpose\":\"guix-validation\",\"run-id\":"
                  (validation-json-string run-id)
                  ",\"created-at\":" (validation-json-string created-at)
                  ",\"expires-at\":" (validation-json-string expires-at) "}"))
+
+(define (validation-tags-json run-id created-at expires-at)
+  (validation-tags-json/state run-id created-at expires-at "IN_TEST"))
 
 (define (validation-safe-run-id? value)
   "Accept only filename/display-name safe validation identifiers."
@@ -109,6 +112,29 @@
 (define (validation-cleanup-action result keep-on-failure?)
   "Choose 'terminate or 'keep without consulting OCI."
   (if (and (not (zero? result)) keep-on-failure?) 'keep 'terminate))
+
+(define (validation-ownership-authorized? local remote operation handoff-marker?)
+  "Deny mutation unless local scope and freshly read OCI ownership all match."
+  (define (value facts key)
+    (let ((entry (and (list? facts) (assoc key facts))))
+      (and entry (cdr entry))))
+  (let ((manager (value local 'managed-by))
+        (state (value local 'artifact-state))
+        (run-id (value local 'run-id))
+        (resource (value local 'resource-type))
+        (instance (value local 'instance-ocid))
+        (scope (value local 'operation-scope)))
+    (and (not handoff-marker?)
+         (equal? manager "guix-platform-install")
+         (equal? state "IN_TEST")
+         (string? run-id) (validation-safe-run-id? run-id)
+         (equal? resource "instance")
+         (string? instance) (string-prefix? "ocid1.instance." instance)
+         (list? scope) (member operation scope)
+         (equal? (value remote 'managed-by) manager)
+         (equal? (value remote 'artifact-state) state)
+         (equal? (value remote 'run-id) run-id)
+         (equal? (value remote 'instance-ocid) instance))))
 
 (define (validation-option-ref options key)
   (let ((entry (assoc key options))) (and entry (cdr entry))))
@@ -178,6 +204,23 @@ testable without invoking OCI."
       (lambda (port) (write state port) (newline port)))
     (rename-file temporary path)))
 
+(define (validation-read-state path)
+  "Read one native state record; malformed or trailing input is rejected."
+  (catch #t
+    (lambda ()
+      (call-with-input-file path
+        (lambda (port)
+          (let ((state (read port)) (trailing (read port)))
+            (and (list? state) (eof-object? trailing) state)))))
+    (lambda args #f)))
+
+(define (validation-state-set state key value)
+  "Return STATE with KEY replaced exactly once."
+  (acons key value (filter (lambda (entry) (not (eq? (car entry) key))) state)))
+
+(define (validation-handoff-marker-path state-path)
+  (string-append state-path ".handoff"))
+
 (define (validation-write-result-json path run-id status phase message)
   "Write a deliberately small machine-readable result without a JSON library."
   (call-with-output-file path
@@ -187,6 +230,56 @@ testable without invoking OCI."
       (display ",\"phase\":" port) (display (validation-json-string phase) port)
       (display ",\"message\":" port) (display (validation-json-string message) port)
       (display "}\n" port))))
+
+(define (validation-event-json sequence kind timestamp payload)
+  "Encode one telemetry event.  SEQUENCE is monotonic within a run.
+PAYLOAD remains a string so replay does not need a JSON parser on stock Guile."
+  (unless (and (integer? sequence) (> sequence 0))
+    (error "event sequence must be a positive integer" sequence))
+  (string-append "{\"seq\":" (number->string sequence)
+                 ",\"kind\":" (validation-json-string kind)
+                 ",\"timestamp\":" (validation-json-string timestamp)
+                 ",\"payload\":" (validation-json-string payload) "}"))
+
+(define (validation-event-sequence line)
+  "Read the leading numeric seq field emitted by validation-event-json.
+Return #f for malformed input; callers must treat it as a journal fault."
+  (let ((prefix "{\"seq\":"))
+    (and (string-prefix? prefix line)
+         (let* ((start (string-length prefix))
+                (end (string-index line #\, start)))
+           (and end
+                (let ((value (string->number (substring line start end))))
+                  (and (integer? value) (> value 0) value)))))))
+
+(define (validation-replay-events remote-lines last-sequence)
+  "Validate and select unseen journal lines after LAST-SEQUENCE.
+Returns (values unseen new-last error).  A duplicate prefix is allowed because
+reconnect fetches may overlap; any gap or malformed event stops replay."
+  (let loop ((lines remote-lines) (expected (+ last-sequence 1)) (unseen '()))
+    (if (null? lines)
+        (values (reverse unseen) (- expected 1) #f)
+        (let* ((line (car lines)) (sequence (validation-event-sequence line)))
+          (cond
+           ((not sequence)
+            (values #f last-sequence "malformed remote journal event"))
+           ((<= sequence last-sequence)
+            (loop (cdr lines) expected unseen))
+           ((= sequence expected)
+            (loop (cdr lines) (+ expected 1) (cons line unseen)))
+           (else
+            (values #f last-sequence
+                    (string-append "remote journal gap: expected "
+                                   (number->string expected) " but received "
+                                   (number->string sequence)))))))))
+
+(define (validation-append-lines path lines)
+  "Append already validated JSONL events and force them to stable local output."
+  (unless (null? lines)
+    (let ((port (open-file path "a")))
+      (for-each (lambda (line) (display line port) (newline port)) lines)
+      (force-output port)
+      (close-port port))))
 
 (define (validation-stream-command/status command log-path)
   "Run local shell COMMAND, tee its already-combined output incrementally.

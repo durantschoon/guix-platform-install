@@ -59,9 +59,12 @@ This checklist tracks remaining work for the guix-platform-install project.
   after five bounded attempts; instance terminated)
 - ✅ Stage 1 one-shot snapshot/upload/run/log/terminate controller implemented
   with offline coverage
-- ⏸ OV-3 executable `IN_TEST` ownership gate
-- ⏳ OV-4 Stage 1 live passing and failing validation runs
-- ⏸ OV-5 resilient telemetry, reconnect/replay, and console capture
+- ✅ OV-3 executable `IN_TEST` ownership gate (54 offline checks; live guarded
+  cleanup and live handoff/refusal acceptance passed)
+- ✅ OV-4 Stage 1 live passing and failing validation runs (both instances
+  terminated; declared nonzero status preserved)
+- 🔄 OV-5 resilient telemetry, reconnect/replay, and console capture (offline
+  JSONL sequence/replay foundation implemented; live disconnect gate pending)
 - ⏸ OV-6 handoff and operational hardening
 
 **Primary Focus: Cloudzy Installation Testing**

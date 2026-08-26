@@ -30,6 +30,40 @@ poll-until          all long waits go through one helper so every
                     script's waiting behavior (dots, timeout, message)
                     is identical.
 
+validation event helpers
+                    encode monotonically sequenced JSONL without guile-json,
+                    reject malformed events and gaps, and permit an overlapping
+                    prefix after reconnect.  A gap is never silently skipped:
+                    resilient telemetry is evidence only if it can say exactly
+                    which events it inspected.
+
+Statement of omission: validation-common.scm does not reconnect to a guest or
+consult OCI.  It is the pure layer used to prove replay behavior offline; the
+controller owns transport, lifecycle polling, and console capture.
+
+Disposable ownership gate
+                    Stage 0 and Stage 1 record manager, artifact state,
+                    resource type, exact OCID, and allowed operations locally.
+                    Immediately before termination they perform one fresh OCI
+                    read of the exact instance's OCID and three ownership tags.
+                    Missing tags serialize as `null`; absent, malformed, stale,
+                    mismatched, or handed-off facts all block termination.
+
+Statement of omission: a display name, expiry time, successful command, or
+locally recorded OCID alone never authorizes mutation.  Those facts are useful
+for diagnosis, not proof that the cloud resource is still controller-owned.
+
+validation-lifecycle.scm
+                    provides exact-run status, guarded cleanup, and fail-safe
+                    handoff. Handoff writes the local marker and HANDED_OFF
+                    state before changing OCI, then requires a fresh OCI
+                    confirmation of exact OCID, run ID, and state. An
+                    interruption therefore protects rather than exposes data.
+
+Statement of omission: there is no name-based destroy, bulk cleanup, adoption,
+or HANDED_OFF-to-IN_TEST transition. Each would widen deletion authority and
+requires a separate explicit design and user instruction.
+
 ========================================================================
 oci-inspect.scm
 ========================================================================
