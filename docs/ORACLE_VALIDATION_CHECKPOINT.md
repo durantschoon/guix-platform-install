@@ -8,8 +8,8 @@ should be able to resume from this file without relying on chat history.
 - Time: 2026-08-25 23:25 America/New_York
 - Objective: prove that the generic Guix image accepts an ephemeral SSH key
   supplied only through OCI instance metadata.
-- Last verified fact: the OV-3 runtime-lookup image is `AVAILABLE` in OCI after
-  checksum-verified build/upload/import.  Its next action is Stage 0.
+- Last verified fact: OV-3 Stage 0 and Stage 1 pass/fail acceptance runs all
+  completed with automatic termination.
 
 ## Live resources
 
@@ -86,9 +86,8 @@ authorize unattended mutation or destruction.
 
 ## Exact next action
 
-OV-2 is complete. Advance to OV-4 with a passing and then failing
-`make oracle-stage1 YES=--yes` run; preserve both results and confirm
-termination for each.
+OV-4 is complete for the one-shot pass/fail contract. Next is OV-5 planning
+for resilient telemetry and event replay.
 
 Preferred build entry point remains `make oracle-build-generic`; use an explicit
 `BUILD_NAME` for each diagnostic generation so prior artifacts remain intact.
@@ -111,6 +110,12 @@ Make.  Update or clear the instance/evidence values when the active test
 artifact changes.  Never place OCI credentials or private-key paths there.
 
 ## Session log
+
+- 2026-08-26: OV-4 passing run `20260826T040957Z-556e-be8fb` completed in
+  103s (prediction 89s); failing run `20260826T041155Z-5ed1-4bec7` correctly
+  returned failure for `exit 7` in 119s. Both disposable instances terminated.
+- 2026-08-26: Added bounded authenticated-SSH readiness polling to prevent
+  Stage 1 racing the metadata key installation service.
 
 - 2026-08-24: first live metadata-only probe booted but SSH failed; instance
   terminated and evidence retained locally.
