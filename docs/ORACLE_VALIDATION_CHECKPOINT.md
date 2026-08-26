@@ -62,6 +62,11 @@ authorize unattended mutation or destruction.
   by `make oracle-timings`.  Current first-sample baselines are build 256s,
   upload 421s, import-to-available 478s, and failed Stage 0 total 729s.  Timed
   jobs print their prediction before starting and actual/delta afterward.
+- OV-3 Stage 0 run `20260826T040146Z-b39-9e2ba` passed in 99 seconds versus
+  the 729-second prediction. Serial evidence shows service start, four retries,
+  and `installed 1 key(s); directory mode 0700, file mode 0600`; metadata-only
+  SSH then succeeded. The exact instance OCID and termination are recorded in
+  that run's `state.scm`. The early Guile segfault remains a separate follow-up.
 
 - The first Stage 0 run is under
   `.oracle-validation/runs/20260824T200854Z-2573-13e84/`.
@@ -81,9 +86,9 @@ authorize unattended mutation or destruction.
 
 ## Exact next action
 
-Run `make oracle-stage0 YES=--yes` against the OV-3 image now recorded in
-`.env`.  Require serial evidence containing `metadata-ssh-keys: service
-starting`, preserve all evidence, and confirm termination before advancing.
+OV-2 is complete. Advance to OV-4 with a passing and then failing
+`make oracle-stage1 YES=--yes` run; preserve both results and confirm
+termination for each.
 
 Preferred build entry point remains `make oracle-build-generic`; use an explicit
 `BUILD_NAME` for each diagnostic generation so prior artifacts remain intact.
