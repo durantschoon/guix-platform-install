@@ -93,11 +93,21 @@ contains the command text itself."
                          run-id "/source.tar -C " remote "/source; cd " remote
                          "/source; timeout " (validation-sh-quote timeout)
                          " sh /tmp/" run-id "/command.sh' 2>&1")))
-    (if (not (zero? (validation-stream-command/status make-temp log)))
+    ;; RUNNING only means the control plane started the VM.  Wait for the
+    ;; metadata-key Shepherd service to install the key before attempting the
+    ;; first transfer; otherwise Stage 1 races the same boot-time retry window
+    ;; that Stage 0 deliberately measures.
+    (if (not (poll-until "authenticated SSH readiness"
+                         (lambda ()
+                           (zero? (validation-stream-command/status
+                                   (string-append base " true 2>&1") log)))
+                         10 180))
+        1
+        (if (not (zero? (validation-stream-command/status make-temp log)))
         1
         (if (not (zero? (validation-stream-command/status copy log)))
             1
-            (validation-stream-command/status execute log)))))
+            (validation-stream-command/status execute log))))))
 
 (define (run-validation options)
   (let* ((source-input (validation-option-ref options 'source))

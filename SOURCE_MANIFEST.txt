@@ -10,13 +10,13 @@
 aa5c9f59fc4f780358c9a0e239b8eb640e1031d226bd64d731aef4078eea0a2b  ./cloudzy/install/01-partition.go
 afe036905ac887402c9cec059a441340f81663adc5c595ff6afa99d2807bf77b  ./cloudzy/install/02-mount.go
 6c48ca627b53d3bac4f7012490c076f2036c9a8d6c781025da6afbe627e09d46  ./cloudzy/install/03-config.go
-1413e38244ac26c90435221c62d3aeb0cc7fe41959f24ec296d060f0c7f73b24  ./cloudzy/install/04-system-init.go
+17524ad3186281cbc8a8c25d818d2351e4a458d3600fb4450fc043019be1039b  ./cloudzy/install/04-system-init.go
 2f5888d739db6a21bf724a73712cf6b4299355cc42bb694c39d65f328d322e49  ./cloudzy/install/state.go
 2a6a93d83ad59fd45b081a76d09dddf94c19cf052dc2f56eb4e8dc0613847fed  ./cmd/hash-to-words/main_test.go
 b2d66c39f05a9943073c963eb1763993f4873841c28eab1e888c7500fc09d20b  ./cmd/hash-to-words/main.go
 8f182be114dd652fc8c1c6ec48b722709b58a1bc7e7cb492d846c9e18723dd4b  ./cmd/recovery/main.go
-8a9de6b41da90684c9d58fd7b86e5dc001e1b870bdca7d1402c45a0115abb755  ./framework-dual/install/01-partition-check_test.go
-5b9757f039714f87bd5cc115b7e53ae3704ed790c0a7cce352c4d25418f6d396  ./framework-dual/install/01-partition-check.go
+62e75320502e863ae1e927d75cf9e61aa89acbefe56f7293fc10c3451ff59eac  ./framework-dual/install/01-partition-check_test.go
+bd9b4134a571950587bd34384d64c894b0f3b748a4c5903fa3dc1a1629acb6f0  ./framework-dual/install/01-partition-check.go
 f14b5c13b9f056167119b6d33d1ca684202eb7b729db09c9abd967d56bb54882  ./framework-dual/install/02-mount-existing_test.go
 cb21308d6873b378ee6a6db59c2fb86b31a317cd3ccedde9783150b94ddeb811  ./framework-dual/install/02-mount-existing.go
 2a6f53312dbd769654f06fc5fb46b65c5a60147f8c764af89ee30644d8f65a19  ./framework-dual/install/03-config-dual-boot_test.go
@@ -55,7 +55,7 @@ d4678a5c0e473fe43c23b5a4087809622e5b2703377bea56ce572ad0dd1ffc43  postinstall/li
 
 ## Diagnostic Scripts
 
-c139a569a01ea8d232ac87e2890eb0c935e8d9dd117f799a7ce9eab1114c7876  lib/validate-before-deploy.sh
+c892f54860b263ac1e3acc147754d1725188a59e4ed848fcf10250b9518a473f  lib/validate-before-deploy.sh
 61c42f1a2ea25fcaebc46f8b66b28c4c44178f9b3917dce6a21141616460bfa2  diagnose-guix-build.sh
 f6c1207f91bce6538f2de25252655713b0fc78758998717f205038fe14d8fd2e  investigate-kernel-location.sh
 
@@ -90,7 +90,7 @@ a25d0a3b2b45e4729782d67806218382a0f53bf124e245317c7443acf74efcf2  oracle/scripts
 212b2428ed2bbbc078bd8d173b04bf71b8be0fe5e3f2b31660cdecf6e107f4f5  oracle/scripts/macos/oci-client.scm
 d9cd01e839b8d33245da20ce7a5b08b84515029bb581837ef491262a673a2912  oracle/scripts/oci-common.scm
 484cc75da935b54a824c54fb66278b4933a841c76a76d70cf3afbcc636f7df80  oracle/scripts/oci-inspect.scm
-abc4005d46d51588699aaa2298e67d074a02384cf629955004ee52de7f968718  oracle/scripts/validate.scm
+b2ccfca85f724217105ae5b4acc50f078e27652b5c512969a15d14f73e649d73  oracle/scripts/validate.scm
 f0fddf74feb533c0cd99fabd67c4a11121978864c7688b1f6579dec155d43e84  oracle/scripts/validation-common.scm
 998d9f30c7d52a0f52942be08c6f2535b69add44e34f09a0441c206cf0bfaa1f  oracle/tests/test-oracle-capacity.scm
 d0e605e8142a5491724313bb2aace4337fade2df40c6e03eb5de835d74de383e  oracle/tests/test-oracle-image.scm
