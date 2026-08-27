@@ -5,6 +5,18 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-08-27: OV-6 live release acceptance passed in run
+  `20260827T201856Z-dd6f-661af`. The exact source snapshot hash was recorded,
+  the guest hashed its transferred `SOURCE_MANIFEST.txt` and returned result
+  0, versioned evidence was retained under
+  `.oracle-validation/runs/20260827T201856Z-dd6f-661af/`, and a fresh OCI read
+  confirmed the exact instance
+  `ocid1.instance.oc1.iad.anuwcljth2vmswacpmxcscbusrjrqnowpg4pbfeqdb32tf6bsbav4hcvag5a`
+  is `TERMINATED`. Two earlier diagnostic runs used files outside the guest
+  transfer boundary; both failed as command-failure and terminated cleanly.
+  OV-6 is complete. Retained-instance execution and MCP tools remain deferred
+  to stages 08-09.
+
 - 2026-08-27: Stage 05 is merged as `876c35b` and the Stage 06 prompt is
   committed as `1f3d2ea`. The next implementation unit is Stage 06: add a
   read-only expired-run review and an explicit, fail-closed `IN_TEST` reaper.
@@ -143,11 +155,11 @@ froze the bounded one-shot request/status/result contract and execution limits.
 Stage 06 reviewed and safely reaps expired `IN_TEST` records through the
 existing exact-instance ownership gate. The next implementation unit is
 Stage 07 packaged the bounded one-shot controller, rehearsed restart from
-checkpoint, and prepared the live release-acceptance checklist. The next action
-is a human-authorized live run: execute a declared computation from a hashed
-snapshot, preserve the versioned result/evidence, and confirm the exact
-disposable instance reaches `TERMINATED`. Retained-instance task joining and an
-MCP facade are explicitly deferred to post-release stages 08-09.
+checkpoint, and prepared the live release-acceptance checklist. OV-6 then
+passed its human-authorized live run: a declared computation ran from a hashed
+snapshot, produced versioned result/evidence, and the exact disposable
+instance reached `TERMINATED`. Retained-instance task joining and an MCP facade
+are explicitly deferred to post-release stages 08-09.
 
 OV-3 is complete. It records the declared ownership/scope fields and gates
 both Stage 0 and Stage 1 termination on a fresh exact-instance OCI read. The

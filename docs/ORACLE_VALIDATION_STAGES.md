@@ -19,7 +19,7 @@ Only one `OV-*` stage is active at a time.  Every live action updates
 | OV-3 | Executable `IN_TEST` ownership gate | complete |
 | OV-4 | Live one-shot validation acceptance | complete |
 | OV-5 | Resilient telemetry and recovery | complete |
-| OV-6 | One-shot release and forward-compatible hardening | active |
+| OV-6 | One-shot release and forward-compatible hardening | complete |
 
 ## OV-0 — Controller foundation and measured failure
 
@@ -174,6 +174,15 @@ guest-loss run `20260826T235720Z-b317-de56f` retained events and console/lifecyc
 evidence and classified the terminated guest before a result.
 
 ## OV-6 — One-shot release and forward-compatible hardening
+
+Status: complete. The bounded one-shot release candidate passed its live
+acceptance run on 2026-08-27. Run `20260827T201856Z-dd6f-661af` transferred the
+hashed source snapshot, executed a hash of the transferred `SOURCE_MANIFEST.txt`
+with result 0, preserved versioned evidence, and the exact instance was
+confirmed `TERMINATED` by a fresh OCI read. Two earlier runs deliberately used
+files outside the transferred working directory; both returned command-failure
+and terminated cleanly, so they remain diagnostic evidence rather than release
+evidence.
 
 The release milestone is intentionally narrower than a Runpod-like compute
 service: remotely run one declared computation that requires a live Guix

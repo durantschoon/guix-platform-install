@@ -66,12 +66,12 @@ This checklist tracks remaining work for the guix-platform-install project.
 - ✅ OV-5 resilient telemetry, reconnect/replay, console capture, and
   permanent-loss evidence (2026-08-27; forced reconnect and guest-loss live
   gates passed; exact disposable instances terminated)
-- 🚧 OV-6 bounded one-shot remote-compute release
+- ✅ OV-6 bounded one-shot remote-compute release (complete; live acceptance 2026-08-27)
   - Stage 05: versioned one-shot contract and execution bounds (merged)
   - Stage 06: expired `IN_TEST` review/reaper (merged)
   - Stage 07: packaging, restart rehearsal, and release candidate (merged)
-  - Release gate: live hashed computation, attributable result, exact instance
-    confirmed `TERMINATED`
+  - Release gate passed: live hashed computation, attributable result, exact
+    instance confirmed `TERMINATED`
   - Deferred post-release: retained-instance task joining and MCP facade
 
 **Primary Focus: Cloudzy Installation Testing**
