@@ -3,7 +3,7 @@
 Orientation for any AI agent working in this repository. Vendor-neutral: the
 rules below apply whichever assistant you are.
 
-**Written 2026-08-11.** Anything about *current state* rots; the "Conventions"
+**Current-state snapshot refreshed 2026-08-27.** Anything about *current state* rots; the "Conventions"
 section does not. When they disagree, trust `git log` and `CHECKLIST.md` over
 this file, and fix this file.
 
@@ -13,11 +13,13 @@ this file, and fix this file.
 |---|---|
 | **`CLAUDE.md`** | The full operating rules. Despite the name these are **not Claude-specific** — language policy, shebang paths, ASCII constraints, testing workflow. Read it before writing code. |
 | **`CHECKLIST.md`** | What is done and what is next. The five most recent completions are at the top; older ones are in `archive/CHECKLIST_COMPLETED.md`. |
-| **`docs/ORACLE_ONE_CLICK_ROADMAP.md`** | The work currently in flight, and the single gate blocking it. |
-| **`docs/stages/README.md`** | How delegated implementation works here — numbered stage prompts, isolated worktrees, review gates. Four stages are merged. |
+| **`docs/ORACLE_VALIDATION_CHECKPOINT.md`** | The live-cloud restart point, current evidence boundary, and exact next action. |
+| **`docs/ORACLE_VALIDATION_STAGES.md`** | The Oracle validation work currently in flight and its release gates. |
+| **`docs/ORACLE_ONE_CLICK_ROADMAP.md`** | The friend-facing Oracle path; only the console walkthrough/screenshots remain. |
+| **`docs/stages/README.md`** | How delegated implementation works here — numbered stage prompts, isolated worktrees, review gates. Five stages are merged. |
 | **`docs/STORY.md`** | Narrative of how the hard problems were actually diagnosed. The one doc that inverts the usual technical/narrative ratio. Optional, but it explains *why* several odd-looking decisions are correct. |
 
-## Where the project is (2026-08-11)
+## Where the project is (2026-08-27)
 
 The goal: someone with no Guix experience gets a free always-on Guix machine on
 Oracle Cloud, configured the way they like.
@@ -26,12 +28,17 @@ Oracle Cloud, configured the way they like.
   instance-metadata SSH keys, capacity handling, first-boot preferences, and a
   published walkthrough at
   <https://durantschoon.github.io/guix-platform-install/>.
-- **Blocked**: publishing one generic image, and the console-only path. Both
-  wait on a single test.
-- **The gate**: launch an instance whose SSH key arrives *only* via
-  `--metadata ssh_authorized_keys`, and log in. Everything underneath it —
-  endpoint, auth header, fallback, value format, DHCP timing — is measured. Two
-  bugs have been found and fixed by running it; it has not yet passed.
+- **Done**: a generic keyless image was published, imported, launched, and
+  accessed with a key supplied only through OCI metadata. The one-shot remote
+  validator has live pass/fail, reconnect/replay, telemetry, permanent-loss,
+  ownership-gate, and exact-instance cleanup evidence.
+- **In flight**: OV-6, the bounded one-shot remote-compute release. Repository
+  stage 05 is merged, stage 06 is authored, and stage 07 is planned. The release
+  gate is a live hashed computation with attributable output and the exact
+  instance confirmed `TERMINATED`.
+- **Friend-facing remainder**: the console-only walkthrough and screenshots.
+  Retained-instance execution and an MCP facade are intentionally deferred
+  until after the one-shot release.
 
 ## Not in git, and easy to miss
 
@@ -81,10 +88,16 @@ lib/validate-before-deploy.sh --verbose   # exit 0; "Failed:" must be 0
 ./update-manifest.sh                      # if it covers a file you changed
 ```
 
-Inherited state, not your breakage: about 15 validation warnings, and
-`run-tests.sh` reports 14/14 converted-script tests failing. Those are
-auto-generated, have never passed, and are deliberately non-gating. Do not
-"fix" them as part of unrelated work.
+`make check` runs the first two commands. `make oracle-test` runs the two
+portable offline Oracle suites; `make oracle-test-all` adds preferences and
+image evaluation and therefore requires Guix.
+
+Inherited state, not your breakage: about 15 validation warnings. On a
+Guix-capable environment, `run-tests.sh` reports 14/14 converted-script tests
+failing; those are auto-generated, have never passed, and are deliberately
+non-gating. On macOS it currently exits 2 earlier because `(guix read-print)`
+is unavailable, then exposes the known `return`-outside-function bug. Do not
+"fix" either as part of unrelated work.
 
 ## When to verify instead of trust
 

@@ -1,6 +1,6 @@
 # Guix System on Oracle Cloud Infrastructure (Always Free)
 
-✅ **Status: verified end-to-end on 2026-08-08.** The image built, passed the QEMU smoke test, uploaded, imported, and launched as a running instance with sshd answering on its public IP. The whole flow is scripted in `scripts/` (see below); the manual commands in this file are kept as the reference for what the scripts do.
+**Status (2026-08-27): verified through live login and disposable remote execution.** The generic keyless image was published, imported, launched, and accessed with an SSH key supplied only by OCI metadata. The disposable validator has live pass/fail, reconnect/replay, guest-loss, and guarded-cleanup evidence. The bounded one-shot release is still in progress; see the checkpoint linked below.
 
 ## How this platform differs from the others
 
@@ -43,7 +43,9 @@ Make assignments override the defaults.
 The read-only/local targets are:
 
 ```sh
-make oracle-test
+make oracle-test                 # two portable offline suites
+make oracle-test-all             # all four suites; requires Guix
+make oracle-test-validation      # focused validator/controller suite
 make oracle-auth
 make oracle-inventory
 make oracle-instance
@@ -64,8 +66,9 @@ restarted with its populated Guix store layer. It refuses to run while
 `oracle/image/authorized-key.pub` exists.
 
 They retain the controller's confirmation prompt.  Set `YES=--yes` only for
-an already-reviewed unattended run.  There is intentionally no generic
-destroy target until the ownership gate is enforced in executable code.
+an already-reviewed unattended run. There is intentionally no generic destroy
+target. Cleanup is available only for an exact `RUN_DIR` through the executable
+ownership gate.
 
 `scripts/validate.scm` is a separate, one-shot path for code that must be
 validated on a real Guix System.  OCI credentials remain on the controller;
@@ -101,6 +104,8 @@ See [the validation runner plan](../docs/ORACLE_VALIDATION_RUNNER.md) for the
 trust boundary, current verification status, and resilient-telemetry stages.
 See [the staged work plan](../docs/ORACLE_VALIDATION_STAGES.md) for the active
 stage, dependencies, and transition gates.
+See [the restart checkpoint](../docs/ORACLE_VALIDATION_CHECKPOINT.md) for the
+latest live evidence and exact next action.
 
 Repeatable read-only inspection is available separately from the controllers:
 

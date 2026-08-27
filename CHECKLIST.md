@@ -67,8 +67,8 @@ This checklist tracks remaining work for the guix-platform-install project.
   permanent-loss evidence (2026-08-27; forced reconnect and guest-loss live
   gates passed; exact disposable instances terminated)
 - 🚧 OV-6 bounded one-shot remote-compute release
-  - Stage 05: versioned one-shot contract and execution bounds (authored)
-  - Stage 06: expired `IN_TEST` review/reaper (planned)
+  - Stage 05: versioned one-shot contract and execution bounds (merged)
+  - Stage 06: expired `IN_TEST` review/reaper (authored)
   - Stage 07: packaging, restart rehearsal, and release candidate (planned)
   - Release gate: live hashed computation, attributable result, exact instance
     confirmed `TERMINATED`
@@ -595,16 +595,18 @@ Learned the complete workflow for getting Framework 13 fully operational after m
 ### 🟢 APPROVED FUTURE WORK — "Friend Clicks a Button, Gets Guix on Oracle" (2026-08-08)
 
 **Full plan: [docs/ORACLE_ONE_CLICK_ROADMAP.md](docs/ORACLE_ONE_CLICK_ROADMAP.md).**
-Approved by the user; step 1 is implemented, steps 2-6 are not started.
+Approved by the user. Steps 1, 2, 4, 5, and the presentation-only form of 6
+are complete; only step 3 remains.
 
 **Target:** someone who has never used Guix, and has no Guix installed anywhere,
 makes an Oracle free-tier account, chooses a few preferences, waits, and is up
 and running.
 
-**Steps 1, 5 and 6 are DONE.** Step 1 (`59987c9`) is the unlock; steps 5
-(capacity handling) and 6 (presentation-only web page at `web/index.html`) were
-built through the stage pipeline — see [docs/stages/](docs/stages/). Steps 2-4
-remain blocked on the gate below.
+**Steps 1, 2, 4, 5 and 6 are DONE.** Step 1 (`59987c9`) was the unlock; steps
+4-6 were built through the stage pipeline — see
+[docs/stages/](docs/stages/). The generic image in step 2 passed its live
+metadata-only login gate on 2026-08-11. Step 3 remains as documentation and
+screenshots, not as a blocked implementation path.
 
 **Step 1 — Instance-metadata SSH keys — DONE (`59987c9`).** The unlock. Without
 it a key could only be baked in, so a published image could serve nobody but its
@@ -623,16 +625,16 @@ everyone**.
 >
 > Guix writes a baked-in key to `/etc/ssh/authorized_keys.d/` and never to
 > `~/.ssh/authorized_keys`, so it can only have come from instance metadata.
-> **Steps 2-3 are unblocked.** Three bugs were found by running it — an `#f`
+> **Steps 2-3 were unblocked.** Three bugs were found by running it — an `#f`
 > reaching the authorized-keys builder, a fetch that gave up before DHCP had a
 > lease (the address was reachable on attempt 4, ~20s in), and `read-line` being
 > unbound inside a shepherd gexp. Automated end-to-end by
 > `~/.local/bin/oracle-metadata-gate`.
 >
-> *Caveat kept deliberately:* the confirming image also carried a baked-in key,
+> *Historical caveat:* the first confirming image also carried a baked-in key,
 > because a keyless image that fails leaves no way in to read the logs — which is
 > exactly why two earlier attempts taught nothing. The service is verified; the
-> keyless image is confirmed to build; step 2 exercises the last inch.
+> keyless image was then published and exercised that last inch successfully.
 
 | Step | Effort | Blocked by |
 |---|---|---|
@@ -640,7 +642,7 @@ everyone**.
 | 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | Unblocked; not the active remote-compute release path |
 | 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | ✅ **DONE** (stage 03) |
 | 5. Capacity handling | Small | ✅ **DONE** (stage 01) — reasoned, never seen a real refusal |
-| 6. Web UI to show friends | Medium | ✅ **DONE** presentation-only (stage 02) — hedges until 2-3 land |
+| 6. Web UI to show friends | Medium | ✅ **DONE** presentation-only (stage 02) — marks step 3's screenshot gap |
 
 **On step 4:** `oracle-image.scm` hardcodes `%user-name`, `%host-name`,
 `%timezone` and locale. With a shared image these *must* move to first

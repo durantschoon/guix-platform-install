@@ -1,0 +1,18 @@
+The root Makefile gives short, discoverable names to repository workflows that
+are otherwise easy to mistype or only partly run.
+
+`test` preserves the full-suite entry point. `check` spells out the two
+pre-commit gates in their required order; it deliberately does not regenerate
+the manifest because that writes a shared generated file and is only needed
+when a covered source changed.
+
+`oracle-test` runs the capacity and validator/controller suites, the two Oracle
+suites that are genuinely offline and portable. The preferences and image
+evaluation suites import Guix modules unavailable on the macOS development
+host. `oracle-test-all` adds both and fails clearly when `guix` is absent.
+Focused `oracle-test-*` targets make it cheap to rerun only the affected
+boundary while editing.
+
+Cloud lifecycle targets remain explicit. There is no display-name-based or
+generic destroy shortcut: mutation and cleanup continue through the exact-run
+ownership gate in `validation-lifecycle.scm`.

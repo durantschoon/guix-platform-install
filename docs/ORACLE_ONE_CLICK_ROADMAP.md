@@ -233,10 +233,9 @@ nothing. It has no form, input, or textarea anywhere in it, and makes no
 network request at runtime. The "driving the deployment" bullet remains
 **not started and not approved**.
 
-Because steps 2 and 3 are still open, the page states in its own status section
-that the published generic image does not exist and that the metadata SSH key
-service has not been verified on a live instance. Those two sentences come out
-of the page when — and only when — the corresponding steps are actually done.
+The page now records the published generic image and the live metadata-only SSH
+login. Its remaining unfinished deliverable is the console-only walkthrough's
+final documentation and screenshots (step 3), not an image or service gate.
 
 The original scoping question, kept because it is why the answer is what it is:
 
@@ -261,6 +260,8 @@ authenticated UI.
 | 3. Console-only path docs | Small | **UNBLOCKED — the only step left** |
 | 4. Preferences at first boot | Medium | Step 1 verified |
 | 5. Capacity handling | Small | **DONE** — stage 01; reasoned, never seen a real refusal |
-| 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; hedges on steps 2-3 until they land |
+| 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; accurately marks step 3's screenshot gap |
 
-Everything is downstream of one live-instance test.
+The original live-instance gate passed on 2026-08-11. Step 3 is now independent
+documentation work; the separate remote-compute release path is tracked in
+`ORACLE_VALIDATION_STAGES.md`.
