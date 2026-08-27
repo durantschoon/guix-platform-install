@@ -5,6 +5,21 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-08-27: OV-5 permanent guest-loss acceptance passed in run
+  `20260826T235720Z-b317-de56f`. After durable events 1..3, the exact
+  state-recorded OCID was terminated through the guarded lifecycle command.
+  The controller recorded lifecycle `RUNNING` then `TERMINATING`, retained
+  events 1..4 and console evidence, classified guest loss before a result, and
+  wrote a failed result with the instance confirmed `TERMINATED`.
+
+- 2026-08-26: OV-5 loss fixture `20260826T192259Z-ea28-60421` completed
+  naturally (the 600-second guest sleep elapsed during slow SSH/console
+  polling), so it is not permanent-loss evidence. It has a contiguous
+  1..63 journal and was cleaned by the normal controller. A replacement loss
+  fixture is being run with a shorter command; terminate only after its first
+  durable event and use the exact state-recorded OCID through the guarded
+  lifecycle command.
+
 - Time: 2026-08-25 23:25 America/New_York
 - Objective: prove that the generic Guix image accepts an ephemeral SSH key
   supplied only through OCI instance metadata.
@@ -29,9 +44,10 @@ Inventory was read from OCI at the time above.
   - Ownership: pre-existing and unrelated.  Do not stop, modify, or terminate.
 - OV-3 handed-off fixture `20260826T104020Z-34fa-6776a`
   - OCID: `ocid1.instance.oc1.iad.anuwcljth2vmswaccugdhkwcxdtnay2j3ryx4zdru5ih5vus3bw4kqwmzzhq`
-  - State: `RUNNING`; local and OCI artifact state both `HANDED_OFF`
-  - Ownership: protected after live handoff. Automation must not modify or
-    terminate it without a new explicit instruction.
+  - State: `TERMINATED` after explicit user authorization on 2026-08-26;
+    boot-volume preservation was disabled, so it is not recoverable as a VM.
+  - Ownership: the handoff/refusal proof remains in local evidence. Its cloud
+    resource no longer consumes instance quota.
 
 Never select a cleanup target by display name.  Re-read its OCID and lifecycle
 state before terminating it.
@@ -129,6 +145,39 @@ artifact changes.  Never place OCI credentials or private-key paths there.
 
 ## Session log
 
+- 2026-08-26: Forced-reconnect acceptance passed in run
+  `20260826T190730Z-171ae-ef956`. After durable sequence 2, local `timeout`
+  killed one SSH transport with status 124. The detached guest continued;
+  reconnect replay produced exactly sequences 1 through 6 once, including two
+  heartbeats and result 0. Guarded cleanup ran and OCI confirmed the exact
+  instance `TERMINATED`.
+- 2026-08-26: Sol diagnosed the prior duplicate replay as a parenthesis error:
+  the SSH-failure retry block was an unconditional second body form of the
+  success `let`, so old recursive frames replayed stale suffixes. A regression
+  now executes the actual controller loop with incomplete then complete mocked
+  snapshots and requires exactly two reads and sequences 1,2,3.
+- 2026-08-26: Forced-reconnect run `20260826T185702Z-e5b3-2af90` proved the
+  transport interruption itself: `reconnect.log` records local `timeout`
+  killing SSH with status 124 after durable sequence 2, while the detached
+  guest continued through sequence 6/result 0. Acceptance did not pass because
+  the controller repeatedly appended the post-reconnect suffix instead of
+  completing. The exact IN_TEST instance was terminated through the OV-3 gate.
+  Escalated the state-retention diagnosis from Luna/mechanical work to Sol.
+- 2026-08-26: OV-5 durable-journal smoke passed live in run
+  `20260826T123056Z-972c-cbb63`: five contiguous events recorded start,
+  output, a quiet-period heartbeat, output, and result 0. The controller wrote
+  a successful result, guarded cleanup ran, and OCI confirmed the exact
+  instance `TERMINATED`.
+- 2026-08-26: Three preceding OV-5 live attempts failed diagnostically and
+  their exact instances were cleaned through the OV-3 gate. The first showed
+  that a separate result file could diverge from journal replay; the second
+  crossed the Guile module boundary and found `find-map` unbound; the third
+  showed replay/completion needed one atomic state transition. Each defect now
+  has offline regression coverage; the Oracle suite contains 64 checks.
+- 2026-08-26: The user explicitly authorized termination of handed-off OV-3
+  fixture `20260826T104020Z-34fa-6776a` so OV-5 testing could use the free-tier
+  quota. A fresh read confirmed exact OCID, RUNNING state, and HANDED_OFF tags;
+  termination disabled boot-volume preservation and OCI confirmed TERMINATED.
 - 2026-08-26: Wired the OV-3 deny-by-default ownership gate into both
   disposable controllers. The Oracle suite passes 51 checks, including absent
   tags, stale run IDs, OCID mismatch, undeclared scope, both handoff states,

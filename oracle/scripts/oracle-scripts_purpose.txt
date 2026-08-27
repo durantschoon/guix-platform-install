@@ -54,8 +54,9 @@ locally recorded OCID alone never authorizes mutation.  Those facts are useful
 for diagnosis, not proof that the cloud resource is still controller-owned.
 
 validation-lifecycle.scm
-                    provides exact-run status, guarded cleanup, and fail-safe
-                    handoff. Handoff writes the local marker and HANDED_OFF
+                    provides exact-run status/log display, read-only evidence
+                    collection, guarded stop/cleanup, and fail-safe handoff.
+                    Handoff writes the local marker and HANDED_OFF
                     state before changing OCI, then requires a fresh OCI
                     confirmation of exact OCID, run ID, and state. An
                     interruption therefore protects rather than exposes data.
@@ -63,6 +64,29 @@ validation-lifecycle.scm
 Statement of omission: there is no name-based destroy, bulk cleanup, adoption,
 or HANDED_OFF-to-IN_TEST transition. Each would widen deletion authority and
 requires a separate explicit design and user instruction.
+
+Statement of omission: `logs` reads only files beneath the caller-supplied run
+directory, and `collect` targets only the OCID recorded in that run. Neither
+accepts a display name or a free-form instance identifier. `stop` is deliberately
+the same fresh-ownership-gated termination as `cleanup`; an unguarded OCI stop
+would create a second mutation path.
+
+The Stage 1 replay loop records a bounded lifecycle snapshot every 30 seconds
+and refreshes serial-console evidence when the exact instance enters
+TERMINATING or TERMINATED.  A terminal state before a sequenced result is a
+distinct guest-loss failure (status 127), while all locally received journal,
+output, lifecycle, reconnect, and console evidence remains in the run directory.
+
+validation-guest-runner.scm
+                    is the single writer for the remote JSONL journal, so
+                    output, heartbeat, and result events share one monotonic
+                    sequence. It flushes every event before continuing and
+                    writes the numeric result separately for cheap polling.
+
+Statement of omission: heartbeats are not written by a second background
+process. Multiple appenders would race sequence allocation and could produce a
+green-looking journal with duplicates or gaps. The runner instead polls the
+command pipe and emits heartbeats itself while output is quiet.
 
 ========================================================================
 oci-inspect.scm

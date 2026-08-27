@@ -15,7 +15,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
 .PHONY: help test manifest oracle-help oracle-test oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
-.PHONY: oracle-run-status oracle-cleanup oracle-handoff
+.PHONY: oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff
 .PHONY: oracle-build-generic oracle-upload-generic oracle-import-generic oracle-timings
 
 help:
@@ -46,6 +46,9 @@ oracle-help:
 	@echo "  make oracle-stage0        # IMAGE_ID/SUBNET_ID default from .env"
 	@echo "  make oracle-stage1 COMMAND='./run-tests.sh'"
 	@echo "  make oracle-run-status RUN_DIR=.oracle-validation/runs/..."
+	@echo "  make oracle-logs RUN_DIR=.oracle-validation/runs/..."
+	@echo "  make oracle-collect RUN_DIR=.oracle-validation/runs/..."
+	@echo "  make oracle-stop RUN_DIR=.oracle-validation/runs/..."
 	@echo "  make oracle-cleanup RUN_DIR=.oracle-validation/runs/..."
 	@echo "  make oracle-handoff RUN_DIR=.oracle-validation/runs/..."
 	@echo ""
@@ -102,10 +105,11 @@ oracle-stage1:
 	oracle/scripts/run-timed.sh stage1-total \
 	$(GUILE) --no-auto-compile -s oracle/scripts/validate.scm start \
 		--image-id '$(IMAGE_ID)' --subnet-id '$(SUBNET_ID)' \
-		--source '$(SOURCE)' --command '$(COMMAND)' $(KEEP) $(YES)
+		--source '$(SOURCE)' --command '$(COMMAND)' $(KEEP) \
+		$(if $(FORCE_DISCONNECT_AFTER),--force-disconnect-after '$(FORCE_DISCONNECT_AFTER)',) $(YES)
 
-oracle-run-status oracle-cleanup oracle-handoff:
+oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff:
 	@test -n "$(RUN_DIR)" || { echo "RUN_DIR is required" >&2; exit 2; }
 	$(GUILE) --no-auto-compile -s oracle/scripts/validation-lifecycle.scm \
-		$(patsubst oracle-run-status,status,$(patsubst oracle-cleanup,cleanup,$(patsubst oracle-handoff,handoff,$@))) \
+		$(patsubst oracle-run-status,status,$(patsubst oracle-logs,logs,$(patsubst oracle-collect,collect,$(patsubst oracle-stop,stop,$(patsubst oracle-cleanup,cleanup,$(patsubst oracle-handoff,handoff,$@)))))) \
 		--run-dir '$(RUN_DIR)' $(YES)

@@ -146,6 +146,7 @@ testable without invoking OCI."
   (let loop ((rest args)
              (options `((shape . "VM.Standard.E2.1.Micro")
                         (timeout . "3600")
+                        (force-disconnect-after . #f)
                         (keep-on-failure . #f)
                         (yes . #f))))
     (cond
@@ -153,11 +154,16 @@ testable without invoking OCI."
       (let ((missing (filter (lambda (key) (not (validation-option-ref options key)))
                              '(image-id subnet-id source command))))
         (if (null? missing)
-            (let ((timeout (string->number
-                            (validation-option-ref options 'timeout))))
-              (if (and timeout (integer? timeout) (> timeout 0))
+            (let* ((timeout (string->number
+                             (validation-option-ref options 'timeout)))
+                   (forced-text (validation-option-ref
+                                 options 'force-disconnect-after))
+                   (forced (and forced-text (string->number forced-text))))
+              (if (and timeout (integer? timeout) (> timeout 0)
+                       (or (not forced-text)
+                           (and forced (integer? forced) (> forced 0))))
                   (values options #f)
-                  (values #f "--timeout must be a positive integer")))
+                  (values #f "timeouts and forced-disconnect sequence must be positive integers")))
             (values #f (string-append "missing required option --"
                                       (symbol->string (car missing)))))))
      ((member (car rest) '("--keep-on-failure" "--yes"))
@@ -165,7 +171,7 @@ testable without invoking OCI."
             (acons (if (string=? (car rest) "--yes") 'yes 'keep-on-failure)
                    #t options)))
      ((member (car rest) '("--image-id" "--subnet-id" "--source" "--command"
-                           "--shape" "--timeout"))
+                           "--shape" "--timeout" "--force-disconnect-after"))
       (if (null? (cdr rest))
           (values #f (string-append "option requires a value: " (car rest)))
           (loop (cddr rest)
@@ -252,6 +258,25 @@ Return #f for malformed input; callers must treat it as a journal fault."
                 (let ((value (string->number (substring line start end))))
                   (and (integer? value) (> value 0) value)))))))
 
+(define (validation-result-event-status line)
+  "Return the numeric payload of a result event, otherwise #f."
+  (let ((kind "\"kind\":\"result\"")
+        (payload "\"payload\":\""))
+    (and (string-contains line kind)
+         (let ((start-at (string-contains line payload)))
+           (and start-at
+                (let* ((start (+ start-at (string-length payload)))
+                       (end (string-index line #\" start))
+                       (value (and end (string->number (substring line start end)))))
+                  (and (integer? value) (>= value 0) (<= value 255) value)))))))
+
+(define (validation-latest-result-status lines)
+  "Return the newest valid result status without relying on optional SRFIs."
+  (let loop ((rest (reverse lines)))
+    (and (pair? rest)
+         (or (validation-result-event-status (car rest))
+             (loop (cdr rest))))))
+
 (define (validation-replay-events remote-lines last-sequence)
   "Validate and select unseen journal lines after LAST-SEQUENCE.
 Returns (values unseen new-last error).  A duplicate prefix is allowed because
@@ -272,6 +297,17 @@ reconnect fetches may overlap; any gap or malformed event stops replay."
                     (string-append "remote journal gap: expected "
                                    (number->string expected) " but received "
                                    (number->string sequence)))))))))
+
+(define (validation-process-journal remote-lines last-sequence)
+  "Validate one fetched journal snapshot and derive its completion atomically.
+Returns (values unseen new-last result-status error)."
+  (call-with-values
+      (lambda () (validation-replay-events remote-lines last-sequence))
+    (lambda (unseen new-last error)
+      (if error
+          (values #f last-sequence #f error)
+          (values unseen new-last
+                  (validation-latest-result-status remote-lines) #f)))))
 
 (define (validation-append-lines path lines)
   "Append already validated JSONL events and force them to stable local output."

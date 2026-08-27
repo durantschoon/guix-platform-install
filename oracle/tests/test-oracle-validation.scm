@@ -32,8 +32,11 @@
   (string-append repository-root "/oracle/scripts/oci-inspect.scm"))
 (define lifecycle-script
   (string-append repository-root "/oracle/scripts/validation-lifecycle.scm"))
+(define guest-runner-script
+  (string-append repository-root "/oracle/scripts/validation-guest-runner.scm"))
 (define macos-oci-client
   (string-append repository-root "/oracle/scripts/macos/oci-client.scm"))
+(define makefile (string-append repository-root "/Makefile"))
 
 ;;; Both files are helper libraries in script form.  Loading them in the test
 ;;; process is safe by design and avoids copying their implementation here.
@@ -67,8 +70,10 @@
 (define probe-source (read-text probe-script))
 (define inspect-source (read-text inspect-script))
 (define lifecycle-source (read-text lifecycle-script))
+(define guest-runner-source (read-text guest-runner-script))
 (define oci-common-source (read-text oci-common))
 (define macos-oci-source (read-text macos-oci-client))
+(define makefile-source (read-text makefile))
 
 (format #t "Testing Oracle validation helpers (offline)\n")
 (format #t "  Helpers: ~a, ~a\n\n" validation-common oci-common)
@@ -170,6 +175,17 @@
                         "VM.Standard.E2.1.Micro")
               (string=? (validation-option-ref options 'timeout) "3600")
               (not (validation-option-ref options 'keep-on-failure)))))
+(check "start parser accepts a positive forced-disconnect sequence"
+       (let ((options (car (parse-start '("--image-id" "image"
+                                          "--subnet-id" "subnet"
+                                          "--source" "." "--command" "true"
+                                          "--force-disconnect-after" "2")))))
+         (string=? (validation-option-ref options 'force-disconnect-after) "2")))
+(check "start parser rejects an invalid forced-disconnect sequence"
+       (let ((result (parse-start '("--image-id" "image" "--subnet-id" "subnet"
+                                    "--source" "." "--command" "true"
+                                    "--force-disconnect-after" "0"))))
+         (and (not (car result)) (string-contains (cdr result) "positive integers"))))
 
 (for-each
  (lambda (timeout)
@@ -302,6 +318,33 @@
        (and (string-contains lifecycle-source "'instance-ocid")
             (string-contains lifecycle-source "'run-id")
             (string-contains lifecycle-source "\"HANDED_OFF\"")))
+(check "lifecycle surface exposes logs, collect, and stop"
+       (and (string-contains lifecycle-source "status|logs|collect|stop|cleanup|handoff")
+            (string-contains lifecycle-source "(define (show-logs")
+            (string-contains lifecycle-source "(define (collect")
+            (string-contains lifecycle-source "(define (stop")
+            (string-contains lifecycle-source "(string=? command \"logs\")")
+            (string-contains lifecycle-source "(string=? command \"collect\")")
+            (string-contains lifecycle-source "(string=? command \"stop\")")))
+(check "logs is local-only and collect uses the recorded exact OCID"
+       (and (string-contains lifecycle-source "events.jsonl")
+            (string-contains lifecycle-source "remote-output.log")
+            (string-contains lifecycle-source "reconnect.log")
+            (string-contains lifecycle-source "(oci-instance-state instance)")
+            (string-contains lifecycle-source "oci-capture-console-history instance console")
+            (not (string-contains lifecycle-source "oci-instance-public-ip instance"))))
+(check "stop shares cleanup's fresh ownership gate and termination path"
+       (let ((stop-at (string-contains lifecycle-source "(define (stop run-dir yes?)"))
+             (cleanup-at (string-contains lifecycle-source "(define (cleanup run-dir yes?)")))
+         (and stop-at cleanup-at
+              (string-contains lifecycle-source "(cleanup run-dir yes?)")
+              (string-contains lifecycle-source "validation-ownership-authorized?")
+              (string-contains lifecycle-source "oci-terminate-instance/status"))))
+(check "Make exposes all exact-run lifecycle commands"
+       (and (string-contains makefile-source "oracle-run-status oracle-logs oracle-collect oracle-stop")
+            (string-contains makefile-source "oracle-logs RUN_DIR")
+            (string-contains makefile-source "oracle-collect RUN_DIR")
+            (string-contains makefile-source "oracle-stop RUN_DIR")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Resilient telemetry journal and replay
@@ -318,6 +361,19 @@
        (and (not (validation-event-sequence "{}"))
             (not (validation-event-sequence "{\"seq\":0,\"kind\":\"x\"}"))
             (not (validation-event-sequence "{\"seq\":x,\"kind\":\"x\"}"))))
+(check "result event is the authoritative numeric completion signal"
+       (and (= (validation-result-event-status
+                (validation-event-json 9 "result" "fixture-time" "7")) 7)
+            (= (validation-result-event-status
+                (validation-event-json 10 "result" "fixture-time" "0")) 0)
+            (not (validation-result-event-status event-2))
+            (not (validation-result-event-status
+                  (validation-event-json 11 "result" "fixture-time" "999")))))
+(check "latest result lookup needs no optional find-map binding"
+       (and (= (validation-latest-result-status
+                (list event-1 (validation-event-json 4 "result" "fixture" "7"))) 7)
+            (not (validation-latest-result-status (list event-1 event-2)))
+            (not (string-contains validate-source "find-map"))))
 
 (call-with-values
     (lambda () (validation-replay-events (list event-1 event-2 event-3) 0))
@@ -339,6 +395,144 @@
   (lambda (events last error)
     (check "telemetry replay fails loudly on malformed input"
            (and (not events) (= last 0) (string-contains error "malformed")))))
+
+(call-with-values
+    (lambda () (validation-process-journal (list event-1 event-2) 0))
+  (lambda (unseen new-last result error)
+    (check "journal state transition records an incomplete prefix"
+           (and (not error) (not result) (= new-last 2)
+                (equal? unseen (list event-1 event-2))))))
+(call-with-values
+    (lambda ()
+      (validation-process-journal
+       (list event-1 event-2 (validation-event-json 3 "result" "fixture" "0")) 2))
+  (lambda (unseen new-last result error)
+    (check "journal state transition completes across reconnect overlap"
+           (and (not error) (= result 0) (= new-last 3) (= (length unseen) 1)))))
+
+;;; Execute the real controller loop with transport snapshots. This catches
+;;; parenthesis/control-flow defects that pure journal helpers cannot see.
+(define (read-lines path)
+  (call-with-input-file path
+    (lambda (port)
+      (let loop ((lines '()))
+        (let ((line (read-line port)))
+          (if (eof-object? line) (reverse lines)
+              (loop (cons line lines))))))))
+
+(setenv "ORACLE_VALIDATION_TEST_MODE" "1")
+(load validate-script)
+(let* ((controller-dir (string-append "/tmp/oracle-validation-controller-test-"
+                                     (number->string (getpid))))
+       (events-path (string-append controller-dir "/events.jsonl"))
+       (log-path (string-append controller-dir "/remote.log"))
+       (reconnect-path (string-append controller-dir "/reconnect.log"))
+       (result-event (validation-event-json 3 "result" "fixture" "0"))
+       (snapshots (list (string-join (list event-1 event-2) "\n")
+                        (string-join (list event-1 event-2 result-event) "\n")))
+       (reads 0)
+       (original-read remote-read)
+       (original-sleep sleep)
+       (original-evidence poll-run-evidence))
+  (system* "mkdir" "-p" controller-dir)
+  (for-each (lambda (path) (when (file-exists? path) (delete-file path)))
+            (list events-path log-path reconnect-path))
+  (set! remote-read
+        (lambda (base path)
+          (let ((snapshot (list-ref snapshots (min reads 1))))
+            (set! reads (+ reads 1))
+            (values snapshot 0))))
+  (set! sleep (lambda (seconds) #t))
+  (set! poll-run-evidence (lambda (instance run-dir) #f))
+  (let ((status (replay-until-result "fixture-ssh" "/fixture" "30"
+                                     events-path log-path #f reconnect-path
+                                     "ocid1.instance.fixture" controller-dir)))
+    (set! remote-read original-read)
+    (set! sleep original-sleep)
+    (set! poll-run-evidence original-evidence)
+    (let ((lines (read-lines events-path)))
+      (check "actual controller loop stops after overlapped result snapshot"
+             (and (= status 0) (= reads 2) (= (length lines) 3)
+                  (equal? (map validation-event-sequence lines) '(1 2 3)))))))
+(let* ((loss-dir (string-append "/tmp/oracle-validation-loss-test-"
+                                (number->string (getpid))))
+       (loss-reads 0)
+       (original-read remote-read)
+       (original-evidence poll-run-evidence))
+  (system* "mkdir" "-p" loss-dir)
+  (set! remote-read (lambda (base path) (set! loss-reads (+ loss-reads 1))
+                      (values (string-join (list event-1 event-2) "\n") 0)))
+  (set! poll-run-evidence (lambda (instance run-dir) "TERMINATED"))
+  (let ((status (replay-until-result "fixture-ssh" "/fixture" "30"
+                                     (string-append loss-dir "/events.jsonl")
+                                     (string-append loss-dir "/remote.log")
+                                     #f (string-append loss-dir "/reconnect.log")
+                                     "ocid1.instance.fixture" loss-dir)))
+    (set! remote-read original-read)
+    (set! poll-run-evidence original-evidence)
+    (check "permanent guest loss is classified before another remote read"
+           (and (= status 127) (= loss-reads 0)))))
+(let* ((evidence-dir (string-append "/tmp/oracle-validation-evidence-test-"
+                                    (number->string (getpid))))
+       (console-calls 0)
+       (original-state oci-instance-state)
+       (original-console oci-capture-console-history))
+  (system* "mkdir" "-p" evidence-dir)
+  (set! oci-instance-state (lambda (instance) "RUNNING"))
+  (set! oci-capture-console-history
+        (lambda (instance path)
+          (set! console-calls (+ console-calls 1))
+          (call-with-output-file path (lambda (port) (display "mock console\n" port)))
+          #t))
+  (let ((state (poll-run-evidence "ocid1.instance.fixture" evidence-dir)))
+    (set! oci-instance-state original-state)
+    (set! oci-capture-console-history original-console)
+    (check "periodic evidence poll records lifecycle with mocked OCI"
+           (and (string=? state "RUNNING")
+                (= console-calls 1)
+                (file-exists? (string-append evidence-dir "/lifecycle.jsonl")))))
+  (set! oci-instance-state (lambda (instance) "TERMINATED"))
+  (set! oci-capture-console-history
+        (lambda (instance path)
+          (set! console-calls (+ console-calls 1))
+          (call-with-output-file path (lambda (port) (display "mock console\n" port)))
+          #t))
+  (poll-run-evidence "ocid1.instance.fixture" evidence-dir)
+  (set! oci-instance-state original-state)
+  (set! oci-capture-console-history original-console)
+  (check "terminal evidence poll refreshes latest console with mocked OCI"
+         (and (= console-calls 2)
+              (= (length (read-lines
+                          (string-append evidence-dir "/lifecycle.jsonl"))) 2)
+              (file-exists? (string-append evidence-dir "/console-history.log")))))
+(unsetenv "ORACLE_VALIDATION_TEST_MODE")
+
+(let* ((fixture-dir (string-append "/tmp/oracle-validation-guest-test-"
+                                  (number->string (getpid))))
+       (command (string-append fixture-dir "/command.sh"))
+       (journal (string-append fixture-dir "/events.jsonl"))
+       (result (string-append fixture-dir "/result")))
+  (system* "mkdir" "-p" fixture-dir)
+  (call-with-output-file command
+    (lambda (port)
+      (display "printf 'before quiet\\n'\nsleep 2\nprintf 'after quiet\\n'\nexit 7\n" port)))
+  (let ((status
+         (status:exit-val
+          (system
+           (string-append
+            "VALIDATION_GUEST_SHELL=/bin/sh VALIDATION_HEARTBEAT_SECONDS=1 guile"
+            " --no-auto-compile -s " (validation-sh-quote guest-runner-script)
+            " " (validation-sh-quote journal) " " (validation-sh-quote result)
+            " " (validation-sh-quote command) " 30")))))
+    (let ((lines (read-lines journal)))
+      (call-with-values (lambda () (validation-replay-events lines 0))
+        (lambda (events new-last error)
+          (check "guest runner emits contiguous output, heartbeat, and result events"
+                 (and (= status 7) (not error) (= new-last (length lines))
+                      (any (lambda (line) (string-contains line "\"kind\":\"heartbeat\"")) events)
+                      (string-contains (last events) "\"payload\":\"7\"")))))))
+  (check "guest runner persists the same numeric command result"
+         (string=? (call-with-input-file result read-line) "7")))
 (check "termination explicitly deletes the boot volume"
        (let ((command (oci-terminate-command "ocid1.instance.fixture")))
          (and (string-contains command "--preserve-boot-volume false")
@@ -370,6 +564,26 @@
 (check "validate controller uses incremental command-log streaming"
        (and (string-contains validate-source "validation-stream-command/status")
             (string-contains validate-source "remote-output.log")))
+(check "OV-5 controller detaches and replays the durable guest journal"
+       (and (string-contains validate-source "setsid /run/current-system/profile/bin/guile")
+            (string-contains validate-source "replay-until-result")
+            (string-contains validate-source "validation-process-journal")
+            (string-contains validate-source "events.jsonl")))
+(check "OV-5 completion comes from the sequenced result event"
+       (and (string-contains validate-source "validation-process-journal")
+            (not (string-contains validate-source "remote-read base result"))))
+(check "OV-5 evidence gaps return a status so cleanup still runs"
+       (and (string-contains validate-source "(begin (say \"[ERROR] \" error) 125)")
+            (not (string-contains validate-source "(when error (die error))"))))
+(check "OV-5 forced reconnect kills one SSH session after a durable sequence"
+       (and (string-contains validate-source "timeout 1 ")
+            (string-contains validate-source "'sleep 30'")
+            (string-contains validate-source "forced SSH interruption after sequence")
+            (string-contains validate-source "reconnect.log")))
+(check "guest runner enforces timeout and is the only journal writer"
+       (and (string-contains guest-runner-source "timeout \" timeout-text")
+            (string-contains guest-runner-source "(define (event kind payload)")
+            (string-contains guest-runner-source "(force-output journal)")))
 (check "probe controller uses incremental command-log streaming"
        (and (string-contains probe-source "validation-stream-command/status")
             (string-contains probe-source "remote-output.log")))

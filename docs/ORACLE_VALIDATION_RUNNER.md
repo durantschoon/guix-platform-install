@@ -3,11 +3,10 @@
 The ordered implementation and live-acceptance work is tracked in
 [`ORACLE_VALIDATION_STAGES.md`](ORACLE_VALIDATION_STAGES.md).
 
-**Status (2026-08-26): Stage 0 metadata-only SSH and the Stage 1 pass/fail
+**Status (2026-08-27): Stage 0 metadata-only SSH and the Stage 1 pass/fail
 contract passed live acceptance; every disposable instance terminated. OV-5
-resilient telemetry is active offline. Its forced-disconnect live acceptance is
-pending, as is the OV-3 fresh-tag ownership gate required before another live
-cleanup mutation.**
+resilient telemetry, forced reconnect, periodic lifecycle/console capture, and
+permanent guest-loss evidence all passed live acceptance. OV-6 is next.**
 
 ## Timing and prediction
 

@@ -7,7 +7,8 @@
 ;;; The guest receives a source archive, a command file, and only the matching
 ;;; public key through instance metadata.
 
-(define %script-directory (dirname (canonicalize-path (car (command-line)))))
+(define %script-directory
+  (dirname (canonicalize-path (or (current-filename) (car (command-line))))))
 (load (string-append %script-directory "/oci-common.scm"))
 (load (string-append %script-directory "/validation-common.scm"))
 
@@ -89,23 +90,114 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                    (lambda (port) (display output port) (newline port)))
                  (zero? status)))))))
 
-(define (transfer-and-execute key ip run-id archive command-file remote timeout log)
-  "Create the remote staging area, copy files, and run the uploaded command.
-The caller has already restricted RUN-ID and REMOTE, so this construction never
-contains the command text itself."
+(define (remote-read base path)
+  (run-command/status
+   (string-append base " 'test -f " path " && cat " path "' 2>/dev/null")))
+
+(define (record-reconnect path text)
+  (let ((port (open-file path "a")))
+    (display text port) (newline port) (force-output port) (close-port port)))
+
+(define (record-lifecycle run-dir state)
+  "Append one bounded OCI lifecycle observation to the exact run evidence."
+  (let ((port (open-file (string-append run-dir "/lifecycle.jsonl") "a")))
+    (format port "{\"timestamp\":\"~a\",\"state\":\"~a\"}~%"
+            (validation-utc-time 0) state)
+    (force-output port)
+    (close-port port)))
+
+(define (poll-run-evidence instance run-dir)
+  "Read lifecycle and refresh console evidence for one exact instance."
+  (let ((state (oci-instance-state instance)))
+    (record-lifecycle run-dir state)
+    ;; Refresh the latest serial history on every evidence cadence, including
+    ;; RUNNING, so a later guest loss retains the newest useful console view.
+    (oci-capture-console-history
+     instance (string-append run-dir "/console-history.log"))
+    state))
+
+(define (replay-until-result base remote timeout events-path log-path
+                             force-disconnect-after reconnect-path instance run-dir)
+  "Reconnect and replay the durable journal until its result file appears."
+  (let ((journal (string-append remote "/events.jsonl"))
+        (deadline (+ (current-time) (string->number timeout) 180)))
+    (let loop ((last-sequence 0) (failures 0) (forced? #f)
+               (last-evidence (- (current-time) 30)))
+      (if (> (current-time) deadline)
+          124
+          (let* ((now (current-time))
+                 (evidence-state
+                  (and (>= (- now last-evidence) 30)
+                       (poll-run-evidence instance run-dir))))
+            (if (member evidence-state '("TERMINATING" "TERMINATED"))
+                (begin
+                  (say "[ERROR] guest lost before a result event; evidence retained in " run-dir)
+                  127)
+                (call-with-values (lambda () (remote-read base journal))
+            (lambda (output status)
+              (if (zero? status)
+                  (let ((lines (if (string-null? output) '()
+                                   (string-split output #\newline))))
+                    (call-with-values
+                        (lambda () (validation-process-journal lines last-sequence))
+                      (lambda (unseen new-last result-status error)
+                        (if error
+                            (begin (say "[ERROR] " error) 125)
+                            (begin
+                              (validation-append-lines events-path unseen)
+                              (validation-append-lines log-path unseen)
+                              (for-each (lambda (line) (display line) (newline)) unseen)
+                              (if (and force-disconnect-after (not forced?)
+                                       (>= new-last force-disconnect-after)
+                                       (not result-status))
+                                  (let ((forced-status
+                                         (status:exit-val
+                                          (system (string-append
+                                                   "timeout 1 " base
+                                                   " 'sleep 30' >/dev/null 2>&1")))))
+                                    (record-reconnect
+                                     reconnect-path
+                                     (string-append "forced SSH interruption after sequence "
+                                                    (number->string new-last)
+                                                    "; transport status "
+                                                    (number->string forced-status)))
+                                    (if (zero? forced-status) 126
+                                        (loop new-last 0 #t now)))
+                                  (if (and result-status (integer? result-status))
+                                      result-status
+                                      (begin (sleep 5)
+                                             (loop new-last 0 forced?
+                                                   (if evidence-state now last-evidence))))))))))
+                  (begin
+                    (when (= (modulo failures 3) 0)
+                      (say "[WARN] SSH telemetry unavailable; reconnecting"))
+                    (sleep 5)
+                    (loop last-sequence (+ failures 1) forced?
+                          (if evidence-state now last-evidence)))))))))))
+            )
+
+(define (transfer-and-execute key ip run-id archive command-file runner-file
+                              remote timeout log events force-disconnect-after
+                              reconnect-path instance run-dir)
+  "Upload once, detach the guest runner, then reconnect/replay its journal."
   (let* ((base (ssh-base key ip))
          (make-temp (string-append base " 'mkdir -p /tmp/" run-id "' 2>&1"))
          (copy (string-append "scp -i " (validation-sh-quote key)
                               " -o BatchMode=yes -o StrictHostKeyChecking=no"
                               " -o UserKnownHostsFile=/dev/null "
                               (validation-sh-quote archive) " "
-                              (validation-sh-quote command-file) " guix@"
+                              (validation-sh-quote command-file) " "
+                              (validation-sh-quote runner-file) " guix@"
                               (validation-sh-quote ip) ":/tmp/" run-id "/ 2>&1"))
-         (execute
+         (prepare
           (string-append base " 'set -e; mkdir -p " remote "/source; tar -xf /tmp/"
-                         run-id "/source.tar -C " remote "/source; cd " remote
-                         "/source; timeout " (validation-sh-quote timeout)
-                         " sh /tmp/" run-id "/command.sh' 2>&1")))
+                         run-id "/source.tar -C " remote "/source' 2>&1"))
+         (start
+          (string-append base " 'setsid /run/current-system/profile/bin/guile"
+                         " --no-auto-compile -s /tmp/" run-id
+                         "/validation-guest-runner.scm " remote "/events.jsonl "
+                         remote "/result /tmp/" run-id "/command.sh " timeout
+                         " </dev/null >/tmp/" run-id "/runner.log 2>&1 &' 2>&1")))
     ;; RUNNING only means the control plane started the VM.  Wait for the
     ;; metadata-key Shepherd service to install the key before attempting the
     ;; first transfer; otherwise Stage 1 races the same boot-time retry window
@@ -120,7 +212,13 @@ contains the command text itself."
         1
         (if (not (zero? (validation-stream-command/status copy log)))
             1
-            (validation-stream-command/status execute log))))))
+            (if (not (zero? (validation-stream-command/status prepare log)))
+                1
+                (if (not (zero? (validation-stream-command/status start log)))
+                    1
+                    (replay-until-result base remote timeout events log
+                                         force-disconnect-after reconnect-path
+                                         instance run-dir))))))))
 
 (define (run-validation options)
   (let* ((source-input (validation-option-ref options 'source))
@@ -136,9 +234,12 @@ contains the command text itself."
          (manifest (string-append run-dir "/source-manifest.txt"))
          (hash-file (string-append run-dir "/source.sha256"))
          (command-file (string-append run-dir "/command.sh"))
+         (runner-file (string-append %script-directory "/validation-guest-runner.scm"))
          (key-dir (string-append run-dir "/ssh"))
          (key (string-append key-dir "/id_ed25519"))
          (log (string-append run-dir "/remote-output.log"))
+         (events (string-append run-dir "/events.jsonl"))
+         (reconnect-log (string-append run-dir "/reconnect.log"))
          (image (validation-option-ref options 'image-id))
          (subnet (validation-option-ref options 'subnet-id))
          (shape (validation-option-ref options 'shape))
@@ -202,9 +303,14 @@ contains the command text itself."
                               1
                               (begin
                                 (write-run-state state-path run-id "running" options instance ip source-hash)
-                                (transfer-and-execute key ip run-id archive command-file
+                                (transfer-and-execute key ip run-id archive command-file runner-file
                                                       (validation-remote-directory run-id)
-                                                      (validation-option-ref options 'timeout) log))))))
+                                                      (validation-option-ref options 'timeout)
+                                                      log events
+                                                      (let ((value (validation-option-ref
+                                                                    options 'force-disconnect-after)))
+                                                        (and value (string->number value)))
+                                                      reconnect-log instance run-dir))))))
                    (action (validation-cleanup-action
                             exit-status (validation-option-ref options 'keep-on-failure)))
                    (_console (oci-capture-console-history

@@ -18,8 +18,8 @@ Only one `OV-*` stage is active at a time.  Every live action updates
 | OV-2 | Live metadata-only SSH acceptance | complete |
 | OV-3 | Executable `IN_TEST` ownership gate | complete |
 | OV-4 | Live one-shot validation acceptance | complete |
-| OV-5 | Resilient telemetry and recovery | active (offline implementation) |
-| OV-6 | Handoff and operational hardening | pending |
+| OV-5 | Resilient telemetry and recovery | complete |
+| OV-6 | Handoff and operational hardening | active |
 
 ## OV-0 — Controller foundation and measured failure
 
@@ -155,10 +155,10 @@ ownership gate.
 
 ## OV-5 — Resilient telemetry and recovery
 
-Status: active for offline implementation. The JSONL event/replay layer now
-rejects malformed records and sequence gaps while allowing an overlapping
-prefix after reconnect. Live forced-disconnect acceptance must wait until the
-OV-3 ownership check protects cleanup with a fresh OCI tag read.
+Status: complete. The JSONL event/replay layer rejects malformed records and
+sequence gaps while allowing an overlapping prefix after reconnect. Live
+forced-disconnect and permanent guest-loss acceptance both passed with fresh
+OCI ownership-gated cleanup.
 
 Work:
 
@@ -168,9 +168,10 @@ Work:
 - `status`, `logs`, `collect`, and `stop` commands with Make entry points.
 - Explicit timeouts for every network wait.
 
-Exit gate: force an SSH interruption during a live validation, reconnect, and
-prove contiguous event sequence numbers.  Force permanent guest loss and prove
-local evidence remains actionable.
+Exit gate passed 2026-08-27: forced SSH interruption run
+`20260826T190730Z-171ae-ef956` replayed contiguous events 1..6; permanent
+guest-loss run `20260826T235720Z-b317-de56f` retained events and console/lifecycle
+evidence and classified the terminated guest before a result.
 
 ## OV-6 — Handoff and operational hardening
 

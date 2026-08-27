@@ -63,8 +63,9 @@ This checklist tracks remaining work for the guix-platform-install project.
   cleanup and live handoff/refusal acceptance passed)
 - ✅ OV-4 Stage 1 live passing and failing validation runs (both instances
   terminated; declared nonzero status preserved)
-- 🔄 OV-5 resilient telemetry, reconnect/replay, and console capture (offline
-  JSONL sequence/replay foundation implemented; live disconnect gate pending)
+- ✅ OV-5 resilient telemetry, reconnect/replay, console capture, and
+  permanent-loss evidence (2026-08-27; forced reconnect and guest-loss live
+  gates passed; exact disposable instances terminated)
 - ⏸ OV-6 handoff and operational hardening
 
 **Primary Focus: Cloudzy Installation Testing**
