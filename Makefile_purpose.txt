@@ -13,6 +13,12 @@ host. `oracle-test-all` adds both and fails clearly when `guix` is absent.
 Focused `oracle-test-*` targets make it cheap to rerun only the affected
 boundary while editing.
 
+`ORACLE_SOURCE` and `ORACLE_COMMAND` are optional `.env` defaults for repeated
+one-shot runs. They are deliberately non-secret and remain visible in
+`oracle-help`; command-line `SOURCE=` and `COMMAND=` assignments override them.
+The command is not validated as harmless because it is user-declared guest
+work, so operators must review it before setting `YES=--yes`.
+
 Cloud lifecycle targets remain explicit. There is no display-name-based or
 generic destroy shortcut: mutation and cleanup continue through the exact-run
 ownership gate in `validation-lifecycle.scm`.

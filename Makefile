@@ -128,8 +128,10 @@ oracle-stage0:
 		$(GUILE) --no-auto-compile -s oracle/scripts/05-verify-metadata-ssh.scm \
 		--image-id '$(IMAGE_ID)' --subnet-id '$(SUBNET_ID)' $(YES)
 
-SOURCE ?= .
-COMMAND ?= ./run-tests.sh
+# Reusable non-secret defaults come from .env; command-line assignments still
+# override them for a one-off run.
+SOURCE ?= $(if $(ORACLE_SOURCE),$(ORACLE_SOURCE),.)
+COMMAND ?= $(if $(ORACLE_COMMAND),$(ORACLE_COMMAND),./run-tests.sh)
 
 oracle-stage1:
 	@test -n "$(IMAGE_ID)" || { echo "IMAGE_ID is required" >&2; exit 2; }

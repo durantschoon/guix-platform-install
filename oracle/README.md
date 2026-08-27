@@ -68,6 +68,11 @@ make oracle-run IMAGE_ID=ocid1.image... SUBNET_ID=ocid1.subnet... \
   SOURCE="$PWD" COMMAND='sha256sum known-good/provenance' YES=--yes
 ```
 
+For repeated one-shot runs, set the non-secret `ORACLE_SOURCE` and
+`ORACLE_COMMAND` defaults in the gitignored `.env` (see `.env.example`).
+`SOURCE=` and `COMMAND=` on the command line always override them. Review the
+guest command before using `YES=--yes`.
+
 This is still a disposable cloud mutation and writes evidence beneath the
 run directory. `make oracle-resume-check RUN_DIR=...` performs the offline
 restart rehearsal against one exact checkpoint; it never adopts a resource.
