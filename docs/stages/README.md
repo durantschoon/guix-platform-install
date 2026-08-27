@@ -120,8 +120,8 @@ stop and report **Blocked** rather than decide.
 | 03 | Oracle first-boot preferences (hostname, timezone, shell) | merged (`f9dff27`) |
 | 04 | Preserve comments and gexp syntax in config edits | merged (`3a364db`) |
 | 05 | Freeze the bounded one-shot remote-compute contract | merged (`876c35b`) |
-| 06 | Review and reap expired `IN_TEST` resources safely | planned |
-| 07 | Package, document, and cut the one-shot release candidate | planned |
+| 06 | Review and reap expired `IN_TEST` resources safely | merged (`f866007`) |
+| 07 | Package, document, and cut the one-shot release candidate | active |
 | 08 | Retained-instance multi-execution identity and synchronization | deferred, post-release |
 | 09 | MCP tool facade over the retained-instance controller | deferred, post-release |
 

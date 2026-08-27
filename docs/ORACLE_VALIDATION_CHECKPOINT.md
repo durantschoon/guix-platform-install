@@ -11,6 +11,12 @@ should be able to resume from this file without relying on chat history.
   This is offline implementation work; no live-cloud action is authorized by
   the stage. Stage 07 remains the packaging and release-candidate stage.
 
+- 2026-08-27: Stage 06 was independently reviewed, merged, and its source
+  manifest regenerated (`f866007`). The next implementation unit is Stage 07:
+  package the bounded one-shot controller, rehearse restart from checkpoint,
+  and prepare the live release-acceptance checklist. No live action is implied
+  by the implementation stage.
+
 - 2026-08-27: OV-6 was narrowed to a releasable one-shot remote-compute
   milestone. Repository stages 05-07 deliver the versioned bounded contract,
   expired-resource lifecycle, and release candidate. Retained-instance task
@@ -128,9 +134,10 @@ OV-4 and OV-5 are complete. OV-5's durable JSONL journal, reconnect/replay,
 periodic lifecycle/console evidence, and permanent-loss live gate all passed;
 the latest loss run is `20260826T235720Z-b317-de56f`. OV-6 is active. Stage 05
 froze the bounded one-shot request/status/result contract and execution limits.
-The next implementation unit is repository Stage 06: review and safely reap
-expired `IN_TEST` records through the existing exact-instance ownership gate.
-Stage 07 then completes the one-shot release path. Retained-instance task
+Stage 06 reviewed and safely reaps expired `IN_TEST` records through the
+existing exact-instance ownership gate. The next implementation unit is
+repository Stage 07: package the bounded one-shot controller, rehearse restart
+from checkpoint, and prepare the live release-acceptance checklist. Retained-instance task
 joining and an MCP facade are explicitly deferred to post-release stages 08-09.
 
 OV-3 is complete. It records the declared ownership/scope fields and gates

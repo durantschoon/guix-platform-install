@@ -190,7 +190,7 @@ The repository-wide stage sequence in `docs/stages/` implements OV-6:
 2. **Stage 06 — expired-resource lifecycle.** Add read-only stale-run review,
    then an explicit reaper that can act only through the OV-3 fresh ownership
    gate. Expiry selects candidates; it never grants deletion authority.
-3. **Stage 07 — release candidate.** Package the non-interactive entry point,
+3. **Stage 07 — release candidate (active).** Package the non-interactive entry point,
    document human and coding-agent use, complete restart-from-checkpoint
    rehearsal, and prepare the live acceptance checklist.
 
