@@ -107,13 +107,11 @@ authorize unattended mutation or destruction.
 
 ## Exact next action
 
-OV-4 is complete for the one-shot pass/fail contract. OV-5 offline
-implementation is active: the JSONL event/replay layer validates monotonic
-sequences, permits reconnect overlap, and fails on gaps or malformed records.
-Next, connect that layer to a durable guest journal and bounded reconnect loop.
-OV-3 now performs the required fresh OCI-tag ownership comparison before
-cleanup, so the OV-5 forced-disconnect live gate may proceed after its offline
-implementation passes.
+OV-4 and OV-5 are complete. OV-5's durable JSONL journal, reconnect/replay,
+periodic lifecycle/console evidence, and permanent-loss live gate all passed;
+the latest loss run is `20260826T235720Z-b317-de56f`. OV-6 is active. The next
+work is policy/reaper hardening and the remaining handoff/restart acceptance;
+do not treat the existing OV-3 handoff proof as completion of all OV-6 work.
 
 OV-3 is complete. It records the declared ownership/scope fields and gates
 both Stage 0 and Stage 1 termination on a fresh exact-instance OCI read. The
