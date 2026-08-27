@@ -96,7 +96,7 @@ oracle/scripts/validate.scm start \
   --command './run-tests.sh'
 ```
 
-Optional policy flags may include `--shape`, `--timeout`, and
+Optional policy flags include `--shape`, `--timeout`, `--max-output-bytes`, and
 `--keep-on-failure`.  Keeping a failed instance is opt-in because an abandoned
 cloud resource is a worse default than losing an interactive debugging shell.
 
@@ -115,6 +115,38 @@ Each run receives a collision-resistant ID and a local directory:
 
 `state.scm` is the native, atomically replaced recovery record. `result.json`
 is the stable machine-readable handoff to an LLM or other caller.
+
+## Versioned one-shot schemas
+
+All three machine interfaces use `schema_version: 1`. `request.json` records
+the explicit `run_id`, `execution_id`, source SHA-256, declared command, and
+parsed timeout/output/shape policy. Example:
+
+```json
+{"schema_version":1,"run_id":"20260827T120000Z-a-b","execution_id":"20260827T120000Z-a-b","source_sha256":"abc123","command":"./run-tests.sh","policy":{"timeout_seconds":3600,"max_output_bytes":1048576,"shape":"VM.Standard.E2.1.Micro"}}
+```
+
+Status adds the same explicit execution and source identities to the existing
+exact-instance lifecycle view:
+
+```json
+{"schema_version":1,"run_id":"20260827T120000Z-a-b","execution_id":"20260827T120000Z-a-b","source_sha256":"abc123","instance_ocid":"ocid1.instance...","local_phase":"running","artifact_state":"IN_TEST","remote_lifecycle":"RUNNING","remote_artifact_state":"IN_TEST","ownership_match":true}
+```
+
+A terminal result records those four identities without deriving one from
+another, plus command, exit status or failure class, timestamps, duration,
+cleanup disposition, output completeness, and evidence paths:
+
+```json
+{"schema_version":1,"run_id":"20260827T120000Z-a-b","execution_id":"20260827T120000Z-a-b","instance_ocid":"ocid1.instance...","source_sha256":"abc123","command":"./run-tests.sh","exit_status":0,"failure_class":null,"started_at":"2026-08-27T12:00:00Z","ended_at":"2026-08-27T12:00:42Z","duration_seconds":42,"cleanup_disposition":"terminated","output_truncated":false,"output_byte_limit":1048576,"full_output_path":null,"evidence_paths":["events.jsonl","console-history.log"]}
+```
+
+The boundary accepts only `VM.Standard.E2.1.Micro`, timeouts from 1 through
+86400 seconds, and retained-output limits from 1 through 16777216 bytes. The
+defaults are 3600 seconds and 1048576 bytes. Invalid policy is rejected before
+authentication, key generation, or launch. Output beyond the limit produces a
+durable `output-truncated` event naming the byte limit and
+`full_output_path=none`; callers must never treat that stream as complete.
 
 For lifecycle polling, use:
 
@@ -158,6 +190,13 @@ Guix instance. It does not promise a resident task service. The controller is
 nevertheless shaped for that later service: an OCI instance, an execution, and
 a source snapshot are separate identities, and a result belongs to one exact
 execution and source hash.
+
+This compatibility boundary deliberately adds no retained-instance default,
+synchronization, task joining, daemon, or MCP tool. It adds no cloud mutation:
+launch and guarded termination remain the only one-shot mutations. A future
+retained controller may assign an `execution_id` different from `run_id`
+without changing the fact that neither identity is an alias for the instance
+OCID or source SHA-256.
 
 ### Stage 2 -- resilient telemetry
 

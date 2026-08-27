@@ -365,3 +365,28 @@ retained with the recorded instance OCID so the operator can collect evidence
 or terminate manually.  A failed validation is terminated by default.
 --keep-on-failure is opt-in because an unenforced promise to clean up later is
 not a lifecycle policy.
+
+BOUNDED ONE-SHOT CONTRACT (Stage 05)
+
+The request, status, and result surfaces have independent schema-version
+constants.  run-id, execution-id, instance OCID, and source SHA-256 are stored
+and emitted as separate facts even though the one-shot implementation currently
+chooses execution-id = run-id.  This prevents a later retained-instance runner
+from having to reinterpret historical identity fields.
+
+Execution policy is parsed once before any OCI authentication or launch:
+VM.Standard.E2.1.Micro is the sole declared shape, timeout is bounded at 86400
+seconds, and retained event output is bounded at 16777216 bytes.  The accepted
+Stage 1 invocation keeps its original shape and 3600-second timeout and gains a
+1 MiB output default.
+
+The guest keeps writing valid one-object-per-line JSONL after the output limit.
+It emits exactly one output-truncated fact with the byte limit and an explicit
+full_output_path=none.  It is tempting to keep an unbounded second copy on the
+guest, but permanent guest loss would make that location misleading evidence;
+no full-output location is claimed when none is durably retained.
+
+Statement of omission: this stage adds no lifecycle state, automatic instance
+retention, synchronization, task joining, daemon, MCP server, implicit command
+allowlist, credential forwarding, or cloud mutation path.  Those change the
+controller architecture and remain deferred.

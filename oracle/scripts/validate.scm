@@ -15,14 +15,16 @@
 (define (validate-usage)
   (die "usage: validate.scm start --image-id OCID --subnet-id OCID --source PATH "
        "--command COMMAND [--shape SHAPE] [--timeout SECONDS] "
+       "[--max-output-bytes BYTES] "
        "[--keep-on-failure] [--yes]"))
 
 (define (validation-run-root source)
   (string-append source "/.oracle-validation/runs"))
 
-(define (write-run-state path run-id phase options instance ip source-hash)
+(define (write-run-state path run-id execution-id phase options instance ip source-hash)
   (validation-write-state
    path `((schema . 1) (kind . oracle-validation) (run-id . ,run-id)
+          (execution-id . ,execution-id)
           (managed-by . "guix-platform-install")
           (artifact-state . "IN_TEST") (resource-type . "instance")
           (operation-scope . (inspect collect-console terminate handoff))
@@ -177,7 +179,7 @@ find prunes runner state and excludes sockets/devices before tar sees them."
             )
 
 (define (transfer-and-execute key ip run-id archive command-file runner-file
-                              remote timeout log events force-disconnect-after
+                              remote timeout max-output-bytes log events force-disconnect-after
                               reconnect-path instance run-dir)
   "Upload once, detach the guest runner, then reconnect/replay its journal."
   (let* ((base (ssh-base key ip))
@@ -196,7 +198,8 @@ find prunes runner state and excludes sockets/devices before tar sees them."
           (string-append base " 'setsid /run/current-system/profile/bin/guile"
                          " --no-auto-compile -s /tmp/" run-id
                          "/validation-guest-runner.scm " remote "/events.jsonl "
-                         remote "/result /tmp/" run-id "/command.sh " timeout
+                         remote "/result /tmp/" run-id "/command.sh "
+                         (number->string timeout) " " (number->string max-output-bytes)
                          " </dev/null >/tmp/" run-id "/runner.log 2>&1 &' 2>&1")))
     ;; RUNNING only means the control plane started the VM.  Wait for the
     ;; metadata-key Shepherd service to install the key before attempting the
@@ -216,7 +219,7 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                 1
                 (if (not (zero? (validation-stream-command/status start log)))
                     1
-                    (replay-until-result base remote timeout events log
+                    (replay-until-result base remote (number->string timeout) events log
                                          force-disconnect-after reconnect-path
                                          instance run-dir))))))))
 
@@ -228,6 +231,7 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                       (acons 'source source options)
                       options))
          (run-id (validation-run-id))
+         (execution-id run-id)
          (run-dir (string-append (validation-run-root source) "/" run-id))
          (state-path (string-append run-dir "/state.scm"))
          (archive (string-append run-dir "/source.tar"))
@@ -244,15 +248,20 @@ find prunes runner state and excludes sockets/devices before tar sees them."
          (subnet (validation-option-ref options 'subnet-id))
          (shape (validation-option-ref options 'shape))
          (display-name (string-append "guix-validation-" run-id))
-         (instance #f) (ip #f) (source-hash #f))
+         (instance #f) (ip #f) (source-hash #f)
+         (started-at (validation-utc-time 0))
+         (started-seconds (current-time)))
     (unless (and source (validation-mkdir-p key-dir))
       (die "cannot read source or create run directory: " source-input))
-    (write-run-state state-path run-id "prepared" options #f #f #f)
+    (write-run-state state-path run-id execution-id "prepared" options #f #f #f)
     (write-command-file command-file (validation-option-ref options 'command))
     (unless (snapshot-source source archive manifest hash-file)
       (die "could not create complete source snapshot"))
     (set! source-hash (first-field hash-file))
-    (write-run-state state-path run-id "snapshotted" options #f #f source-hash)
+    (write-run-state state-path run-id execution-id "snapshotted" options #f #f source-hash)
+    (call-with-output-file (string-append run-dir "/request.json")
+      (lambda (port)
+        (display (validation-request-json options run-id execution-id source-hash) port)))
     (unless (oci-authenticated?)
       (die "OCI CLI is not authenticated; run 01-setup-client.scm first"))
     (unless (validation-option-ref options 'yes)
@@ -274,9 +283,8 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                                           (validation-utc-time 0)
                                           (validation-utc-time
                                            (+ 3600
-                                              (string->number
-                                               (validation-option-ref options 'timeout))))))))
-      (write-run-state state-path run-id "launching" options #f #f source-hash)
+                                              (validation-option-ref options 'timeout)))))))
+      (write-run-state state-path run-id execution-id "launching" options #f #f source-hash)
       (call-with-values (lambda () (oci/status (string-append launch " 2>&1")))
         (lambda (output status)
           (call-with-output-file (string-append run-dir "/oci-output.log")
@@ -284,12 +292,20 @@ find prunes runner state and excludes sockets/devices before tar sees them."
           (set! instance (and (zero? status) (oci-first-ocid-line output)))))
       (if (not instance)
           (begin
-            (write-run-state state-path run-id "launch-failed" options #f #f source-hash)
-            (validation-write-result-json (string-append run-dir "/result.json") run-id 1
-                                          "launch-failed" "OCI did not return an instance OCID")
+            (write-run-state state-path run-id execution-id "launch-failed" options #f #f source-hash)
+            (validation-write-result-json
+             (string-append run-dir "/result.json")
+             `((run-id . ,run-id) (execution-id . ,execution-id)
+               (source-sha256 . ,source-hash) (command . ,(validation-option-ref options 'command))
+               (failure-class . "launch-failure") (started-at . ,started-at)
+               (ended-at . ,(validation-utc-time 0))
+               (duration-seconds . ,(- (current-time) started-seconds))
+               (cleanup-disposition . "not-launched")
+               (output-byte-limit . ,(validation-option-ref options 'max-output-bytes))
+               (evidence-paths . ("request.json" "state.scm" "oci-output.log"))))
             (die "launch failed; evidence is in " run-dir))
           (begin
-            (write-run-state state-path run-id "launched" options instance #f source-hash)
+            (write-run-state state-path run-id execution-id "launched" options instance #f source-hash)
             (let* ((running? (poll-until "instance to reach RUNNING"
                                          (lambda () (string=? (oci-instance-state instance) "RUNNING"))
                                          20 900))
@@ -298,14 +314,15 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                         1
                         (begin
                           (set! ip (oci-instance-public-ip instance))
-                          (write-run-state state-path run-id "ssh" options instance ip source-hash)
+                          (write-run-state state-path run-id execution-id "ssh" options instance ip source-hash)
                           (if (not ip)
                               1
                               (begin
-                                (write-run-state state-path run-id "running" options instance ip source-hash)
+                                (write-run-state state-path run-id execution-id "running" options instance ip source-hash)
                                 (transfer-and-execute key ip run-id archive command-file runner-file
                                                       (validation-remote-directory run-id)
                                                       (validation-option-ref options 'timeout)
+                                                      (validation-option-ref options 'max-output-bytes)
                                                       log events
                                                       (let ((value (validation-option-ref
                                                                     options 'force-disconnect-after)))
@@ -320,15 +337,29 @@ find prunes runner state and excludes sockets/devices before tar sees them."
                    (final (if (and (zero? exit-status) clean?) 0 1)))
               (when (and clean? (eq? action 'terminate) (file-exists? key))
                 (delete-file key))
-              (write-run-state state-path run-id (if (zero? final) "complete" "failed")
+              (write-run-state state-path run-id execution-id (if (zero? final) "complete" "failed")
                                options instance ip source-hash)
               (validation-write-result-json
-               (string-append run-dir "/result.json") run-id final
-               (if (zero? exit-status) "complete" "failed")
-               (if (eq? action 'keep)
-                   (string-append "failure retained instance; terminate with: "
-                                  (oci-terminate-command instance))
-                   (if clean? "instance terminated" "instance cleanup failed; inspect termination.log")))
+               (string-append run-dir "/result.json")
+               `((run-id . ,run-id) (execution-id . ,execution-id)
+                 (instance-ocid . ,instance) (source-sha256 . ,source-hash)
+                 (command . ,(validation-option-ref options 'command))
+                 (exit-status . ,exit-status)
+                 (failure-class . ,(cond ((not clean?) "cleanup-failure")
+                                         ((= exit-status 127) "guest-loss")
+                                         ((not (zero? exit-status)) "command-failure")
+                                         (else #f)))
+                 (started-at . ,started-at) (ended-at . ,(validation-utc-time 0))
+                 (duration-seconds . ,(- (current-time) started-seconds))
+                 (cleanup-disposition . ,(if (eq? action 'keep) "retained-by-policy"
+                                             (if clean? "terminated" "termination-failed")))
+                 (output-truncated . ,(and (file-exists? events)
+                                           (string-contains (call-with-input-file events get-string-all)
+                                                            "output-truncated")))
+                 (output-byte-limit . ,(validation-option-ref options 'max-output-bytes))
+                 (evidence-paths . ("request.json" "state.scm" "events.jsonl"
+                                    "remote-output.log" "lifecycle.jsonl"
+                                    "console-history.log" "termination.log"))))
               (if (zero? final)
                   (say "[OK] validation completed; result: " run-dir "/result.json")
                   (begin

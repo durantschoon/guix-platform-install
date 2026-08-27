@@ -67,6 +67,7 @@
   (call-with-input-file path get-string-all))
 
 (define validate-source (read-text validate-script))
+(define validation-common-source (read-text validation-common))
 (define probe-source (read-text probe-script))
 (define inspect-source (read-text inspect-script))
 (define lifecycle-source (read-text lifecycle-script))
@@ -163,7 +164,7 @@
 (check "start parser accepts all required options and flags"
        (and (car valid-start)
             (not (cdr valid-start))
-            (string=? (validation-option-ref (car valid-start) 'timeout) "60")
+            (= (validation-option-ref (car valid-start) 'timeout) 60)
             (validation-option-ref (car valid-start) 'keep-on-failure)
             (validation-option-ref (car valid-start) 'yes)))
 
@@ -173,7 +174,8 @@
                                           "--source" "." "--command" "true")))))
          (and (string=? (validation-option-ref options 'shape)
                         "VM.Standard.E2.1.Micro")
-              (string=? (validation-option-ref options 'timeout) "3600")
+              (= (validation-option-ref options 'timeout) 3600)
+              (= (validation-option-ref options 'max-output-bytes) 1048576)
               (not (validation-option-ref options 'keep-on-failure)))))
 (check "start parser accepts a positive forced-disconnect sequence"
        (let ((options (car (parse-start '("--image-id" "image"
@@ -185,7 +187,7 @@
        (let ((result (parse-start '("--image-id" "image" "--subnet-id" "subnet"
                                     "--source" "." "--command" "true"
                                     "--force-disconnect-after" "0"))))
-         (and (not (car result)) (string-contains (cdr result) "positive integers"))))
+         (and (not (car result)) (string-contains (cdr result) "unsupported execution policy"))))
 
 (for-each
  (lambda (timeout)
@@ -195,9 +197,24 @@
                                     "--timeout" timeout))))
      (check (string-append "start parser rejects invalid timeout " timeout)
             (and (not (car result))
-                 (string-contains (cdr result) "positive integer"))
+                 (string-contains (cdr result) "invalid or excessive"))
             (format #f "~s" result))))
  '("0" "-1" "abc" "1.5"))
+
+(for-each
+ (lambda (limit)
+   (let ((result (parse-start (list "--image-id" "image" "--subnet-id" "subnet"
+                                    "--source" "." "--command" "true"
+                                    "--max-output-bytes" limit))))
+     (check (string-append "start parser rejects invalid output bound " limit)
+            (and (not (car result)) (string-contains (cdr result) "invalid or excessive")))))
+ '("0" "-1" "abc" "16777217"))
+
+(check "shape policy rejects undeclared shape before controller launch"
+       (let ((result (parse-start '("--image-id" "image" "--subnet-id" "subnet"
+                                    "--source" "." "--command" "true"
+                                    "--shape" "VM.Standard.A1.Flex"))))
+         (and (not (car result)) (string-contains (cdr result) "unsupported execution policy"))))
 
 (let ((result (parse-start '("--image-id" "image" "--subnet-id" "subnet"
                             "--source" "."))))
@@ -361,6 +378,42 @@
               (string-contains json "\"local_phase\":\"running\"")
               (string-contains json "\"remote_lifecycle\":\"RUNNING\"")
               (string-contains json "\"ownership_match\":true"))))
+
+(let* ((options (car valid-start))
+       (request (validation-request-json options "run-fixture" "exec-fixture" "sha-fixture"))
+       (result (validation-result-json
+                '((run-id . "run-fixture") (execution-id . "exec-fixture")
+                  (instance-ocid . "ocid1.instance.fixture") (source-sha256 . "sha-fixture")
+                  (command . "make check") (exit-status . 0)
+                  (started-at . "start") (ended-at . "end") (duration-seconds . 2)
+                  (cleanup-disposition . "terminated") (output-byte-limit . 60)
+                  (evidence-paths . ("events.jsonl"))))))
+  (check "request and result schemas preserve distinct identities"
+         (and (string-contains request "\"schema_version\":1")
+              (string-contains request "\"execution_id\":\"exec-fixture\"")
+              (string-contains result "\"schema_version\":1")
+              (string-contains result "\"run_id\":\"run-fixture\"")
+              (string-contains result "\"instance_ocid\":\"ocid1.instance.fixture\"")
+              (string-contains result "\"source_sha256\":\"sha-fixture\"")))
+  (check "result contract does not leak credential or private-key fixtures"
+         (and (not (string-contains result "/Users/fixture/.oci/config"))
+              (not (string-contains result "/tmp/id_ed25519"))
+              (not (string-contains result "PRIVATE KEY")))))
+
+(for-each
+ (lambda (fixture)
+   (let ((json (validation-result-json fixture)))
+     (check (string-append "terminal result distinguishes "
+                           (or (validation-option-ref fixture 'failure-class) "passing"))
+            (string-contains json
+                             (if (validation-option-ref fixture 'failure-class)
+                                 (validation-option-ref fixture 'failure-class)
+                                 "\"failure_class\":null")))))
+ (list '((exit-status . 0))
+       '((exit-status . 7) (failure-class . "command-failure"))
+       '((failure-class . "launch-failure"))
+       '((exit-status . 127) (failure-class . "guest-loss"))
+       '((exit-status . 0) (failure-class . "cleanup-failure"))))
 
 (let* ((checkpoint-dir (string-append "/tmp/oracle-validation-checkpoint-"
                                       (number->string (getpid))))
@@ -559,7 +612,7 @@
             "VALIDATION_GUEST_SHELL=/bin/sh VALIDATION_HEARTBEAT_SECONDS=1 guile"
             " --no-auto-compile -s " (validation-sh-quote guest-runner-script)
             " " (validation-sh-quote journal) " " (validation-sh-quote result)
-            " " (validation-sh-quote command) " 30")))))
+            " " (validation-sh-quote command) " 30 1048576")))))
     (let ((lines (read-lines journal)))
       (call-with-values (lambda () (validation-replay-events lines 0))
         (lambda (events new-last error)
@@ -568,7 +621,28 @@
                       (any (lambda (line) (string-contains line "\"kind\":\"heartbeat\"")) events)
                       (string-contains (last events) "\"payload\":\"7\"")))))))
   (check "guest runner persists the same numeric command result"
-         (string=? (call-with-input-file result read-line) "7")))
+         (string=? (call-with-input-file result read-line) "7"))
+  (for-each
+   (lambda (case)
+     (let* ((limit (car case)) (payload (cdr case))
+            (case-journal (string-append fixture-dir "/events-" (number->string limit) ".jsonl"))
+            (case-result (string-append fixture-dir "/result-" (number->string limit))))
+       (call-with-output-file command
+         (lambda (port) (format port "printf '~a'\n" payload)))
+       (system (string-append
+                "VALIDATION_GUEST_SHELL=/bin/sh guile --no-auto-compile -s "
+                (validation-sh-quote guest-runner-script) " "
+                (validation-sh-quote case-journal) " " (validation-sh-quote case-result)
+                " " (validation-sh-quote command) " 30 " (number->string limit)))
+       (let ((text (read-text case-journal)))
+         (check (if (= (string-length payload) limit)
+                    "output at byte limit remains complete"
+                    "output beyond byte limit records explicit truncation")
+                (if (= (string-length payload) limit)
+                    (not (string-contains text "output-truncated"))
+                    (and (string-contains text "\"kind\":\"output-truncated\"")
+                         (string-contains text "byte_limit=5;full_output_path=none")))))))
+   '((5 . "abcde") (5 . "abcdef"))))
 (check "termination explicitly deletes the boot volume"
        (let ((command (oci-terminate-command "ocid1.instance.fixture")))
          (and (string-contains command "--preserve-boot-volume false")
@@ -620,6 +694,14 @@
        (and (string-contains guest-runner-source "timeout \" timeout-text")
             (string-contains guest-runner-source "(define (event kind payload)")
             (string-contains guest-runner-source "(force-output journal)")))
+(check "Stage 05 adds no daemon, MCP, retained default, or cloud mutation path"
+       (and (not (string-contains validate-source "mcp"))
+            (not (string-contains validate-source "daemon"))
+            (not (string-contains validate-source "sync"))
+            (not (string-contains validate-source "instance stop"))
+            (not (string-contains validation-common-source "instance stop"))
+            (string-contains validation-common-source "compute instance launch")
+            (string-contains validate-source "oci-terminate-instance/status")))
 (check "probe controller uses incremental command-log streaming"
        (and (string-contains probe-source "validation-stream-command/status")
             (string-contains probe-source "remote-output.log")))

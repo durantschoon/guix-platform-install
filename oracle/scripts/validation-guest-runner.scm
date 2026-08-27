@@ -31,13 +31,15 @@
   (string-append "'" (string-join (string-split text #\') "'\\''") "'"))
 
 (define (main args)
-  (unless (= (length args) 4)
-    (die "usage: validation-guest-runner.scm JOURNAL RESULT COMMAND-FILE TIMEOUT"))
+  (unless (= (length args) 5)
+    (die "usage: validation-guest-runner.scm JOURNAL RESULT COMMAND-FILE TIMEOUT MAX-OUTPUT-BYTES"))
   (let* ((journal-path (list-ref args 0))
          (result-path (list-ref args 1))
          (command-path (list-ref args 2))
          (timeout-text (list-ref args 3))
          (timeout (string->number timeout-text))
+         (output-limit-text (list-ref args 4))
+         (output-limit (string->number output-limit-text))
          (child-result-path (string-append result-path ".child"))
          (shell (or (getenv "VALIDATION_GUEST_SHELL")
                     "/run/current-system/profile/bin/sh"))
@@ -47,6 +49,8 @@
             (if (and value (integer? value) (> value 0)) value 10)))
          (journal (open-file journal-path "a"))
          (sequence 0)
+         (retained-bytes 0)
+         (truncation-recorded? #f)
          (last-heartbeat (current-time)))
     (define (event kind payload)
       (set! sequence (+ sequence 1))
@@ -58,8 +62,23 @@
       (when (>= (- (current-time) last-heartbeat) heartbeat-seconds)
         (event "heartbeat" "command running")
         (set! last-heartbeat (current-time))))
+    (define (output-event text)
+      "Retain at most OUTPUT-LIMIT bytes and explicitly mark incomplete output."
+      (let* ((remaining (- output-limit retained-bytes))
+             (length (string-length text)))
+        (when (> remaining 0)
+          (let ((kept (if (> length remaining) (substring text 0 remaining) text)))
+            (event "output" kept)
+            (set! retained-bytes (+ retained-bytes (string-length kept)))))
+        (when (and (> length remaining) (not truncation-recorded?))
+          (event "output-truncated"
+                 (string-append "byte_limit=" output-limit-text
+                                ";full_output_path=none"))
+          (set! truncation-recorded? #t))))
     (unless (and timeout (integer? timeout) (> timeout 0))
       (die "TIMEOUT must be a positive integer"))
+    (unless (and output-limit (integer? output-limit) (> output-limit 0))
+      (die "MAX-OUTPUT-BYTES must be a positive integer"))
     (event "started" command-path)
     (when (file-exists? child-result-path) (delete-file child-result-path))
     (let* ((command (string-append
@@ -71,7 +90,7 @@
         (let* ((text (list->string (reverse buffer)))
                (status-text (call-with-input-file child-result-path read-line))
                (status (or (string->number status-text) 255)))
-          (unless (string-null? text) (event "output" text))
+          (unless (string-null? text) (output-event text))
           (close-pipe input)
           (event "result" (number->string status))
           (call-with-output-file result-path
@@ -87,7 +106,7 @@
                 (finish buffer)
                 (if (or (char=? c #\newline) (>= (length buffer) 4095))
                     (begin
-                      (event "output" (list->string (reverse (cons c buffer))))
+                      (output-event (list->string (reverse (cons c buffer))))
                       (loop '()))
                     (loop (cons c buffer))))))
          (else

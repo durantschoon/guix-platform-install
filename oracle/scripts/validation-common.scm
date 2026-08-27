@@ -139,13 +139,44 @@
 (define (validation-option-ref options key)
   (let ((entry (assoc key options))) (and entry (cdr entry))))
 
+(define %validation-request-schema-version 1)
+(define %validation-status-schema-version 1)
+(define %validation-result-schema-version 1)
+(define %validation-default-shape "VM.Standard.E2.1.Micro")
+(define %validation-allowed-shapes (list %validation-default-shape))
+(define %validation-default-timeout 3600)
+(define %validation-maximum-timeout 86400)
+(define %validation-default-output-bytes 1048576)
+(define %validation-maximum-output-bytes 16777216)
+
+(define (validation-positive-bounded-integer text maximum)
+  "Parse TEXT once, rejecting malformed, non-positive, and excessive values."
+  (let ((value (and (string? text) (string->number text))))
+    (and value (integer? value) (> value 0) (<= value maximum) value)))
+
+(define (validation-request-json options run-id execution-id source-sha256)
+  "Encode the versioned request without controller credential material."
+  (string-append
+   "{\"schema_version\":" (number->string %validation-request-schema-version)
+   ",\"run_id\":" (validation-json-string run-id)
+   ",\"execution_id\":" (validation-json-string execution-id)
+   ",\"source_sha256\":" (validation-json-string source-sha256)
+   ",\"command\":" (validation-json-string (validation-option-ref options 'command))
+   ",\"policy\":{\"timeout_seconds\":"
+   (number->string (validation-option-ref options 'timeout))
+   ",\"max_output_bytes\":"
+   (number->string (validation-option-ref options 'max-output-bytes))
+   ",\"shape\":" (validation-json-string (validation-option-ref options 'shape))
+   "}}\n"))
+
 (define (validation-parse-start args)
   "Parse validate.scm's start arguments, returning (values options error).
 The small parser keeps Stage 1 dependency-free and makes required inputs
 testable without invoking OCI."
   (let loop ((rest args)
-             (options `((shape . "VM.Standard.E2.1.Micro")
-                        (timeout . "3600")
+             (options `((shape . ,%validation-default-shape)
+                        (timeout . ,%validation-default-timeout)
+                        (max-output-bytes . ,%validation-default-output-bytes)
                         (force-disconnect-after . #f)
                         (keep-on-failure . #f)
                         (yes . #f))))
@@ -154,16 +185,19 @@ testable without invoking OCI."
       (let ((missing (filter (lambda (key) (not (validation-option-ref options key)))
                              '(image-id subnet-id source command))))
         (if (null? missing)
-            (let* ((timeout (string->number
-                             (validation-option-ref options 'timeout)))
+            (let* ((timeout (validation-option-ref options 'timeout))
+                   (output-limit (validation-option-ref options 'max-output-bytes))
                    (forced-text (validation-option-ref
                                  options 'force-disconnect-after))
                    (forced (and forced-text (string->number forced-text))))
-              (if (and timeout (integer? timeout) (> timeout 0)
+              (if (and (integer? timeout) (> timeout 0)
+                       (integer? output-limit) (> output-limit 0)
+                       (member (validation-option-ref options 'shape)
+                               %validation-allowed-shapes)
                        (or (not forced-text)
                            (and forced (integer? forced) (> forced 0))))
                   (values options #f)
-                  (values #f "timeouts and forced-disconnect sequence must be positive integers")))
+                  (values #f "unsupported execution policy")))
             (values #f (string-append "missing required option --"
                                       (symbol->string (car missing)))))))
      ((member (car rest) '("--keep-on-failure" "--yes"))
@@ -171,12 +205,20 @@ testable without invoking OCI."
             (acons (if (string=? (car rest) "--yes") 'yes 'keep-on-failure)
                    #t options)))
      ((member (car rest) '("--image-id" "--subnet-id" "--source" "--command"
-                           "--shape" "--timeout" "--force-disconnect-after"))
+                           "--shape" "--timeout" "--max-output-bytes"
+                           "--force-disconnect-after"))
       (if (null? (cdr rest))
           (values #f (string-append "option requires a value: " (car rest)))
-          (loop (cddr rest)
-                (acons (string->symbol (substring (car rest) 2)) (cadr rest)
-                       options))))
+          (let* ((key (string->symbol (substring (car rest) 2)))
+                 (raw (cadr rest))
+                 (parsed (cond ((eq? key 'timeout)
+                                (validation-positive-bounded-integer raw %validation-maximum-timeout))
+                               ((eq? key 'max-output-bytes)
+                                (validation-positive-bounded-integer raw %validation-maximum-output-bytes))
+                               (else raw))))
+            (if (and (member key '(timeout max-output-bytes)) (not parsed))
+                (values #f (string-append "invalid or excessive --" (symbol->string key)))
+                (loop (cddr rest) (acons key parsed options))))))
      (else (values #f (string-append "unknown option: " (car rest)))))))
 
 (define (validation-parse-probe args)
@@ -242,8 +284,13 @@ available in their run files for detailed diagnosis."
                                    (validation-option-ref facts key))))
                    (if value value default)))))
     (string-append
-     "{\"schema_version\":1,\"run_id\":"
+     "{\"schema_version\":" (number->string %validation-status-schema-version)
+     ",\"run_id\":"
      (validation-json-string (field state 'run-id ""))
+     ",\"execution_id\":"
+     (validation-json-string (field state 'execution-id ""))
+     ",\"source_sha256\":"
+     (validation-json-string (field state 'source-sha256 ""))
      ",\"instance_ocid\":"
      (validation-json-string (field state 'instance-ocid ""))
      ",\"local_phase\":"
@@ -267,15 +314,37 @@ available in their run files for detailed diagnosis."
 (define (validation-handoff-marker-path state-path)
   (string-append state-path ".handoff"))
 
-(define (validation-write-result-json path run-id status phase message)
-  "Write a deliberately small machine-readable result without a JSON library."
+(define (validation-result-json facts)
+  "Encode the complete terminal one-shot contract from explicit FACTS."
+  (define (field key default)
+    (or (validation-option-ref facts key) default))
+  (string-append
+   "{\"schema_version\":" (number->string %validation-result-schema-version)
+   ",\"run_id\":" (validation-json-string (field 'run-id ""))
+   ",\"execution_id\":" (validation-json-string (field 'execution-id ""))
+   ",\"instance_ocid\":" (validation-json-string (field 'instance-ocid ""))
+   ",\"source_sha256\":" (validation-json-string (field 'source-sha256 ""))
+   ",\"command\":" (validation-json-string (field 'command ""))
+   ",\"exit_status\":" (if (number? (field 'exit-status #f))
+                                 (number->string (field 'exit-status #f)) "null")
+   ",\"failure_class\":" (if (field 'failure-class #f)
+                                  (validation-json-string (field 'failure-class #f)) "null")
+   ",\"started_at\":" (validation-json-string (field 'started-at ""))
+   ",\"ended_at\":" (validation-json-string (field 'ended-at ""))
+   ",\"duration_seconds\":" (number->string (field 'duration-seconds 0))
+   ",\"cleanup_disposition\":" (validation-json-string (field 'cleanup-disposition "unknown"))
+   ",\"output_truncated\":" (if (field 'output-truncated #f) "true" "false")
+   ",\"output_byte_limit\":" (number->string (field 'output-byte-limit 0))
+   ",\"full_output_path\":" (if (field 'full-output-path #f)
+                                    (validation-json-string (field 'full-output-path #f)) "null")
+   ",\"evidence_paths\":["
+   (string-join (map validation-json-string (field 'evidence-paths '())) ",")
+   "]}\n"))
+
+(define (validation-write-result-json path facts)
+  "Atomically write the complete machine-readable terminal result."
   (call-with-output-file path
-    (lambda (port)
-      (display "{\"run_id\":" port) (display (validation-json-string run-id) port)
-      (display ",\"status\":" port) (display (number->string status) port)
-      (display ",\"phase\":" port) (display (validation-json-string phase) port)
-      (display ",\"message\":" port) (display (validation-json-string message) port)
-      (display "}\n" port))))
+    (lambda (port) (display (validation-result-json facts) port))))
 
 (define (validation-event-json sequence kind timestamp payload)
   "Encode one telemetry event.  SEQUENCE is monotonic within a run.
