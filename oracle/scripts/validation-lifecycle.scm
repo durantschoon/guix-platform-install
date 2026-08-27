@@ -8,14 +8,14 @@
 (load (string-append %script-directory "/validation-common.scm"))
 
 (define (usage)
-  (die "usage: validation-lifecycle.scm status|logs|collect|stop|cleanup|handoff --run-dir DIR [--yes]; status also accepts --json"))
+  (die "usage: validation-lifecycle.scm status|logs|collect|stop|cleanup|handoff --run-dir DIR [--yes]; review|reap --root DIR [--yes]; status also accepts --json"))
 
 (define (parse args)
   (let loop ((rest args) (run-dir #f) (yes? #f) (json? #f))
     (cond ((null? rest) (values run-dir yes? json?))
           ((string=? (car rest) "--yes") (loop (cdr rest) run-dir #t json?))
           ((string=? (car rest) "--json") (loop (cdr rest) run-dir yes? #t))
-          ((string=? (car rest) "--run-dir")
+          ((member (car rest) '("--run-dir" "--root"))
            (if (null? (cdr rest)) (usage)
                (loop (cddr rest) (cadr rest) yes? json?)))
           (else (usage)))))
@@ -121,6 +121,94 @@
                 (lambda (port) (display "HANDED_OFF confirmed by fresh OCI read\n" port)))
               (say "[OK] handed off protected instance " instance))))))))
 
+(define (stage6-now)
+  (strftime "%Y-%m-%dT%H:%M:%SZ" (gmtime (current-time))))
+
+(define (review-record root path state now)
+    (let* ((decision (validation-review-decision state now))
+         (facts (append state `((decision . ,(symbol->string (car decision)))
+                                (reason . ,(cdr decision))
+                                (evidence-path . ,path)))))
+    facts))
+
+(define (run-directories root)
+  "Enumerate only immediate local checkpoint directories; never OCI inventory."
+  (filter (lambda (name)
+            (and (not (member name '(#f "." "..")))
+                 (file-is-directory? (string-append root "/" name))))
+          (scandir root)))
+
+(define (review-root root)
+  "Read every exact local state and emit one protected/eligible record."
+  (unless (file-is-directory? root) (die "review root is missing: " root))
+  (for-each
+   (lambda (name)
+     (let* ((path (string-append root "/" name "/state.scm"))
+            (state (validation-read-state path)))
+       (display (validation-review-json
+                 (if state
+                     (review-record root path state (stage6-now))
+                     `((run-id . ,name) (decision . "protected")
+                       (reason . "malformed-state") (evidence-path . ,path))))
+       (newline)))
+   (run-directories root))))
+
+(define (append-reaper-outcome root facts)
+  (let* ((path (string-append root "/reaper-outcomes.jsonl"))
+         (old (if (file-exists? path)
+                  (call-with-input-file path get-string-all)
+                  "")))
+    (call-with-output-file path
+      (lambda (port)
+        (display old port)
+        (display (validation-reaper-json facts) port)
+        (newline port)))))
+
+(define (reap-root root yes?)
+  "Reap only reviewed local candidates after a fresh exact-OCID OV-3 read."
+  (unless yes? (die "reap requires explicit --yes after review"))
+  (unless (file-is-directory? root) (die "reap root is missing: " root))
+  (let ((now (stage6-now)))
+    (for-each
+     (lambda (name)
+       (let* ((run-dir (string-append root "/" name))
+              (state-path (string-append run-dir "/state.scm"))
+              (state (validation-read-state state-path))
+              (decision (and state (validation-review-decision state now)))
+              (instance (and state (validation-option-ref state 'instance-ocid)))
+              (base (append (or state `((run-id . ,name)))
+                            `((evidence-path . ,state-path)))))
+         (if (or (not decision) (not (eq? (car decision) 'eligible)))
+             (begin
+               (display (validation-reaper-json
+                         (append base `((decision . "protected")
+                                        (outcome . "skipped")
+                                        (reason . ,(if decision (cdr decision) "malformed-state")))))
+               (newline))
+             (let ((remote (catch #t (lambda () (oci-instance-ownership instance))
+                             (lambda args #f))))
+               (if (not (validation-ownership-authorized?
+                         state remote 'terminate
+                         (file-exists? (validation-handoff-marker-path state-path))))
+                   (begin
+                     (display (validation-reaper-json
+                               (append base `((decision . "protected")
+                                              (outcome . "skipped")
+                                              (reason . "fresh-ownership-mismatch")))))
+                     (newline))
+                   (call-with-values (lambda () (oci-terminate-instance/status instance))
+                     (lambda (output status)
+                       (let ((outcome (if (zero? status) "terminated" "termination-failed")))
+                         (append-reaper-outcome root
+                           (append base `((decision . "authorized")
+                                          (outcome . ,outcome))))
+                         (display output) (newline)
+                         (display (validation-reaper-json
+                                   (append base `((decision . "authorized")
+                                                  (outcome . ,outcome))))
+                         (newline))))))))))
+     (run-directories root)))))
+
 (define (main args)
   (unless (pair? args) (usage))
   (let ((command (car args)))
@@ -133,6 +221,8 @@
               ((string=? command "stop") (stop run-dir yes?))
               ((string=? command "cleanup") (cleanup run-dir yes?))
               ((string=? command "handoff") (handoff run-dir yes?))
+              ((string=? command "review") (review-root run-dir))
+              ((string=? command "reap") (reap-root run-dir yes?))
               (else (usage)))))))
 
 (unless (getenv "ORACLE_VALIDATION_TEST_MODE")

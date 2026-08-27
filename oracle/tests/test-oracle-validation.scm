@@ -76,6 +76,14 @@
 (define macos-oci-source (read-text macos-oci-client))
 (define makefile-source (read-text makefile))
 
+(define stage6-good
+  `((schema . 1) (run-id . "20260827T120000Z-stage6")
+    (execution-id . "exec-stage6") (managed-by . "guix-platform-install")
+    (artifact-state . "IN_TEST") (resource-type . "instance")
+    (instance-ocid . "ocid1.instance.fixture")
+    (expires-at . "2020-01-01T00:00:00Z")
+    (operation-scope . (terminate))))
+
 (format #t "Testing Oracle validation helpers (offline)\n")
 (format #t "  Helpers: ~a, ~a\n\n" validation-common oci-common)
 
@@ -710,6 +718,48 @@
             (string-contains probe-source
                              "metadata-only SSH probe failed; instance terminated")
             (string-contains probe-source "probe cleanup failed")))
+
+;;; ---------------------------------------------------------------------------
+;;; Stage 06 expired-run review and reaper policy
+
+(check "expired review is eligible only with complete local facts"
+       (equal? (validation-review-decision stage6-good "2026-08-27T00:00:00Z")
+               '(eligible . "expired-awaiting-fresh-ownership")))
+(check "unexpired review remains protected"
+       (equal? (validation-review-decision
+                (acons 'expires-at "2099-01-01T00:00:00Z" stage6-good)
+                "2026-08-27T00:00:00Z")
+               '(protected . "unexpired")))
+(check "handoff and malformed facts remain protected"
+       (and (equal? (validation-review-decision
+                     (acons 'artifact-state "HANDED_OFF" stage6-good)
+                     "2026-08-27T00:00:00Z") '(protected . "handed-off"))
+            (equal? (validation-review-decision
+                     (acons 'instance-ocid #f stage6-good)
+                     "2026-08-27T00:00:00Z")
+                    '(protected . "missing-or-malformed-instance-ocid"))))
+(check "review and reaper schemas expose identities, expiry, decision, and evidence"
+       (and (string-contains (validation-review-json
+                              (append stage6-good
+                                      '((decision . "eligible") (reason . "expired")
+                                        (evidence-path . "/tmp/run/state.scm"))))
+                            "\"schema_version\":1")
+            (string-contains (validation-reaper-json
+                              (append stage6-good
+                                      '((decision . "authorized") (outcome . "terminated")
+                                        (evidence-path . "/tmp/run/state.scm"))))
+                            "\"execution_id\":\"exec-stage6\"")))
+(check "lifecycle exposes explicit review/reap and fresh termination gate"
+       (and (string-contains lifecycle-source "review|reap")
+            (string-contains lifecycle-source "validation-review-decision")
+            (string-contains lifecycle-source "oci-instance-ownership")
+            (string-contains lifecycle-source "oci-terminate-instance/status")
+            (string-contains lifecycle-source "reap requires explicit --yes")))
+(check "stage 06 adds no adoption, daemon, MCP, or inventory mutation"
+       (and (not (string-contains lifecycle-source "instance list"))
+            (not (string-contains lifecycle-source "mcp"))
+            (not (string-contains lifecycle-source "daemon"))
+            (string-contains lifecycle-source "immediate local checkpoint directories")))
 
 (newline)
 (if (zero? failures)

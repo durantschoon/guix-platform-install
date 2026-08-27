@@ -246,3 +246,16 @@ claim a TTL it has no persistent process to enforce.
 - OV-5 provides an independently replayable journal plus periodic OCI
   lifecycle and serial-console evidence. It is still a one-shot execution
   model; retained-instance synchronization is deferred.
+
+## Expired-run review
+
+Interrupted runs can be inspected with `validation-lifecycle.scm review
+--root ~/.oracle-validation/runs`. This is a read-only inventory of local
+checkpoints. Its versioned records distinguish expired candidates from
+unexpired, malformed, missing-identity, and handed-off records; expiry is
+never deletion authority. `reap --root ... --yes` is an explicit mutating
+operation that re-reads ownership for each exact recorded OCID through the
+OV-3 gate immediately before termination. OCI read failures and ownership
+mismatches are protected outcomes, and durable results distinguish successful
+termination from a failed termination request. No inventory search or
+automatic adoption is performed.

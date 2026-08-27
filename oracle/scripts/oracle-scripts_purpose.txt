@@ -68,6 +68,18 @@ Statement of omission: there is no name-based destroy, bulk cleanup, adoption,
 or HANDED_OFF-to-IN_TEST transition. Each would widen deletion authority and
 requires a separate explicit design and user instruction.
 
+Stage 06 review/reaper additions
+                    review enumerates only local checkpoint directories and
+                    emits protected/eligible facts; reap requires --yes and a
+                    fresh exact-OCID OV-3 read immediately before termination.
+                    Outcomes are durable and distinguish skipped, terminated,
+                    and termination-failed results.
+
+Statement of omission: expired timestamps never authorize deletion, and old
+checkpoints without a recorded expiry remain protected. There is no OCI
+inventory scan, implicit adoption, daemon, retained-instance mode, or MCP
+facade; each would expand lifecycle authority beyond this stage.
+
 Statement of omission: `logs` reads only files beneath the caller-supplied run
 directory, and `collect` targets only the OCID recorded in that run. Neither
 accepts a display name or a free-form instance identifier. `stop` is deliberately
