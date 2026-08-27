@@ -122,11 +122,13 @@ stop and report **Blocked** rather than decide.
 | 05 | Freeze the bounded one-shot remote-compute contract | merged (`876c35b`) |
 | 06 | Review and reap expired `IN_TEST` resources safely | merged (`f866007`) |
 | 07 | Package, document, and cut the one-shot release candidate | merged (`046d9eb`) |
-| 08 | Retained-instance multi-execution identity and synchronization | deferred, post-release |
-| 09 | MCP tool facade over the retained-instance controller | deferred, post-release |
+| 08 | Retained-instance multi-execution identity and synchronization | planned, OV-backed post-release |
+| 09 | MCP tool facade over the retained-instance controller | planned, OV-backed post-release |
 
 Stages 05-07 form the release path. The release gate is a live run of a
 declared computation in a fresh Guix environment with attributable output and
 confirmed cleanup. Stages 08-09 are deliberately not release blockers; stages
 05-07 must preserve their architectural path by keeping instance identity,
-execution identity, and source identity distinct.
+execution identity, and source identity distinct. Stages 08-09 must reuse the
+OV contracts and ownership/evidence machinery rather than creating a parallel
+controller or weakening the one-shot safety boundary.

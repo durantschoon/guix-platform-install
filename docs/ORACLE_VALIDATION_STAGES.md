@@ -199,7 +199,7 @@ The repository-wide stage sequence in `docs/stages/` implements OV-6:
 2. **Stage 06 — expired-resource lifecycle.** Add read-only stale-run review,
    then an explicit reaper that can act only through the OV-3 fresh ownership
    gate. Expiry selects candidates; it never grants deletion authority.
-3. **Stage 07 — release candidate (active).** Package the non-interactive entry point,
+3. **Stage 07 — release candidate (complete).** Package the non-interactive entry point,
    document human and coding-agent use, complete restart-from-checkpoint
    rehearsal, and prepare the live acceptance checklist.
 
@@ -208,13 +208,15 @@ computation from a hashed snapshot, produces the versioned result/evidence,
 and confirms the exact disposable instance `TERMINATED`. That live action is a
 human/coordinator gate, not delegated implementation.
 
-Deferred, explicitly not OV-6 release blockers:
+Post-release, explicitly not OV-6 blockers:
 
 - **Stage 08 — retained instance.** Multiple explicitly hashed executions may
-  join one instance without result misattribution.
+  join one instance without result misattribution, reusing OV-6's request,
+  result, checkpoint, and evidence schemas plus the OV-3 ownership gate.
 - **Stage 09 — MCP facade.** Typed create/run/status/logs/handoff/terminate
-  tools wrap the proven controller. No third-party credential-accepting
-  service is introduced.
+  tools wrap the proven controller and its exact-run evidence; the facade adds
+  no cloud authority and introduces no third-party credential-accepting
+  service.
 
 ## Stage transition rule
 
