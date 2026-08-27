@@ -7,6 +7,7 @@
 (use-modules (ice-9 popen)
              (ice-9 rdelim)
              (ice-9 textual-ports)
+             (ice-9 ftw)
              (srfi srfi-1))
 
 (define (validation-sh-quote text)
@@ -148,6 +149,82 @@
 (define %validation-maximum-timeout 86400)
 (define %validation-default-output-bytes 1048576)
 (define %validation-maximum-output-bytes 16777216)
+
+;; Stage 6 review/reaper records are deliberately a separate, additive
+;; interface.  Expiry is evidence for review; the existing ownership gate is
+;; the only deletion authority.
+(define %validation-review-schema-version 1)
+(define %validation-reaper-schema-version 1)
+
+(define (validation-iso-utc? value)
+  "Accept only the fixed-width UTC timestamps emitted by this controller."
+  (and (string? value) (= (string-length value) 20)
+       (char=? (string-ref value 4) #\-)
+       (char=? (string-ref value 7) #\-)
+       (char=? (string-ref value 10) #\T)
+       (char=? (string-ref value 13) #\:)
+       (char=? (string-ref value 16) #\:)
+       (char=? (string-ref value 19) #\Z)
+       (every char-numeric?
+              (append (string->list (substring value 0 4))
+                      (string->list (substring value 5 7))
+                      (string->list (substring value 8 10))
+                      (string->list (substring value 11 13))
+                      (string->list (substring value 14 16))
+                      (string->list (substring value 17 19))))))
+
+(define (validation-expired? expires-at now)
+  "Compare fixed-width UTC timestamps; malformed expiry is never expired."
+  (and (validation-iso-utc? expires-at) (validation-iso-utc? now)
+       (string<=? expires-at now)))
+
+(define (validation-review-decision state now)
+  "Return an inspectable local decision before any OCI call is considered."
+  (let* ((artifact (validation-option-ref state 'artifact-state))
+         (expiry (validation-option-ref state 'expires-at))
+         (instance (validation-option-ref state 'instance-ocid))
+         (run-id (validation-option-ref state 'run-id))
+         (manager (validation-option-ref state 'managed-by))
+         (resource (validation-option-ref state 'resource-type)))
+    (cond
+     ((not (list? state)) '(protected . "malformed-state"))
+     ((equal? artifact "HANDED_OFF") '(protected . "handed-off"))
+     ((not (equal? manager "guix-platform-install")) '(protected . "manager-mismatch"))
+     ((not (equal? resource "instance")) '(protected . "resource-mismatch"))
+     ((not (equal? artifact "IN_TEST")) '(protected . "unknown-artifact-state"))
+     ((not (and (string? run-id) (validation-safe-run-id? run-id)))
+      '(protected . "missing-or-malformed-run-id"))
+     ((not (and (string? instance) (string-prefix? "ocid1.instance." instance)))
+      '(protected . "missing-or-malformed-instance-ocid"))
+     ((not (validation-iso-utc? expiry)) '(protected . "missing-or-malformed-expiry"))
+     ((validation-expired? expiry now) '(eligible . "expired-awaiting-fresh-ownership"))
+     (else '(protected . "unexpired")))))
+
+(define (validation-review-json facts)
+  "Encode one review decision without credentials or OCI command material."
+  (define (field key default)
+    (or (validation-option-ref facts key) default))
+  (string-append
+   "{\"schema_version\":" (number->string %validation-review-schema-version)
+   ",\"run_id\":" (validation-json-string (field 'run-id ""))
+   ",\"execution_id\":" (validation-json-string (field 'execution-id ""))
+   ",\"instance_ocid\":" (validation-json-string (field 'instance-ocid ""))
+   ",\"expires_at\":" (validation-json-string (field 'expires-at ""))
+   ",\"decision\":" (validation-json-string (field 'decision "protected"))
+   ",\"reason\":" (validation-json-string (field 'reason "unknown"))
+   ",\"evidence_path\":" (validation-json-string (field 'evidence-path "")) "}"))
+
+(define (validation-reaper-json facts)
+  "Encode one durable reaper outcome with explicit evidence and status."
+  (string-append
+   "{\"schema_version\":" (number->string %validation-reaper-schema-version)
+   ",\"run_id\":" (validation-json-string (or (validation-option-ref facts 'run-id) ""))
+   ",\"execution_id\":" (validation-json-string (or (validation-option-ref facts 'execution-id) ""))
+   ",\"instance_ocid\":" (validation-json-string (or (validation-option-ref facts 'instance-ocid) ""))
+   ",\"expires_at\":" (validation-json-string (or (validation-option-ref facts 'expires-at) ""))
+   ",\"decision\":" (validation-json-string (or (validation-option-ref facts 'decision) "protected"))
+   ",\"outcome\":" (validation-json-string (or (validation-option-ref facts 'outcome) "skipped"))
+   ",\"evidence_path\":" (validation-json-string (or (validation-option-ref facts 'evidence-path) "")) "}"))
 
 (define (validation-positive-bounded-integer text maximum)
   "Parse TEXT once, rejecting malformed, non-positive, and excessive values."

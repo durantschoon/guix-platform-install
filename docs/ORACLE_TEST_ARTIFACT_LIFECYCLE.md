@@ -70,6 +70,41 @@ Human interaction outside this handoff cannot be detected reliably.  A person
 who wants to keep an `IN_TEST` artifact should request handoff before placing
 valuable data on it.
 
+## Expired-run review and reaping
+
+The local controller exposes two bounded operations:
+
+```sh
+validation-lifecycle.scm review --root ~/.oracle-validation/runs
+validation-lifecycle.scm reap --root ~/.oracle-validation/runs --yes
+```
+
+`review` is read-only. It inventories immediate local run directories and
+emits schema-versioned records containing the run and execution identities,
+exact instance OCID, expiry, decision, reason, and state-file evidence path.
+Missing or malformed state, missing expiry or OCID, unknown state, handoff,
+manager mismatch, and unexpired records are protected. Existing checkpoints
+written before local expiry was recorded remain protected and are not guessed
+into eligibility.
+
+`reap` requires `--yes` and considers only records reviewed as expired. For
+each candidate it performs a fresh exact-OCID ownership read immediately
+before calling the existing guarded termination operation. A mismatch, OCI
+read error, handoff marker, or any incomplete fact is recorded as `skipped`;
+it never falls back to inventory, display names, or adoption. Successful and
+failed termination attempts are appended to `reaper-outcomes.jsonl`, with
+`terminated` and `termination-failed` kept distinct.
+
+Example review record:
+
+```json
+{"schema_version":1,"run_id":"20260827T120000Z-stage6","execution_id":"exec-stage6","instance_ocid":"ocid1.instance.example","expires_at":"2026-08-27T00:00:00Z","decision":"eligible","reason":"expired-awaiting-fresh-ownership","evidence_path":".../state.scm"}
+```
+
+The review/reaper implementation is an offline controller surface. It adds no
+daemon, retained-instance mode, automatic adoption, MCP server, or OCI
+inventory mutation. A live OCI acceptance run is outside this stage.
+
 ## Repeatability and pre-authorization
 
 During live work, treat repeated command construction or repeated approval
