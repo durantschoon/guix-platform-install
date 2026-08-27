@@ -19,7 +19,7 @@ Only one `OV-*` stage is active at a time.  Every live action updates
 | OV-3 | Executable `IN_TEST` ownership gate | complete |
 | OV-4 | Live one-shot validation acceptance | complete |
 | OV-5 | Resilient telemetry and recovery | complete |
-| OV-6 | Handoff and operational hardening | active |
+| OV-6 | One-shot release and forward-compatible hardening | active |
 
 ## OV-0 — Controller foundation and measured failure
 
@@ -173,19 +173,39 @@ Exit gate passed 2026-08-27: forced SSH interruption run
 guest-loss run `20260826T235720Z-b317-de56f` retained events and console/lifecycle
 evidence and classified the terminated guest before a result.
 
-## OV-6 — Handoff and operational hardening
+## OV-6 — One-shot release and forward-compatible hardening
 
-Work:
+The release milestone is intentionally narrower than a Runpod-like compute
+service: remotely run one declared computation that requires a live Guix
+environment, return attributable evidence, and clean up the disposable
+instance. Retaining an instance for later tasks and exposing MCP tools are
+post-release work, but this release must not conflate instance, execution, and
+source identities in a way that blocks them.
 
-- Stable result schema and documented human/LLM interfaces.
-- Resource, duration, output, shape, and cost policies.
-- Allowlisted commands/artifacts where appropriate.
-- Expired `IN_TEST` review/reaper flow using the OV-3 ownership gate.
-- One instance can validate multiple explicitly hashed snapshots without
-  misattributing results.
+The repository-wide stage sequence in `docs/stages/` implements OV-6:
 
-Exit gate: perform a live handoff, verify automation refuses subsequent
-mutation, and complete a restart-from-checkpoint exercise without chat history.
+1. **Stage 05 — bounded one-shot contract.** Freeze versioned request, status,
+   and result shapes; keep instance/execution/source identities distinct; add
+   duration, output, shape, and command policy with fail-closed parsing.
+2. **Stage 06 — expired-resource lifecycle.** Add read-only stale-run review,
+   then an explicit reaper that can act only through the OV-3 fresh ownership
+   gate. Expiry selects candidates; it never grants deletion authority.
+3. **Stage 07 — release candidate.** Package the non-interactive entry point,
+   document human and coding-agent use, complete restart-from-checkpoint
+   rehearsal, and prepare the live acceptance checklist.
+
+OV-6 exits only after a live release-acceptance run executes a declared
+computation from a hashed snapshot, produces the versioned result/evidence,
+and confirms the exact disposable instance `TERMINATED`. That live action is a
+human/coordinator gate, not delegated implementation.
+
+Deferred, explicitly not OV-6 release blockers:
+
+- **Stage 08 — retained instance.** Multiple explicitly hashed executions may
+  join one instance without result misattribution.
+- **Stage 09 — MCP facade.** Typed create/run/status/logs/handoff/terminate
+  tools wrap the proven controller. No third-party credential-accepting
+  service is introduced.
 
 ## Stage transition rule
 

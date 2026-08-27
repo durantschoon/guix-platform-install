@@ -6,7 +6,8 @@ The ordered implementation and live-acceptance work is tracked in
 **Status (2026-08-27): Stage 0 metadata-only SSH and the Stage 1 pass/fail
 contract passed live acceptance; every disposable instance terminated. OV-5
 resilient telemetry, forced reconnect, periodic lifecycle/console capture, and
-permanent guest-loss evidence all passed live acceptance. OV-6 is next.**
+permanent guest-loss evidence all passed live acceptance. OV-6 is the bounded
+one-shot release path; retained instances and MCP tools are deferred.**
 
 ## Timing and prediction
 
@@ -150,7 +151,13 @@ Stage 1 acceptance criteria:
 - pure/offline tests cover parsing, command construction, state transitions,
   and cleanup policy.
 
-## Later stages
+## Release boundary and later expansion
+
+The first release promises one remotely executed computation per disposable
+Guix instance. It does not promise a resident task service. The controller is
+nevertheless shaped for that later service: an OCI instance, an execution, and
+a source snapshot are separate identities, and a result belongs to one exact
+execution and source hash.
 
 ### Stage 2 -- resilient telemetry
 
@@ -161,7 +168,7 @@ must reconnect without a gap in event sequence numbers.  Permanent instance
 loss must still leave the locally received events and most recent console
 history.
 
-### Stage 3 -- incremental agent loop
+### Stage 3 -- incremental agent loop (deferred until after one-shot release)
 
 Add `sync`, `run`, and `watch` so one instance can validate multiple source
 snapshots.  Every attempt records its own source hash and result; a result must
@@ -172,6 +179,10 @@ never be attributed to files that were synchronized later.
 Add `.guix-validation.scm`, allowlisted commands/artifacts, resource and output
 limits, shape/cost policy, temporary OCI security-token support, expired-run
 cleanup, and a stable machine-readable result schema for coding-agent tools.
+
+For the one-shot release, only the stable schemas, bounded execution policy,
+and expired-run safety are required. Temporary OCI security-token support,
+retained-instance synchronization, and MCP tools are post-release.
 
 ## Failure and cleanup policy
 
@@ -188,10 +199,11 @@ claim a TTL it has no persistent process to enforce.
 
 ## Known constraints
 
-- The current generic-image metadata SSH path has failed its live proof and is
-  being repaired in OV-1; it remains unverified until OV-2 passes.
+- The generic-image metadata SSH path passed live acceptance in OV-2. This
+  proves launch and login, not every future workload or shape.
 - `VM.Standard.E2.1.Micro` has only 1 GiB RAM.  The image's swap helps, but
   substantial Guix builds may need a larger paid shape.
 - Stage 1 requires an already imported image and an existing public subnet.
-- Stage 1 captures the SSH stream but not yet an independently replayable
-  remote event journal or continuous OCI serial history.
+- OV-5 provides an independently replayable journal plus periodic OCI
+  lifecycle and serial-console evidence. It is still a one-shot execution
+  model; retained-instance synchronization is deferred.

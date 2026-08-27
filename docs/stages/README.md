@@ -101,6 +101,12 @@ stop and report **Blocked** rather than decide.
   re-run the gates on the union before merging back.
 - Retro every 5 stages (when `NN % 5 == 0`, before authoring stage NN), plus
   whenever the user asks.
+- Before a live-cloud claim advances a stage, name the evidence boundary:
+  offline, evaluation, build, boot, login, or executed workload. A lower phase
+  never silently stands in for a higher one.
+- Generated/shared-file checks must report what they inspected. The
+  coordinator regenerates `SOURCE_MANIFEST.txt` after merge even if an older
+  green check claims it is current.
 - **Blocked-on-human work is not staged.** Steps that depend on a live OCI
   instance launch are gated on the user; see
   [../ORACLE_ONE_CLICK_ROADMAP.md](../ORACLE_ONE_CLICK_ROADMAP.md).
@@ -112,4 +118,15 @@ stop and report **Blocked** rather than decide.
 | 01 | OCI capacity handling in `04-deploy.scm` | merged (`5d0e976`) |
 | 02 | Presentation-only web page for the Oracle flow | merged (`ec5eeee`) |
 | 03 | Oracle first-boot preferences (hostname, timezone, shell) | merged (`f9dff27`) |
-| 04 | Preserve comments and gexp syntax in config edits | authored |
+| 04 | Preserve comments and gexp syntax in config edits | merged (`3a364db`) |
+| 05 | Freeze the bounded one-shot remote-compute contract | authored |
+| 06 | Review and reap expired `IN_TEST` resources safely | planned |
+| 07 | Package, document, and cut the one-shot release candidate | planned |
+| 08 | Retained-instance multi-execution identity and synchronization | deferred, post-release |
+| 09 | MCP tool facade over the retained-instance controller | deferred, post-release |
+
+Stages 05-07 form the release path. The release gate is a live run of a
+declared computation in a fresh Guix environment with attributable output and
+confirmed cleanup. Stages 08-09 are deliberately not release blockers; stages
+05-07 must preserve their architectural path by keeping instance identity,
+execution identity, and source identity distinct.

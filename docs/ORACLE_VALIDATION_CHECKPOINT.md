@@ -5,6 +5,17 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-08-27: OV-6 was narrowed to a releasable one-shot remote-compute
+  milestone. Repository stages 05-07 deliver the versioned bounded contract,
+  expired-resource lifecycle, and release candidate. Retained-instance task
+  joining and MCP tools are deferred to stages 08-09, while stages 05-07 keep
+  instance, execution, and source identities distinct. The context audit also
+  repaired stale OV-2/OV-5 claims and regenerated a manifest stale for three
+  previously committed files. Validation passes 6/15/0 over 78 files with a
+  sandbox-safe Go cache. Host `./run-tests.sh` exits 2 at the stage-04
+  `(guix read-print)` dependency, then hits the known `return`-outside-function
+  bug; run the Guix-dependent suites in a Guix-capable environment.
+
 - 2026-08-27: OV-5 permanent guest-loss acceptance passed in run
   `20260826T235720Z-b317-de56f`. After durable events 1..3, the exact
   state-recorded OCID was terminated through the guarded lifecycle command.
@@ -110,8 +121,11 @@ authorize unattended mutation or destruction.
 OV-4 and OV-5 are complete. OV-5's durable JSONL journal, reconnect/replay,
 periodic lifecycle/console evidence, and permanent-loss live gate all passed;
 the latest loss run is `20260826T235720Z-b317-de56f`. OV-6 is active. The next
-work is policy/reaper hardening and the remaining handoff/restart acceptance;
-do not treat the existing OV-3 handoff proof as completion of all OV-6 work.
+implementation unit is repository stage 05: freeze the bounded one-shot
+request/status/result contract and execution limits without conflating
+instance, execution, or source identity. Stages 06-07 complete the one-shot
+release path. Retained-instance task joining and an MCP facade are explicitly
+deferred to post-release stages 08-09.
 
 OV-3 is complete. It records the declared ownership/scope fields and gates
 both Stage 0 and Stage 1 termination on a fresh exact-instance OCI read. The
@@ -119,17 +133,17 @@ OCI CLI `join`/`to_string` query shape was verified read-only against the
 protected Oracle Linux instance: its absent ownership tags returned `null`, so
 the pure gate denies mutation. Guarded `status`, `cleanup`, and fail-safe
 `handoff` commands pass 54 offline checks. Purpose-built live cleanup and
-handoff/refusal acceptance both passed. OV-5 durable guest telemetry is next.
+handoff/refusal acceptance both passed.
 
 Preferred build entry point remains `make oracle-build-generic`; use an explicit
 `BUILD_NAME` for each diagnostic generation so prior artifacts remain intact.
 
 ## Worktree state
 
-The Oracle validation implementation is intentionally still uncommitted.  It
-includes the Stage 0 probe, Stage 1 validator, helpers, tests, macOS OCI client
-resolution, documentation, and manifest/test integration.  Run `git status
---short` before editing and preserve all existing changes.
+The Stage 0/1 controller, OV-3 ownership gate, and OV-5 telemetry work are
+committed on `main`. Run `git status --short` before editing and preserve any
+new changes. Stage prompts are committed before executor launch; forecast
+plaintext remains sealed until merge or abandonment.
 
 Standing workflow rule: watch for repeated actions and approval prompts.  Turn
 them into narrow tested scripts or Make targets where useful, and request

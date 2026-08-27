@@ -66,7 +66,13 @@ This checklist tracks remaining work for the guix-platform-install project.
 - ✅ OV-5 resilient telemetry, reconnect/replay, console capture, and
   permanent-loss evidence (2026-08-27; forced reconnect and guest-loss live
   gates passed; exact disposable instances terminated)
-- ⏸ OV-6 handoff and operational hardening
+- 🚧 OV-6 bounded one-shot remote-compute release
+  - Stage 05: versioned one-shot contract and execution bounds (authored)
+  - Stage 06: expired `IN_TEST` review/reaper (planned)
+  - Stage 07: packaging, restart rehearsal, and release candidate (planned)
+  - Release gate: live hashed computation, attributable result, exact instance
+    confirmed `TERMINATED`
+  - Deferred post-release: retained-instance task joining and MCP facade
 
 **Primary Focus: Cloudzy Installation Testing**
 
@@ -630,8 +636,8 @@ everyone**.
 
 | Step | Effort | Blocked by |
 |---|---|---|
-| 2. Publish one generic image (release + checksum, import from URL) | Small | ✅ **UNBLOCKED — next up** |
-| 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | step 2 |
+| 2. Publish one generic image (release + checksum, import from URL) | Small | ✅ **DONE** 2026-08-11 |
+| 3. Console-only path (no CLI, no Guix — docs + screenshots) | Small | Unblocked; not the active remote-compute release path |
 | 4. Preferences at first boot (hostname, timezone, shell, user) | Medium | ✅ **DONE** (stage 03) |
 | 5. Capacity handling | Small | ✅ **DONE** (stage 01) — reasoned, never seen a real refusal |
 | 6. Web UI to show friends | Medium | ✅ **DONE** presentation-only (stage 02) — hedges until 2-3 land |
