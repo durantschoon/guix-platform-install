@@ -121,7 +121,7 @@ stop and report **Blocked** rather than decide.
 | 04 | Preserve comments and gexp syntax in config edits | merged (`3a364db`) |
 | 05 | Freeze the bounded one-shot remote-compute contract | merged (`876c35b`) |
 | 06 | Review and reap expired `IN_TEST` resources safely | merged (`f866007`) |
-| 07 | Package, document, and cut the one-shot release candidate | active |
+| 07 | Package, document, and cut the one-shot release candidate | merged (`046d9eb`) |
 | 08 | Retained-instance multi-execution identity and synchronization | deferred, post-release |
 | 09 | MCP tool facade over the retained-instance controller | deferred, post-release |
 

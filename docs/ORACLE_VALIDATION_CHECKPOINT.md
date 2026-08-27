@@ -17,6 +17,12 @@ should be able to resume from this file without relying on chat history.
   and prepare the live release-acceptance checklist. No live action is implied
   by the implementation stage.
 
+- 2026-08-27: Stage 07 was independently reviewed, merged, and its source
+  manifest regenerated (`046d9eb`). Offline packaging and restart rehearsal
+  passed 105 Oracle checks. The implementation stages are complete; the next
+  step is the human-authorized live OV-6 release-acceptance run. No live cloud
+  action has been taken by Stage 07.
+
 - 2026-08-27: OV-6 was narrowed to a releasable one-shot remote-compute
   milestone. Repository stages 05-07 deliver the versioned bounded contract,
   expired-resource lifecycle, and release candidate. Retained-instance task
@@ -136,9 +142,12 @@ the latest loss run is `20260826T235720Z-b317-de56f`. OV-6 is active. Stage 05
 froze the bounded one-shot request/status/result contract and execution limits.
 Stage 06 reviewed and safely reaps expired `IN_TEST` records through the
 existing exact-instance ownership gate. The next implementation unit is
-repository Stage 07: package the bounded one-shot controller, rehearse restart
-from checkpoint, and prepare the live release-acceptance checklist. Retained-instance task
-joining and an MCP facade are explicitly deferred to post-release stages 08-09.
+Stage 07 packaged the bounded one-shot controller, rehearsed restart from
+checkpoint, and prepared the live release-acceptance checklist. The next action
+is a human-authorized live run: execute a declared computation from a hashed
+snapshot, preserve the versioned result/evidence, and confirm the exact
+disposable instance reaches `TERMINATED`. Retained-instance task joining and an
+MCP facade are explicitly deferred to post-release stages 08-09.
 
 OV-3 is complete. It records the declared ownership/scope fields and gates
 both Stage 0 and Stage 1 termination on a fresh exact-instance OCI read. The

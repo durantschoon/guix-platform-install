@@ -69,7 +69,7 @@ This checklist tracks remaining work for the guix-platform-install project.
 - 🚧 OV-6 bounded one-shot remote-compute release
   - Stage 05: versioned one-shot contract and execution bounds (merged)
   - Stage 06: expired `IN_TEST` review/reaper (merged)
-  - Stage 07: packaging, restart rehearsal, and release candidate (active)
+  - Stage 07: packaging, restart rehearsal, and release candidate (merged)
   - Release gate: live hashed computation, attributable result, exact instance
     confirmed `TERMINATED`
   - Deferred post-release: retained-instance task joining and MCP facade
