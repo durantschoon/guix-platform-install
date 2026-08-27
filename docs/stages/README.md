@@ -119,7 +119,7 @@ stop and report **Blocked** rather than decide.
 | 02 | Presentation-only web page for the Oracle flow | merged (`ec5eeee`) |
 | 03 | Oracle first-boot preferences (hostname, timezone, shell) | merged (`f9dff27`) |
 | 04 | Preserve comments and gexp syntax in config edits | merged (`3a364db`) |
-| 05 | Freeze the bounded one-shot remote-compute contract | authored |
+| 05 | Freeze the bounded one-shot remote-compute contract | merged (`876c35b`) |
 | 06 | Review and reap expired `IN_TEST` resources safely | planned |
 | 07 | Package, document, and cut the one-shot release candidate | planned |
 | 08 | Retained-instance multi-execution identity and synchronization | deferred, post-release |
