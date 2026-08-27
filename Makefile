@@ -13,7 +13,9 @@ SUBNET_ID ?= $(ORACLE_SUBNET_ID)
 INSTANCE_ID ?= $(ORACLE_INSTANCE_ID)
 EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
-.PHONY: help test manifest oracle-help oracle-test oracle-auth oracle-inventory
+.PHONY: help test check manifest oracle-help oracle-test oracle-test-all
+.PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
+.PHONY: oracle-test-validation oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
 .PHONY: oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff
 .PHONY: oracle-build-generic oracle-upload-generic oracle-import-generic oracle-timings
@@ -21,10 +23,15 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 help:
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
+	@echo "  make check              Run pre-deploy validation and the complete test suite"
 	@echo "  make manifest           Regenerate SOURCE_MANIFEST.txt"
 	@echo "  make oracle-help        Show Oracle validation targets"
 
 test:
+	./run-tests.sh
+
+check:
+	lib/validate-before-deploy.sh --verbose
 	./run-tests.sh
 
 manifest:
@@ -32,7 +39,12 @@ manifest:
 
 oracle-help:
 	@echo "Read-only/local targets:"
-	@echo "  make oracle-test"
+	@echo "  make oracle-test          # all offline Oracle suites"
+	@echo "  make oracle-test-all      # all four suites; requires Guix"
+	@echo "  make oracle-test-capacity"
+	@echo "  make oracle-test-image    # requires guix"
+	@echo "  make oracle-test-preferences # requires Guix"
+	@echo "  make oracle-test-validation"
 	@echo "  make oracle-auth"
 	@echo "  make oracle-inventory"
 	@echo "  make oracle-timings       # historical median/p90 durations"
@@ -55,6 +67,23 @@ oracle-help:
 	@echo "There is intentionally no generic destroy target."
 
 oracle-test:
+	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-capacity.scm
+	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-validation.scm
+
+oracle-test-all: oracle-test oracle-test-preferences oracle-test-image
+
+oracle-test-capacity:
+	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-capacity.scm
+
+oracle-test-image:
+	@command -v guix >/dev/null 2>&1 || { echo "guix is required for the Oracle image evaluation suite" >&2; exit 2; }
+	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-image.scm
+
+oracle-test-preferences:
+	@command -v guix >/dev/null 2>&1 || { echo "guix is required for the Oracle preferences suite" >&2; exit 2; }
+	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-preferences.scm
+
+oracle-test-validation:
 	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-validation.scm
 
 oracle-auth:

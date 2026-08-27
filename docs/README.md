@@ -44,6 +44,7 @@
 - **[Framework 13 Single-Boot](../framework/README.md)** - Framework 13 (Guix only)
 - **[Framework 13 Dual-Boot](../framework-dual/README.md)** - Framework 13 + Pop!_OS
 - **[Raspberry Pi](../raspberry-pi/README.md)** - Raspberry Pi 3/4/5
+- **[Oracle Cloud](../oracle/README.md)** - Generic image and disposable validation workflow
 
 ## 📚 Reference Documentation (Quick Links)
 
