@@ -115,6 +115,18 @@ Each run receives a collision-resistant ID and a local directory:
 `state.scm` is the native, atomically replaced recovery record. `result.json`
 is the stable machine-readable handoff to an LLM or other caller.
 
+For lifecycle polling, use:
+
+    oracle/scripts/validation-lifecycle.scm status --run-dir DIR --json
+
+This emits one JSON object with schema_version 1, the exact run_id and
+instance_ocid, local_phase, local and remote artifact states,
+remote_lifecycle, and an ownership_match boolean. The JSON shape is the
+stable caller interface; human-oriented status output and evidence files may
+grow without changing it. A restart may resume only a checkpoint whose phase
+is prepared, snapshotted, launching, launched, ssh, or running. Terminal and
+HANDED_OFF checkpoints are intentionally refused.
+
 The source transfer excludes `.git`, `.oracle-validation`, sockets, device
 files, and other paths that cannot be represented by the chosen archive.  The
 record states whether the source came from a clean commit or a working-tree

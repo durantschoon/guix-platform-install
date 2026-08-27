@@ -8,15 +8,16 @@
 (load (string-append %script-directory "/validation-common.scm"))
 
 (define (usage)
-  (die "usage: validation-lifecycle.scm status|logs|collect|stop|cleanup|handoff --run-dir DIR [--yes]"))
+  (die "usage: validation-lifecycle.scm status|logs|collect|stop|cleanup|handoff --run-dir DIR [--yes]; status also accepts --json"))
 
 (define (parse args)
-  (let loop ((rest args) (run-dir #f) (yes? #f))
-    (cond ((null? rest) (values run-dir yes?))
-          ((string=? (car rest) "--yes") (loop (cdr rest) run-dir #t))
+  (let loop ((rest args) (run-dir #f) (yes? #f) (json? #f))
+    (cond ((null? rest) (values run-dir yes? json?))
+          ((string=? (car rest) "--yes") (loop (cdr rest) run-dir #t json?))
+          ((string=? (car rest) "--json") (loop (cdr rest) run-dir yes? #t))
           ((string=? (car rest) "--run-dir")
            (if (null? (cdr rest)) (usage)
-               (loop (cddr rest) (cadr rest) yes?)))
+               (loop (cddr rest) (cadr rest) yes? json?)))
           (else (usage)))))
 
 (define (facts run-dir)
@@ -31,14 +32,16 @@
    state remote operation
    (file-exists? (validation-handoff-marker-path state-path))))
 
-(define (show-status run-dir)
+(define (show-status run-dir json?)
   (call-with-values (lambda () (facts run-dir))
     (lambda (state-path state instance)
       (unless instance (die "run has no instance OCID"))
       (let ((remote (oci-instance-ownership instance))
             (lifecycle (oci-instance-state instance)))
-        (format #t "local:  ~s~%remote: ~s~%lifecycle: ~a~%"
-                state remote lifecycle)))))
+        (if json?
+            (display (validation-status-json state remote lifecycle))
+            (format #t "local:  ~s~%remote: ~s~%lifecycle: ~a~%"
+                    state remote lifecycle))))))
 
 (define (show-logs run-dir)
   "Display only evidence already retained in this exact local run directory."
@@ -122,9 +125,9 @@
   (unless (pair? args) (usage))
   (let ((command (car args)))
     (call-with-values (lambda () (parse (cdr args)))
-      (lambda (run-dir yes?)
+      (lambda (run-dir yes? json?)
         (unless run-dir (usage))
-        (cond ((string=? command "status") (show-status run-dir))
+        (cond ((string=? command "status") (show-status run-dir json?))
               ((string=? command "logs") (show-logs run-dir))
               ((string=? command "collect") (collect run-dir))
               ((string=? command "stop") (stop run-dir yes?))

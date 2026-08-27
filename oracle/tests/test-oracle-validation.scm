@@ -292,6 +292,11 @@
 (check "ownership gate denies an interrupted handoff marker"
        (not (validation-ownership-authorized? ownership-local ownership-remote
                                               'terminate #t)))
+(check "ownership gate refuses mutation after confirmed handoff"
+       (not (validation-ownership-authorized?
+             (acons 'artifact-state "HANDED_OFF" ownership-local)
+             (acons 'artifact-state "HANDED_OFF" ownership-remote)
+             'terminate #f)))
 (check "OCI ownership query is one fresh exact-instance read"
        (let ((source oci-common-source))
          (and (string-contains source "(define (oci-instance-ownership")
@@ -345,6 +350,37 @@
             (string-contains makefile-source "oracle-logs RUN_DIR")
             (string-contains makefile-source "oracle-collect RUN_DIR")
             (string-contains makefile-source "oracle-stop RUN_DIR")))
+
+(check "status exposes an explicit versioned JSON interface"
+       (let ((json (validation-status-json
+                    (acons 'phase 'running ownership-local)
+                    ownership-remote "RUNNING")))
+         (and (string-contains lifecycle-source "status also accepts --json")
+              (string-contains lifecycle-source "validation-status-json")
+              (string-contains json "\"schema_version\":1")
+              (string-contains json "\"local_phase\":\"running\"")
+              (string-contains json "\"remote_lifecycle\":\"RUNNING\"")
+              (string-contains json "\"ownership_match\":true"))))
+
+(let* ((checkpoint-dir (string-append "/tmp/oracle-validation-checkpoint-"
+                                      (number->string (getpid))))
+       (checkpoint (string-append checkpoint-dir "/state.scm"))
+       (state (list (cons 'run-id run-id) (cons 'phase 'running)
+                    (cons 'artifact-state "IN_TEST")
+                    (cons 'resource-type "instance")
+                    (cons 'instance-ocid "ocid1.instance.fixture")
+                    (cons 'operation-scope '(inspect collect-console terminate handoff)))))
+  (system* "mkdir" "-p" checkpoint-dir)
+  (validation-write-state checkpoint state)
+  (let ((reloaded (validation-read-state checkpoint)))
+    (check "restart checkpoint round-trips atomically and remains resumable"
+           (and (equal? reloaded state)
+                (validation-state-restartable? reloaded))))
+  (check "terminal and handed-off checkpoints are not restartable"
+         (and (not (validation-state-restartable?
+                    (validation-state-set state 'phase 'complete)))
+              (not (validation-state-restartable?
+                    (validation-state-set state 'artifact-state "HANDED_OFF"))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Resilient telemetry journal and replay

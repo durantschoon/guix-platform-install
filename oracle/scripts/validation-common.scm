@@ -224,6 +224,46 @@ testable without invoking OCI."
   "Return STATE with KEY replaced exactly once."
   (acons key value (filter (lambda (entry) (not (eq? (car entry) key))) state)))
 
+(define (validation-state-restartable? state)
+  "Whether STATE is a valid local checkpoint for a later controller resume.
+HANDED_OFF and terminal records are deliberately not restartable: resuming
+those would either cross a human boundary or duplicate a completed run."
+  (and (list? state)
+       (equal? (validation-option-ref state 'artifact-state) "IN_TEST")
+       (member (validation-option-ref state 'phase)
+               '(prepared snapshotted launching launched ssh running))))
+
+(define (validation-status-json state remote lifecycle)
+  "Encode the stable, machine-readable status surface for one exact run.
+Only scalar fields are exposed; the full native state and OCI evidence remain
+available in their run files for detailed diagnosis."
+  (let ((field (lambda (facts key default)
+                 (let ((value (and (list? facts)
+                                   (validation-option-ref facts key))))
+                   (if value value default)))))
+    (string-append
+     "{\"schema_version\":1,\"run_id\":"
+     (validation-json-string (field state 'run-id ""))
+     ",\"instance_ocid\":"
+     (validation-json-string (field state 'instance-ocid ""))
+     ",\"local_phase\":"
+     (validation-json-string
+      (let ((phase (field state 'phase "unknown")))
+        (if (symbol? phase) (symbol->string phase) phase)))
+     ",\"artifact_state\":"
+     (validation-json-string (field state 'artifact-state "unknown"))
+     ",\"remote_lifecycle\":"
+     (validation-json-string (if lifecycle lifecycle "unknown"))
+     ",\"remote_artifact_state\":"
+     (validation-json-string (field remote 'artifact-state "unknown"))
+     ",\"ownership_match\":"
+     (if (and (string=? (field state 'run-id "")
+                        (field remote 'run-id ""))
+              (string=? (field state 'instance-ocid "")
+                        (field remote 'instance-ocid "")))
+         "true" "false")
+     "}\n")))
+
 (define (validation-handoff-marker-path state-path)
   (string-append state-path ".handoff"))
 

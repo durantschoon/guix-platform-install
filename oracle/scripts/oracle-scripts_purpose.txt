@@ -56,6 +56,9 @@ for diagnosis, not proof that the cloud resource is still controller-owned.
 validation-lifecycle.scm
                     provides exact-run status/log display, read-only evidence
                     collection, guarded stop/cleanup, and fail-safe handoff.
+                    status --json is the stable scalar interface for callers
+                    that need lifecycle and ownership facts without parsing
+                    human-oriented output; schema version 1 is explicit.
                     Handoff writes the local marker and HANDED_OFF
                     state before changing OCI, then requires a fresh OCI
                     confirmation of exact OCID, run ID, and state. An
