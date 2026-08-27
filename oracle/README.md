@@ -60,6 +60,21 @@ make oracle-stage0
 make oracle-stage1 COMMAND='./run-tests.sh'
 ```
 
+For the bounded release candidate, use the discoverable one-shot target with
+all resource and command inputs explicit:
+
+```sh
+make oracle-run IMAGE_ID=ocid1.image... SUBNET_ID=ocid1.subnet... \
+  SOURCE="$PWD" COMMAND='sha256sum known-good/provenance' YES=--yes
+```
+
+This is still a disposable cloud mutation and writes evidence beneath the
+run directory. `make oracle-resume-check RUN_DIR=...` performs the offline
+restart rehearsal against one exact checkpoint; it never adopts a resource.
+The release gate remains human/live: run a declared computation from the
+hashed snapshot, verify the result names the exact source/run/execution and
+instance identities, and confirm that exact instance reaches `TERMINATED`.
+
 On macOS/ARM, `oracle-build-generic` targets `x86_64-linux` inside the existing
 Guix Docker image. It retains a named build container so a cancelled run can be
 restarted with its populated Guix store layer. It refuses to run while

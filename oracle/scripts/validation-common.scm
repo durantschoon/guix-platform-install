@@ -352,6 +352,27 @@ those would either cross a human boundary or duplicate a completed run."
        (member (validation-option-ref state 'phase)
                '(prepared snapshotted launching launched ssh running))))
 
+(define (validation-checkpoint-resumable? state run-id execution-id instance-ocid)
+  "Accept a restart only when the caller names the exact recorded checkpoint.
+An OCID is required even for early phases: a restart must never discover or
+adopt a resource by display name, inventory, or a guessed run directory."
+  (and (validation-state-restartable? state)
+       (string? run-id) (validation-safe-run-id? run-id)
+       (string? execution-id) (> (string-length execution-id) 0)
+       (equal? run-id (validation-option-ref state 'run-id))
+       (equal? execution-id (validation-option-ref state 'execution-id))
+       (let ((recorded (validation-option-ref state 'instance-ocid))
+             (phase (validation-option-ref state 'phase)))
+         (if recorded
+             (and (string? instance-ocid)
+                  (string-prefix? "ocid1.instance." instance-ocid)
+                  (equal? instance-ocid recorded))
+             ;; Before launch there is no instance identity to adopt. Such a
+             ;; checkpoint may resume preparation only when the caller also
+             ;; supplies no instance; launch-phase records are refused.
+             (and (not instance-ocid)
+                  (member phase '(prepared snapshotted)))))))
+
 (define (validation-status-json state remote lifecycle)
   "Encode the stable, machine-readable status surface for one exact run.
 Only scalar fields are exposed; the full native state and OCI evidence remain

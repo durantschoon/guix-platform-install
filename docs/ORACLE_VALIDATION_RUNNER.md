@@ -26,6 +26,27 @@ The local controller launches the instance, sends an exact source snapshot,
 runs a declared command, incrementally saves output on the local machine,
 collects a result, and terminates the instance.
 
+## Stage 07 one-shot entry point
+
+The release-facing, non-interactive wrapper is the `oracle-run` Make target.
+It keeps every cloud resource and guest command explicit while preserving the
+controller's bounded policy and guarded cleanup:
+
+```sh
+make oracle-run IMAGE_ID=ocid1.image... SUBNET_ID=ocid1.subnet... \
+  SOURCE="$PWD" COMMAND='sha256sum known-good/provenance'
+```
+
+`YES=--yes` is required for unattended use; it does not bypass ownership
+checks. The run directory under `.oracle-validation/runs/` contains the
+request, source hash, exact execution and instance identities, result, output,
+telemetry, lifecycle, and console evidence. `make oracle-resume-check
+RUN_DIR=...` is a read-only exact-checkpoint inspection for a restart rehearsal.
+Only non-terminal `IN_TEST` checkpoints with the caller-supplied exact run,
+execution, and instance identities are eligible; terminal, handed-off,
+malformed, or ambiguous records are refused. This stage rehearses that
+decision offline; it does not claim a live restart or OV-6 completion.
+
 This is a validation executor, not a remote autonomous agent.  Builds, tests,
 polling, transfer, and logging are deterministic programs.  The model that
 writes code consumes only the summarized result and evidence paths.  See

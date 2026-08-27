@@ -402,3 +402,18 @@ Statement of omission: this stage adds no lifecycle state, automatic instance
 retention, synchronization, task joining, daemon, MCP server, implicit command
 allowlist, credential forwarding, or cloud mutation path.  Those change the
 controller architecture and remain deferred.
+
+STAGE 07 RELEASE-CANDIDATE PACKAGING
+
+The `oracle-run` Make target is a stable, discoverable wrapper around the
+existing `validate.scm start` controller. It deliberately forwards IMAGE_ID,
+SUBNET_ID, SOURCE, and COMMAND rather than inventing defaults for cloud
+resources or guest work. `oracle-resume-check` is read-only status inspection
+for the exact local run directory; the pure `validation-checkpoint-resumable?`
+predicate is the offline rehearsal boundary and requires matching run,
+execution, and instance identities.
+
+Statement of omission: Stage 07 does not add a second controller, automatic
+restart, retained instances, a daemon, task joining, MCP facade, inventory
+adoption, or live OCI acceptance. The release gate remains a human-verified
+run from a hashed snapshot followed by exact-instance termination evidence.

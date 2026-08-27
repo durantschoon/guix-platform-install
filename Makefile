@@ -17,6 +17,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
+.PHONY: oracle-run oracle-one-shot oracle-resume-check
 .PHONY: oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff
 .PHONY: oracle-build-generic oracle-upload-generic oracle-import-generic oracle-timings
 
@@ -57,6 +58,8 @@ oracle-help:
 	@echo "  make oracle-import-generic # resumable custom-image import and waiter"
 	@echo "  make oracle-stage0        # IMAGE_ID/SUBNET_ID default from .env"
 	@echo "  make oracle-stage1 COMMAND='./run-tests.sh'"
+	@echo "  make oracle-run IMAGE_ID=... SUBNET_ID=... SOURCE=. COMMAND='make check'"
+	@echo "  make oracle-resume-check RUN_DIR=.oracle-validation/runs/..."
 	@echo "  make oracle-run-status RUN_DIR=.oracle-validation/runs/..."
 	@echo "  make oracle-logs RUN_DIR=.oracle-validation/runs/..."
 	@echo "  make oracle-collect RUN_DIR=.oracle-validation/runs/..."
@@ -135,7 +138,29 @@ oracle-stage1:
 	$(GUILE) --no-auto-compile -s oracle/scripts/validate.scm start \
 		--image-id '$(IMAGE_ID)' --subnet-id '$(SUBNET_ID)' \
 		--source '$(SOURCE)' --command '$(COMMAND)' $(KEEP) \
+	$(if $(FORCE_DISCONNECT_AFTER),--force-disconnect-after '$(FORCE_DISCONNECT_AFTER)',) $(YES)
+
+# Stable release-facing alias: all cloud inputs and the guest command remain
+# explicit, while the underlying controller retains its bounded one-shot and
+# ownership-gated cleanup behavior.
+oracle-run oracle-one-shot:
+	@test -n "$(IMAGE_ID)" || { echo "IMAGE_ID is required" >&2; exit 2; }
+	@test -n "$(SUBNET_ID)" || { echo "SUBNET_ID is required" >&2; exit 2; }
+	@test -n "$(SOURCE)" || { echo "SOURCE is required" >&2; exit 2; }
+	@test -n "$(COMMAND)" || { echo "COMMAND is required" >&2; exit 2; }
+	oracle/scripts/run-timed.sh oracle-one-shot \
+	$(GUILE) --no-auto-compile -s oracle/scripts/validate.scm start \
+		--image-id '$(IMAGE_ID)' --subnet-id '$(SUBNET_ID)' \
+		--source '$(SOURCE)' --command '$(COMMAND)' $(KEEP) \
 		$(if $(FORCE_DISCONNECT_AFTER),--force-disconnect-after '$(FORCE_DISCONNECT_AFTER)',) $(YES)
+
+# Read-only reminder for a human/operator holding an exact checkpoint.  The
+# actual continuation remains in the controller; this target never guesses or
+# mutates OCI resources.
+oracle-resume-check:
+	@test -n "$(RUN_DIR)" || { echo "RUN_DIR is required" >&2; exit 2; }
+	$(GUILE) --no-auto-compile -s oracle/scripts/validation-lifecycle.scm \
+		status --run-dir '$(RUN_DIR)' --json
 
 oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff:
 	@test -n "$(RUN_DIR)" || { echo "RUN_DIR is required" >&2; exit 2; }

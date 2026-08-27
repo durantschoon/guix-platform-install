@@ -761,6 +761,62 @@
             (not (string-contains lifecycle-source "daemon"))
             (string-contains lifecycle-source "immediate local checkpoint directories")))
 
+;;; ---------------------------------------------------------------------------
+;;; Stage 07 packaged one-shot and exact restart rehearsal
+
+(define stage7-checkpoint
+  `((schema . 1) (kind . oracle-validation)
+    (run-id . "20260827T120000Z-stage7") (execution-id . "exec-stage7")
+    (artifact-state . "IN_TEST") (resource-type . "instance")
+    (phase . running) (instance-ocid . "ocid1.instance.stage7")
+    (source-sha256 . "sha-stage7") (operation-scope . (terminate))))
+
+(check "packaged one-shot target forwards explicit cloud and guest inputs"
+       (and (string-contains makefile-source "oracle-run oracle-one-shot")
+            (string-contains makefile-source "--image-id '$(IMAGE_ID)'")
+            (string-contains makefile-source "--subnet-id '$(SUBNET_ID)'")
+            (string-contains makefile-source "--source '$(SOURCE)'")
+            (string-contains makefile-source "--command '$(COMMAND)'")
+            (not (string-contains makefile-source "PRIVATE"))))
+(check "restart rehearsal accepts only exact resumable identity"
+       (and (validation-checkpoint-resumable?
+             stage7-checkpoint "20260827T120000Z-stage7" "exec-stage7"
+             "ocid1.instance.stage7")
+            (not (validation-checkpoint-resumable?
+                  stage7-checkpoint "20260827T120000Z-other" "exec-stage7"
+                  "ocid1.instance.stage7"))
+            (not (validation-checkpoint-resumable?
+                  stage7-checkpoint "20260827T120000Z-stage7" "exec-other"
+                  "ocid1.instance.stage7"))
+            (not (validation-checkpoint-resumable?
+                  stage7-checkpoint "20260827T120000Z-stage7" "exec-stage7"
+                  "ocid1.instance.other"))))
+(check "pre-launch restart does not invent an instance identity"
+       (let ((prepared (validation-state-set
+                        (validation-state-set stage7-checkpoint 'phase 'prepared)
+                        'instance-ocid #f)))
+         (and (validation-checkpoint-resumable?
+               prepared "20260827T120000Z-stage7" "exec-stage7" #f)
+              (not (validation-checkpoint-resumable?
+                    prepared "20260827T120000Z-stage7" "exec-stage7"
+                    "ocid1.instance.guess")))))
+(check "restart rehearsal refuses terminal, handed-off, malformed, and ambiguous records"
+       (and (not (validation-checkpoint-resumable?
+                  (validation-state-set stage7-checkpoint 'phase 'complete)
+                  "20260827T120000Z-stage7" "exec-stage7" "ocid1.instance.stage7"))
+            (not (validation-checkpoint-resumable?
+                  (validation-state-set stage7-checkpoint 'artifact-state "HANDED_OFF")
+                  "20260827T120000Z-stage7" "exec-stage7" "ocid1.instance.stage7"))
+            (not (validation-checkpoint-resumable?
+                  (validation-state-set stage7-checkpoint 'execution-id #f)
+                  "20260827T120000Z-stage7" "exec-stage7" "ocid1.instance.stage7"))
+            (not (validation-checkpoint-resumable?
+                  stage7-checkpoint "20260827T120000Z-stage7" "" "ocid1.instance.stage7"))))
+(check "Stage 07 source keeps one-shot boundaries and excludes expansion paths"
+       (and (not (string-contains validate-source "mcp"))
+            (not (string-contains validate-source "daemon"))
+            (not (string-contains validate-source "instance stop"))))
+
 (newline)
 (if (zero? failures)
     (begin
