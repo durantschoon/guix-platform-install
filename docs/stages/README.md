@@ -128,9 +128,11 @@ stop and report **Blocked** rather than decide.
 | 11 | Declarative system service helper and configuration tests (`(gips service)`) | planned, GIPS subsystem |
 | 12 | Multi-node disposable cloud validation for GIPS substitutes | planned, GIPS subsystem |
 | 13 | Personal multi-machine binary substitute sync automation | planned, GIPS subsystem |
+| 14 | GIPS swarm telemetry, live terminal monitor, and dashboard service | planned, GIPS subsystem |
+| 15 | Transitive web-of-trust evaluation and cryptographic fraud proof gossip | planned, GIPS subsystem |
 
 Stages 05-07 form the one-shot Oracle validation release path. Stages 08-09 are
-the deferred retained-instance and MCP facades. Stages 10-13 form the GIPS
+the deferred retained-instance and MCP facades. Stages 10-15 form the GIPS
 peer-to-peer substitute mirror and multi-machine sync subsystem. Each stage
 follows the single global numbering sequence, worktree isolation, and strict
 pre-deployment gate verification.

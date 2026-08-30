@@ -24,7 +24,7 @@ Integrating `(gips service)` with Guix System's `operating-system` declaration a
 
 - Guile for all configuration helpers, transformations, and tests.
 - ASCII-only terminal messages (`[OK]`, `[WARN]`, `[ERROR]`).
-- Strict comment and formatting preservation: no loss of inline comments or #~ gexp syntax during configuration file edits.
+- Strict comment and formatting preservation: no loss of inline comments or `#~` gexp syntax during configuration file edits.
 - Idempotent transformations: running the helper on a configuration that already has GIPS configured must make no modifications.
 - Do not edit `CHECKLIST.md` or `SOURCE_MANIFEST.txt`; the coordinator owns shared registration files.
 
@@ -39,6 +39,14 @@ postinstall/CUSTOMIZATION.md
 docs/stages/stage-11-REPORT.md
 ```
 
+## Tests (enumerated — all required)
+
+1. `has-gips-service?` returns `#f` for minimal configs and `#t` once the GIPS service is attached.
+2. `add-gips-service` attaches `(service gips-service-type ...)` without re-formatting unrelated services.
+3. Adding the GIPS service preserves surrounding S-expressions, inline comments, and `#~` gexp syntax.
+4. Repeated invocations of `add-gips-service` are idempotent and do not insert duplicate service declarations.
+5. All 15 existing verdicts in `gips/test_api.scm` and all 4 verdicts in `gips/test_sign.scm` remain green.
+
 ## Definition of Done
 
 ```sh
@@ -47,8 +55,22 @@ make gips-test                            # exit 0; all Scheme API and service t
 git diff --check                         # exit 0
 ```
 
-## Commit message
+## Commit message (exact, single line)
 
 ```
 feat(gips): add declarative system service helper and configuration tests
 ```
+
+## Report requirements
+
+Write `docs/stages/stage-11-REPORT.md` with:
+- Summary of changes per file.
+- Example input and output `config.scm` transformations.
+- Comment and gexp preservation verification.
+- Pasted gate output.
+- Whitelist audit.
+- Unverified claims section.
+
+## Blocked protocol
+
+If configuration transformation cannot guarantee comment preservation, or if S-expression serialization introduces formatting drift, stop and report `Blocked:`. Do not silently strip comments or overwrite user configuration files without preservation.
