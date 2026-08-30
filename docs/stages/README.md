@@ -124,12 +124,12 @@ stop and report **Blocked** rather than decide.
 | 07 | Package, document, and cut the one-shot release candidate | merged (`046d9eb`) |
 | 08 | Retained-instance multi-execution identity and synchronization | planned, OV-backed post-release |
 | 09 | MCP tool facade over the retained-instance controller | planned, OV-backed post-release |
-| 10 | GNU Guix IPFS Package Substitutes (GIPS) subsystem integration | completed (`feat/integrate-gips`) |
-| 11 | Declarative system service helper and configuration tests (`(gips service)`) | planned, GIPS subsystem |
-| 12 | Multi-node disposable cloud validation for GIPS substitutes | planned, GIPS subsystem |
-| 13 | Personal multi-machine binary substitute sync automation | planned, GIPS subsystem |
-| 14 | GIPS swarm telemetry, live terminal monitor, and dashboard service | planned, GIPS subsystem |
-| 15 | Transitive web-of-trust evaluation and cryptographic fraud proof gossip | planned, GIPS subsystem |
+| 10 | GNU Guix IPFS Package Substitutes (GIPS) subsystem integration | merged (`5836ced`) |
+| 11 | Declarative system service helper and configuration tests (`(gips service)`) | merged (`4f4073c`) |
+| 12 | Multi-node disposable cloud validation for GIPS substitutes | merged (`78e8b26`) |
+| 13 | Personal multi-machine binary substitute sync automation | merged (`fd3c521`) |
+| 14 | GIPS swarm telemetry, live terminal monitor, and dashboard service | merged (`24841e0`) |
+| 15 | Transitive web-of-trust evaluation and cryptographic fraud proof gossip | merged (`8d80f63`) |
 
 Stages 05-07 form the one-shot Oracle validation release path. Stages 08-09 are
 the deferred retained-instance and MCP facades. Stages 10-15 form the GIPS

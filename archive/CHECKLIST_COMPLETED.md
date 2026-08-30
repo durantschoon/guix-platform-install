@@ -2,12 +2,14 @@
 
 This archive contains all completed items from CHECKLIST.md, listed with newest items at the top.
 
-**Last Updated:** 2026-08-05
+**Last Updated:** 2026-08-30
 
 ---
 
 ## 2026-08-03
 
+- ✅ **Postinstall Desktop Switch Fixed (2026-08-03)**: `add_desktop` used to `sed` `%base-services` → `%desktop-services` and stop. `%desktop-services` is a **superset**, so the network-manager/wpa-supplicant/dbus/polkit/ntp that a minimal config lists explicitly then existed twice — verified against a real framework-dual config, the build fails with `more than one target service of type 'dbus'`. Worse, the old warning told you to delete the explicit NetworkManager, which would silently take its DNS block with it. Replaced with `guile-config-helper.scm switch-to-desktop`, which works on parsed S-expressions: it switches the base, drops services the new base provides, and rewrites any that carried a configuration record into `modify-services` clauses with `(inherit config)`. Guarded by Test 6 in `postinstall/tests/run-guile-tests.sh`, confirmed to fail against the old sed-only output.
+- ✅ **DNS That Survives a Reconnect (2026-08-03)**: The generated config ships `[global-dns-domain-*]` to `/etc/NetworkManager/conf.d/dns.conf` via the service's `extra-configuration-files` field, so a fresh install has working name resolution before anyone logs in. Found on hardware: after a reboot the machine had connectivity but an unusable `/etc/resolv.conf`, so `guix pull` died in `getaddrinfo` — **and reported the nonguix channel as untrusted**, because a channel introduction is verified against the `keyring` branch of a repo that could not be cloned. One fault, two messages, and the louder one sends you auditing signing keys. Hand-editing `resolv.conf` is only a reprieve; NetworkManager rewrites it on re-association. **Tradeoff:** this overrides DHCP-supplied servers, so split-horizon DNS breaks — opt-out documented in `03-config-dual-boot_purpose.txt`. Guarded by `TestGenerateMinimalConfig_DNS`; diagnosis ladder in [docs/RECOVERY_REBUILD_FROM_HOST_OS.md](docs/RECOVERY_REBUILD_FROM_HOST_OS.md).
 - ✅ **Readable Console Font on the Framework 13 Panel (2026-08-03)**: The generated config now sets `solar24x32` on tty1-tty6, overriding `%default-console-font` (Unifont-APL8x16, ~1.5 mm cap height on a 2256x1504 13.5" display). This matters most when the desktop is not up and you are reading an error. Done via `modify-services`, **not** a second `(service console-font-service-type ...)` — `%base-services` already instantiates that type, so a second instance collides on the shepherd provisions `console-font-tty1`..`tty6`. Also corrected [docs/CONSOLE_FONT_TIPS.md](../docs/CONSOLE_FONT_TIPS.md), which recommended `ter-v32n`/`ter-v32b`: those live in `font-terminus`, not `kbd`, and naming a font `kbd` does not ship fails silently at boot. Guarded by `TestGenerateMinimalConfig_ConsoleFont`.
 
 ---

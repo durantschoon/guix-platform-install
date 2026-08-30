@@ -32,13 +32,17 @@ Oracle Cloud, configured the way they like.
   accessed with a key supplied only through OCI metadata. The one-shot remote
   validator has live pass/fail, reconnect/replay, telemetry, permanent-loss,
   ownership-gate, and exact-instance cleanup evidence.
-- **In flight**: OV-6, the bounded one-shot remote-compute release. Repository
-  stage 05 is merged, stage 06 is authored, and stage 07 is planned. The release
-  gate is a live hashed computation with attributable output and the exact
-  instance confirmed `TERMINATED`.
+- **Done**: OV-6, the bounded one-shot remote-compute release (Stages 05–07 merged;
+  live acceptance passed with attributable hashed computation and exact instance
+  confirmed `TERMINATED`).
+- **Done**: GIPS (GNU Guix IPFS Package Substitutes) peer-to-peer substitute mirror
+  and multi-machine sync subsystem (Stages 10–15 merged; includes Rust daemon/CLI,
+  Guile Scheme API with REPL parity, declarative `(gips service)` system service,
+  disposable cloud validation harness, personal sync recipe, telemetry monitor,
+  and transitive Web-of-Trust with cryptographic fraud proof gossip).
+- **In flight / Planned next**: Retained-instance multi-execution identity (Stage 08)
+  and MCP tool facade (Stage 09).
 - **Friend-facing remainder**: the console-only walkthrough and screenshots.
-  Retained-instance execution and an MCP facade are intentionally deferred
-  until after the one-shot release.
 
 ## Not in git, and easy to miss
 
