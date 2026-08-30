@@ -44,6 +44,8 @@ manifest:
 
 gips-test:
 	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --self-test
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/personal-sync.scm --self-test
+	$(GUILE) --no-auto-compile -s postinstall/tests/test-personal-sync.scm
 	$(GUILE) --no-auto-compile -s gips/test_api.scm
 	$(GUILE) --no-auto-compile -s gips/test_sign.scm
 

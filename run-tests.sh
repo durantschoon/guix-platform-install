@@ -133,6 +133,30 @@ if command -v guile &> /dev/null; then
         echo
     fi
 
+    if [ -f "postinstall/recipes/add/personal-sync.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Personal Sync Recipe...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s postinstall/recipes/add/personal-sync.scm --self-test; then
+            echo -e "${GREEN}[OK] GIPS personal-sync self-tests passed${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS personal-sync self-tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
+    if [ -f "postinstall/tests/test-personal-sync.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Personal Sync Suite...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s postinstall/tests/test-personal-sync.scm; then
+            echo -e "${GREEN}[OK] GIPS personal-sync suite passed${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS personal-sync suite failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
     if [ -f "gips/test_api.scm" ]; then
         echo -e "${YELLOW}Testing GIPS Scheme API Suite...${NC}"
         echo "----------------------------------------"

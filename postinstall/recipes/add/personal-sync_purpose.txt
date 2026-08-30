@@ -1,0 +1,28 @@
+postinstall/recipes/add/personal-sync.scm -- purpose and justification
+========================================================================
+
+What this file is for
+---------------------
+Provides an automated post-installation synchronization orchestration helper for
+operators managing personal clusters of GNU Guix machines (Framework laptops,
+workstations, home servers, and cloud VPS instances).
+
+It coordinates:
+1. GNS identity record advertisement (mapping peer public keys and IPFS multiaddrs).
+2. Local profile store path reference resolution for GIPS snapshot publishing.
+3. Peer signing key discovery and Guix ACL authorization (/etc/guix/acl).
+
+Interactive vs Headless Mode
+----------------------------
+Reads interactive selections from /dev/tty so that pipes (such as curl ... | guile)
+do not consume the script itself. Supports non-interactive flags (--self-test,
+--status) for headless automation and CI/CD pipelines.
+
+Statements of Omission
+----------------------
+1. Does NOT establish centralized registry servers: peer discovery remains strictly
+   peer-to-peer over GNS records and IPFS DHT swarms.
+2. Does NOT delete or replace existing store paths without verification: substitute
+   ingestion remains guarded by Guix daemon cryptographic hash and signature checks.
+3. Does NOT store credentials or private keys in world-readable paths: all keys
+   and tokens adhere to strict 0600 file modes and 0700 private directories.
