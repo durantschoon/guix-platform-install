@@ -90,6 +90,7 @@ oracle-help:
 oracle-test:
 	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-capacity.scm
 	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-validation.scm
+	$(GUILE) --no-auto-compile -s oracle/tests/test-gips-cloud-validation.scm
 
 oracle-test-all: oracle-test oracle-test-preferences oracle-test-image
 

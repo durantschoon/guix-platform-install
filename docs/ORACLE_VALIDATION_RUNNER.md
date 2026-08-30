@@ -47,6 +47,15 @@ execution, and instance identities are eligible; terminal, handed-off,
 malformed, or ambiguous records are refused. This stage rehearses that
 decision offline; it does not claim a live restart or OV-6 completion.
 
+### GIPS Substitute Cloud Validation Workload (Stage 12)
+
+Stage 12 defines a reproducible validation workload (`oracle/scripts/gips-validation-workload.scm`) that validates GIPS Scheme APIs, Narinfo Ed25519 signing, and post-install recipes in disposable cloud instances:
+
+```sh
+make oracle-run IMAGE_ID=ocid1.image... SUBNET_ID=ocid1.subnet... \
+  SOURCE="$PWD" COMMAND='guile --no-auto-compile -s gips/test_api.scm && guile --no-auto-compile -s gips/test_sign.scm'
+```
+
 This is a validation executor, not a remote autonomous agent.  Builds, tests,
 polling, transfer, and logging are deterministic programs.  The model that
 writes code consumes only the summarized result and evidence paths.  See

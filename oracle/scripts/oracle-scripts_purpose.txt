@@ -413,7 +413,27 @@ for the exact local run directory; the pure `validation-checkpoint-resumable?`
 predicate is the offline rehearsal boundary and requires matching run,
 execution, and instance identities.
 
-Statement of omission: Stage 07 does not add a second controller, automatic
+STATEMENT OF OMISSION: Stage 07 does not add a second controller, automatic
 restart, retained instances, a daemon, task joining, MCP facade, inventory
 adoption, or live OCI acceptance. The release gate remains a human-verified
 run from a hashed snapshot followed by exact-instance termination evidence.
+
+========================================================================
+gips-validation-workload.scm (Stage 12)
+========================================================================
+Defines the deterministic guest workload and result parser for validating GIPS
+substitute publishing, narinfo signing, and retrieval on disposable cloud
+instances.
+
+The workload runs inside the disposable guest VM beneath the OV-6 validation
+controller, executing Scheme API and Narinfo signing verification suites in an
+isolated temporary workspace (`/tmp/gips-val-<run-id>`).
+
+parse-gips-validation-result extracts structured facts (status, verdict counts,
+exit code, failure class, and schema version) and maps them into versioned JSON
+telemetry without credential or key fixtures.
+
+Statement of omission: gips-validation-workload.scm does not mutate cloud
+resources, establish persistent firewall exceptions, or weaken OV-3 fresh
+ownership and disposable instance lifecycle termination gates.
+
