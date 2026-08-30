@@ -699,6 +699,20 @@ If the autostart script exists but keyboard layout isn't being applied in GNOME:
    sudo guix system reconfigure /etc/config.scm
    ```
 
+4. **Swarm Monitoring and Telemetry Operations:**
+   - **Terminal Swarm Monitor:**
+     ```bash
+     guile postinstall/recipes/add/gips.scm --monitor
+     # or JSON output:
+     guile postinstall/recipes/add/gips.scm --monitor-json
+     ```
+   - **Web Telemetry Dashboard:**
+     Point your browser to `http://127.0.0.1:8080/dashboard` to inspect live IPFS fetching latency, cache hit ratios, and gossip mesh throughput.
+   - **Prometheus Metrics Scraper:**
+     ```bash
+     curl -s http://127.0.0.1:8080/metrics?format=prometheus
+     ```
+
 ---
 
 ## Further Reading

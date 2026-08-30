@@ -137,7 +137,10 @@ Features that started as roadmap items and now work:
 * **Objective Cryptographic Fraud Proofs & Revocation**: objective, portable fraud proofs (`gips fraud-proof generate`, `verify`, `submit`, `list`) for `HashMismatch` and `Equivocation` mathematically slash and blacklist rogue publishers without central authorities.
 * **Transitive WoT Evaluation**: `gips trust evaluate` dynamically calculates reputation scores across multi-hop delegation chains with stake decay and instant fraud proof severing.
 * **Automated PubSub Gossip Propagation**: background gossip daemon broadcasts and ingests vouches over `gips.vouch.v1` and fraud proofs over `gips.fraud.v1` (`gips gossip status`).
-* **Live Swarm & Node Monitor**: terminal monitoring dashboard (`gips monitor [--once] [--watch] [--json]`) for real-time peering, message throughput, and substitute latency.
+* **Live Swarm & Node Monitor**: terminal monitoring dashboard (`gips monitor [--once] [--watch] [--json]` or `guile postinstall/recipes/add/gips.scm --monitor`) for real-time peering, message throughput, and substitute latency.
+* **Embedded Telemetry Dashboard**: single-page telemetry web UI served directly at `http://127.0.0.1:8080/dashboard` with strict Content Security Policy (`default-src 'none'; connect-src 'self'`).
+* **Unauthenticated Metrics Endpoints**: read-only metric telemetry endpoints at `GET /metrics` (JSON), `GET /metrics?format=prometheus` (Prometheus 0.0.4 text format), and `GET /metrics/history` (SQLite-backed rolling percentiles).
+* **Declarative Dashboard System Service**: configure `<gips-configuration>` in `/etc/config.scm` with `#:dashboard? #t` to enable automated telemetry serving.
 * **Privacy-Preserving Substitute Queries**: $k$-anonymity store path prefix queries (`gips search-prefix <prefix>`) and compact Bloom filter substitute summaries (`/substitute/filter`).
 * **Direct UnixFS Directory Publishing**: native support for publishing `/gnu/store/` directory trees to IPFS directly as UnixFS DAG hierarchies (`gips publish-tree`) with on-the-fly streaming NAR synthesis.
 * **Complete Offline Snapshot Lifecycle (Plan C)**: `gips snapshot create` (from Guix manifests), `gips snapshot list`, `gips snapshot import` (by CID), and `gips snapshot export` (streaming `.tar` bundles for air-gapped transport).
@@ -147,6 +150,39 @@ Features that started as roadmap items and now work:
 * **`link-channel`, `pin`, `unpin`**: real CLI commands backed by authenticated daemon endpoints.
 * **Guix System Service Definition**: declarative `(gips service)` module providing `<gips-configuration>` and `gips-service-type` for Shepherd daemon management in `/etc/config.scm`.
 * **Standalone GNU Guix Package (`gips.scm`)**: declarative `(gips package)` module and root `gips.scm` entrypoint for building via `guix build -f gips.scm` or `guix shell -f gips.scm`.
+
+## Swarm Telemetry & Dashboard Operations
+
+### 1. Terminal Swarm Monitor
+
+Inspect node health, connected gossip peers, active PubSub topics, vouches, and substitute requests in real time:
+
+```bash
+# Snapshot mode
+gips monitor --once
+
+# Structured JSON telemetry for monitoring daemons
+gips monitor --once --json
+
+# Post-install recipe wrapper
+guile postinstall/recipes/add/gips.scm --monitor
+```
+
+### 2. Web Telemetry Dashboard
+
+Open your browser to `http://127.0.0.1:8080/dashboard` to view live comparative charts:
+- IPFS Nar fetch vs. baseline Guix publish latency distributions
+- SQLite query latencies and active cache hit rates
+- Gossip topic message throughput and active fraud proof revocations
+- Real-time rolling metrics history (7-day SQLite rolling window)
+
+### 3. Metric Export for Daemons
+
+Scrape Prometheus metrics without authentication:
+
+```bash
+curl -s http://127.0.0.1:8080/metrics?format=prometheus
+```
 
 ## Upcoming Features & Roadmap
 

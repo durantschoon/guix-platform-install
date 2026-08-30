@@ -16,6 +16,7 @@
             gips-configuration-user
             gips-configuration-group
             gips-configuration-auto-start?
+            gips-configuration-dashboard?
             gips-configuration-toml
             gips-shepherd-service-spec
             gips-activation-script
@@ -23,14 +24,15 @@
 
 ;;; Record representing the full Guix System service configuration for GIPS.
 (define-record-type <gips-configuration>
-  (%make-gips-configuration package gipsd-config log-file user group auto-start?)
+  (%make-gips-configuration package gipsd-config log-file user group auto-start? dashboard?)
   gips-configuration?
   (package        gips-configuration-package)
   (gipsd-config   gips-configuration-gipsd-config)
   (log-file       gips-configuration-log-file)
   (user           gips-configuration-user)
   (group          gips-configuration-group)
-  (auto-start?    gips-configuration-auto-start?))
+  (auto-start?    gips-configuration-auto-start?)
+  (dashboard?     gips-configuration-dashboard?))
 
 (define* (gips-configuration #:key
                              (package #f)
@@ -39,11 +41,13 @@
                              (log-file "/var/log/gipsd.log")
                              (user "gips")
                              (group "gips")
-                             (auto-start? #t))
+                             (auto-start? #t)
+                             (dashboard? #t))
   "Construct a <gips-configuration> record.
 GIPSD-CONFIG must be a <gipsd-configuration> record from (gips config).
 LOG-FILE is where daemon stdout/stderr will be redirected.
-USER and GROUP specify the system account under which gipsd runs."
+USER and GROUP specify the system account under which gipsd runs.
+DASHBOARD? enables the embedded telemetry dashboard at /dashboard."
   (unless (gipsd-configuration? gipsd-config)
     (error "gips-configuration: #:gipsd-config must be a <gipsd-configuration>"
            gipsd-config))
@@ -53,7 +57,7 @@ USER and GROUP specify the system account under which gipsd runs."
     (error "gips-configuration: #:user must be a string" user))
   (unless (string? group)
     (error "gips-configuration: #:group must be a string" group))
-  (%make-gips-configuration package gipsd-config log-file user group (and auto-start? #t)))
+  (%make-gips-configuration package gipsd-config log-file user group (and auto-start? #t) (and dashboard? #t)))
 
 ;;; Generate the configuration TOML file content for this service instance.
 (define (gips-configuration-toml config)
@@ -72,7 +76,8 @@ USER and GROUP specify the system account under which gipsd runs."
       (listen ,(gipsd-configuration-listen gconfig))
       (db-path ,(gipsd-configuration-db-path gconfig))
       (ipfs-api ,(gipsd-configuration-ipfs-api gconfig))
-      (gossip-transport ,(gipsd-configuration-gossip-transport gconfig)))))
+      (gossip-transport ,(gipsd-configuration-gossip-transport gconfig))
+      (dashboard? ,(gips-configuration-dashboard? config)))))
 
 ;;; Activation script actions (creating directories and establishing owner-only permissions).
 (define (gips-activation-script config)

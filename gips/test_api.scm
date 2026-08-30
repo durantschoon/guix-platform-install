@@ -588,7 +588,7 @@
              (not (gips-key-acl-check #:acl-file acl-path #:key "9999999999999999999999999999999999999999999999999999999999999999")))))
 
   ;; -------------------------------------------------------------------------
-  (verdict 11 "Terminal swarm monitor (gips monitor / (gips-monitor))")
+  (verdict 11 "Terminal swarm monitor & telemetry (gips monitor, /metrics, /metrics/history)")
   (call-with-values
       (lambda ()
         (start-mock-server
@@ -598,6 +598,10 @@
              "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 172\r\nConnection: close\r\n\r\n{\"ok\":true,\"topics\":[\"gips.vouch.v1\",\"gips.fraud.v1\"],\"vouches_received\":0,\"vouches_accepted\":0,\"vouches_rejected\":0,\"fraud_proofs_received\":0,\"fraud_proofs_accepted\":0,\"fraud_proofs_rejected\":0}")
             ((string-contains req-line "/status")
              "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}")
+            ((string-contains req-line "format=prometheus")
+             "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 44\r\nConnection: close\r\n\r\n# HELP gips_requests\ngips_requests_total 42\n")
+            ((string-contains req-line "/metrics/history")
+             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 64\r\nConnection: close\r\n\r\n[{\"timestamp\":1700000000,\"metrics_json\":\"{\\\"requests_total\\\":42}\"}]")
             ((string-contains req-line "/metrics")
              "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 21\r\nConnection: close\r\n\r\n{\"requests_total\":42}")
             ((string-contains req-line "/fraud-proof/list")
@@ -611,7 +615,7 @@
             (begin
               ;; Handle concurrent requests
               (let loop ((count 0))
-                (when (< count 8)
+                (when (< count 16)
                   (catch #t
                     (lambda ()
                       (accept-and-handle sock (lambda (req h b)
@@ -620,6 +624,10 @@
                                                   "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 172\r\nConnection: close\r\n\r\n{\"ok\":true,\"topics\":[\"gips.vouch.v1\",\"gips.fraud.v1\"],\"vouches_received\":0,\"vouches_accepted\":0,\"vouches_rejected\":0,\"fraud_proofs_received\":0,\"fraud_proofs_accepted\":0,\"fraud_proofs_rejected\":0}")
                                                  ((string-contains req "/status")
                                                   "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}")
+                                                 ((string-contains req "format=prometheus")
+                                                  "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 44\r\nConnection: close\r\n\r\n# HELP gips_requests\ngips_requests_total 42\n")
+                                                 ((string-contains req "/metrics/history")
+                                                  "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 64\r\nConnection: close\r\n\r\n[{\"timestamp\":1700000000,\"metrics_json\":\"{\\\"requests_total\\\":42}\"}]")
                                                  ((string-contains req "/metrics")
                                                   "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 21\r\nConnection: close\r\n\r\n{\"requests_total\":42}")
                                                  ((string-contains req "/fraud-proof/list")
@@ -631,10 +639,19 @@
                       (primitive-exit 0)))))
               (primitive-exit 0))
             (begin
-              (let* ((text-snapshot (gips-monitor #:once? #t))
+              (let* ((metrics-json (gips-metrics))
+                     (metrics-prom (gips-metrics #:prometheus? #t))
+                     (metrics-hist (gips-metrics-history))
+                     (text-snapshot (gips-monitor #:once? #t))
                      (json-snapshot (gips-monitor #:once? #t #:json? #t)))
                 (waitpid pid)
                 (close-port sock)
+                (check "gips-metrics parses JSON metrics payload"
+                       (string-contains metrics-json "\"requests_total\":42"))
+                (check "gips-metrics with #:prometheus? #t emits prometheus format"
+                       (string-contains metrics-prom "gips_requests_total 42"))
+                (check "gips-metrics-history retrieves history payload"
+                       (string-contains metrics-hist "\"timestamp\":1700000000"))
                 (check "gips-monitor prints formatted ASCII dashboard"
                        (and (string-contains text-snapshot "GIPS SWARM & NODE MONITOR")
                             (string-contains text-snapshot "Active Topics:")))
@@ -717,9 +734,11 @@
            (and (string-contains toml "listen = \"0.0.0.0:8080\"")
                 (string-contains toml "db_path = \"/var/lib/gips/gipsd.sqlite\"")
                 (string-contains toml "gossip_transport = \"cadet\"")
-                (string-contains toml "cadet_port = \"gips-sys-port\"")))
+                (string-contains toml "cadet_port = \"gips-sys-port\"")
+                (string-contains toml "dashboard = true")))
     (check "gips-shepherd-service-spec declares provision, user, and auto-start"
            (and (assoc-ref shepherd-spec 'auto-start?)
+                (assoc-ref shepherd-spec 'dashboard?)
                 (equal? (assoc-ref shepherd-spec 'user) '("gips-daemon"))
                 (equal? (assoc-ref shepherd-spec 'provision) '((gipsd gips)))))
     (check "gips-activation-script establishes private directory and permissions"

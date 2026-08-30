@@ -13,6 +13,7 @@
             gipsd-configuration-trusted-publishers
             gipsd-configuration-allow-unsigned?
             gipsd-configuration-guix-signing
+            gipsd-configuration-dashboard?
             <trusted-publisher>
             trusted-publisher
             trusted-publisher?
@@ -90,7 +91,8 @@ rather than here, where the mistake was made."
 (define-record-type <gipsd-configuration>
   (%make-gipsd-configuration listen db-path ipfs-api gns-command snapshot-cid
                              gossip-transport cadet-port cadet-command
-                             trusted-publishers allow-unsigned? guix-signing)
+                             trusted-publishers allow-unsigned? guix-signing
+                             dashboard?)
   gipsd-configuration?
   (listen             gipsd-configuration-listen)
   (db-path            gipsd-configuration-db-path)
@@ -102,7 +104,8 @@ rather than here, where the mistake was made."
   (cadet-command      gipsd-configuration-cadet-command)
   (trusted-publishers gipsd-configuration-trusted-publishers)
   (allow-unsigned?    gipsd-configuration-allow-unsigned?)
-  (guix-signing       gipsd-configuration-guix-signing))
+  (guix-signing       gipsd-configuration-guix-signing)
+  (dashboard?         gipsd-configuration-dashboard?))
 
 (define* (gipsd-configuration #:key
                               (listen "127.0.0.1:8080")
@@ -115,7 +118,8 @@ rather than here, where the mistake was made."
                               (cadet-command "gnunet-cadet")
                               (trusted-publishers '())
                               (allow-unsigned? #f)
-                              (guix-signing #f))
+                              (guix-signing #f)
+                              (dashboard? #t))
   (unless (and (list? trusted-publishers)
                (every-trusted-publisher? trusted-publishers))
     (error "gipsd-configuration: #:trusted-publishers must be a list of <trusted-publisher>"
@@ -125,7 +129,8 @@ rather than here, where the mistake was made."
            guix-signing))
   (%make-gipsd-configuration listen db-path ipfs-api gns-command snapshot-cid
                              gossip-transport cadet-port cadet-command
-                             trusted-publishers allow-unsigned? guix-signing))
+                             trusted-publishers allow-unsigned? guix-signing
+                             dashboard?))
 
 (define (every-trusted-publisher? lst)
   (or (null? lst)
@@ -195,8 +200,12 @@ table, so emitting `[trust]` before `listen` would silently reparent it."
           (if (gipsd-configuration-snapshot-cid config)
               (string-append base (format #f "snapshot_cid = ~s\n"
                                           (gipsd-configuration-snapshot-cid config)))
-              base)))
-    (string-append with-snapshot
+              base))
+         (with-dashboard
+          (if (gipsd-configuration-dashboard? config)
+              (string-append with-snapshot "dashboard = true\n")
+              with-snapshot)))
+    (string-append with-dashboard
                    (trust->toml config)
                    ;; After `[trust]` and its `[[trust.trusted_publishers]]`
                    ;; entries: a new table header ends the previous table, so

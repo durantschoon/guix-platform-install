@@ -153,6 +153,7 @@ gns_command = \"gnunet-gns\"
 gossip_transport = \"ipfs\"
 cadet_port = \"gips-gossip\"
 cadet_command = \"gnunet-cadet\"
+dashboard = true
 
 [trust]
 allow_unsigned = false
@@ -180,6 +181,44 @@ secret_key = ~s
           (chmod toml-file #o600)
           (ok "Wrote gipsd.toml with mode 0600")
           #t))))
+
+;;; ---------------------------------------------------------------------------
+;;; Swarm Telemetry & Live Terminal Monitor
+;;; ---------------------------------------------------------------------------
+
+(define* (launch-monitor #:key (json? #f))
+  "Display live swarm telemetry monitor (ASCII or JSON)."
+  (if (command-in-path? "gips")
+      (let ((args (append (list "monitor" "--daemon" "http://127.0.0.1:8080" "--once")
+                          (if json? (list "--json") '()))))
+        (apply system* "gips" args))
+      (begin
+        (catch #t
+          (lambda ()
+            (let* ((port (open-pipe* OPEN_READ "curl" "-s" "-m" "2" "http://127.0.0.1:8080/metrics"))
+                   (metrics-out (get-string-all port))
+                   (_ (close-pipe port))
+                   (gossip-port (open-pipe* OPEN_READ "curl" "-s" "-m" "2" "http://127.0.0.1:8080/gossip/status"))
+                   (gossip-out (get-string-all gossip-port))
+                   (_ (close-pipe gossip-port)))
+              (if json?
+                  (format #t "{\"daemon_url\":\"http://127.0.0.1:8080\",\"metrics\":~a,\"gossip\":~a}\n"
+                          (if (string-null? metrics-out) "{}" metrics-out)
+                          (if (string-null? gossip-out) "{}" gossip-out))
+                  (begin
+                    (format #t "================================================================================\n")
+                    (format #t "  GIPS SWARM & NODE MONITOR\n")
+                    (format #t "================================================================================\n")
+                    (format #t "  Daemon URL:     http://127.0.0.1:8080\n")
+                    (format #t "  Dashboard UI:   http://127.0.0.1:8080/dashboard\n")
+                    (format #t "  Metrics Feed:   http://127.0.0.1:8080/metrics\n\n")
+                    (format #t "  [Gossip Telemetry]\n")
+                    (format #t "    Status: ~a\n\n" (if (string-null? gossip-out) "Inactive" gossip-out))
+                    (format #t "  [Metrics Telemetry]\n")
+                    (format #t "    Status: ~a\n" (if (string-null? metrics-out) "Inactive" metrics-out))
+                    (format #t "================================================================================\n")))))
+          (lambda _
+            (err "Could not reach GIPS daemon on http://127.0.0.1:8080"))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Status Inspection
@@ -220,14 +259,17 @@ secret_key = ~s
               (warn (format #f "Secret key ~a has mode ~o (expected 0600)" sec-file perms))))
         (info "No signing key generated yet")))
 
-  ;; 5. Check Local Substitute Server Response
+  ;; 5. Check Local Substitute Server Response & Dashboard
   (catch #t
     (lambda ()
       (let* ((port (open-pipe* OPEN_READ "curl" "-s" "-m" "2" "http://127.0.0.1:8080/status"))
              (out (get-string-all port))
              (status (close-pipe port)))
         (if (and (zero? (status:exit-val status)) (string-contains out "\"status\":\"ok\""))
-            (ok "GIPS daemon (gipsd) is active and serving on http://127.0.0.1:8080")
+            (begin
+              (ok "GIPS daemon (gipsd) is active and serving on http://127.0.0.1:8080")
+              (ok "Telemetry dashboard available at http://127.0.0.1:8080/dashboard")
+              (ok "Metrics endpoint available at http://127.0.0.1:8080/metrics"))
             (info "GIPS daemon is not currently running on http://127.0.0.1:8080"))))
     (lambda _
       (info "GIPS daemon is not currently reachable"))))
@@ -261,11 +303,17 @@ secret_key = ~s
     (info "2. Start the GIPS daemon:")
     (info "     gipsd --config ~/.config/gips/gipsd.toml &")
     (newline)
-    (info "3. Configure Guix to use GIPS substitutes:")
+    (info "3. Open the Telemetry Dashboard:")
+    (info "     http://127.0.0.1:8080/dashboard")
+    (newline)
+    (info "4. View Live Swarm Monitor in terminal:")
+    (info "     guile postinstall/recipes/add/gips.scm --monitor")
+    (newline)
+    (info "5. Configure Guix to use GIPS substitutes:")
     (info "     Add http://127.0.0.1:8080 to your substitute URLs:")
     (info "     guix-daemon --substitute-urls=\"http://127.0.0.1:8080 https://ci.guix.gnu.org\"")
     (newline)
-    (info "4. Authorize GIPS public key in Guix ACL:")
+    (info "6. Authorize GIPS public key in Guix ACL:")
     (info (format #f "     sudo guix archive --authorize < ~a/signing-key.pub" config-dir))
     (newline)
     (ok "GIPS configuration setup completed successfully.")))
@@ -296,7 +344,8 @@ secret_key = ~s
     (let ((toml (default-config-toml "/tmp/test.sqlite" "http://localhost:5001" "127.0.0.1:8080")))
       (check "default-config-toml contains listen" (string-contains toml "listen = \"127.0.0.1:8080\""))
       (check "default-config-toml contains db_path" (string-contains toml "db_path = \"/tmp/test.sqlite\""))
-      (check "default-config-toml contains ipfs_api" (string-contains toml "ipfs_api = \"http://localhost:5001\"")))
+      (check "default-config-toml contains ipfs_api" (string-contains toml "ipfs_api = \"http://localhost:5001\""))
+      (check "default-config-toml contains dashboard = true" (string-contains toml "dashboard = true")))
 
     ;; Test 3: Key generation and permissions
     (generate-signing-key-if-missing test-dir)
@@ -334,6 +383,8 @@ Options:
   (no arguments)       Run interactive setup wizard
   --headless, --batch  Run non-interactive setup with safe defaults
   --status             Inspect GIPS, IPFS, and ACL configuration status
+  --monitor            Display live terminal swarm monitor snapshot
+  --monitor-json       Output live telemetry monitor snapshot as JSON
   --self-test          Run offline verification test suite
   --help, -h           Show this help message
 "))
@@ -346,6 +397,10 @@ Options:
      (run-setup #t))
     ((or ("--status"))
      (check-gips-status))
+    ((or ("--monitor"))
+     (launch-monitor #:json? #f))
+    ((or ("--monitor-json"))
+     (launch-monitor #:json? #t))
     ((or ("--self-test"))
      (run-self-tests))
     ((or ("--help") ("-h"))

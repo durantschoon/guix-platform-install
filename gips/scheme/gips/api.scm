@@ -665,38 +665,19 @@
     (run-curl* (list "-o" target) url)
     target))
 
-;; Fetch current metrics snapshot (optionally in Prometheus format)
+;; Fetch current metrics snapshot (optionally in Prometheus format). Unauthenticated.
 (define* (gips-metrics #:key (prometheus? #f))
-  (let ((token (gips-auth-token))
-        (url (string-append (gips-base-url) "/metrics" (if prometheus? "?format=prometheus" ""))))
-    (call-with-auth-config token
-      (lambda (cfg-file)
-        (let* ((cmd (format #f "curl -s -f -K ~a ~a ~a"
-                            cfg-file
-                            (if prometheus? "-H 'Accept: text/plain'" "-H 'Accept: application/json'")
-                            url))
-               (port (open-input-pipe cmd))
-               (output (get-string-all port))
-               (status (close-pipe port)))
-          (unless (zero? (status:exit-val status))
-            (error "gips-metrics failed" status))
-          output)))))
+  (let* ((url (string-append (gips-base-url) "/metrics" (if prometheus? "?format=prometheus" "")))
+         (headers (if prometheus?
+                      (list "-H" "Accept: text/plain")
+                      (list "-H" "Accept: application/json"))))
+    (run-curl* headers url)))
 
-;; Fetch recorded rolling metrics history snapshots
+;; Fetch recorded rolling metrics history snapshots (GET /metrics/history). Unauthenticated.
 (define* (gips-metrics-history #:key (limit 50))
-  (let ((token (gips-auth-token))
-        (url (format #f "~a/metrics/history?limit=~a" (gips-base-url) limit)))
-    (call-with-auth-config token
-      (lambda (cfg-file)
-        (let* ((cmd (format #f "curl -s -f -K ~a -H 'Accept: application/json' ~a"
-                            cfg-file
-                            url))
-               (port (open-input-pipe cmd))
-               (output (get-string-all port))
-               (status (close-pipe port)))
-          (unless (zero? (status:exit-val status))
-            (error "gips-metrics-history failed" status))
-          output)))))
+  (let* ((url (format #f "~a/metrics/history?limit=~a" (gips-base-url) limit))
+         (headers (list "-H" "Accept: application/json")))
+    (run-curl* headers url)))
 
 ;; Mint an attenuable capability delegation token.
 (define* (gips-vouch-mint issuer-key-path subject-pubkey
