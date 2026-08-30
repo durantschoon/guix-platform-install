@@ -124,11 +124,13 @@ stop and report **Blocked** rather than decide.
 | 07 | Package, document, and cut the one-shot release candidate | merged (`046d9eb`) |
 | 08 | Retained-instance multi-execution identity and synchronization | planned, OV-backed post-release |
 | 09 | MCP tool facade over the retained-instance controller | planned, OV-backed post-release |
+| 10 | GNU Guix IPFS Package Substitutes (GIPS) subsystem integration | completed (`feat/integrate-gips`) |
+| 11 | Declarative system service helper and configuration tests (`(gips service)`) | planned, GIPS subsystem |
+| 12 | Multi-node disposable cloud validation for GIPS substitutes | planned, GIPS subsystem |
+| 13 | Personal multi-machine binary substitute sync automation | planned, GIPS subsystem |
 
-Stages 05-07 form the release path. The release gate is a live run of a
-declared computation in a fresh Guix environment with attributable output and
-confirmed cleanup. Stages 08-09 are deliberately not release blockers; stages
-05-07 must preserve their architectural path by keeping instance identity,
-execution identity, and source identity distinct. Stages 08-09 must reuse the
-OV contracts and ownership/evidence machinery rather than creating a parallel
-controller or weakening the one-shot safety boundary.
+Stages 05-07 form the one-shot Oracle validation release path. Stages 08-09 are
+the deferred retained-instance and MCP facades. Stages 10-13 form the GIPS
+peer-to-peer substitute mirror and multi-machine sync subsystem. Each stage
+follows the single global numbering sequence, worktree isolation, and strict
+pre-deployment gate verification.
