@@ -1,0 +1,66 @@
+[package]
+name = "gips-workspace"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[test]]
+name = "e2e_federation"
+path = "tests/e2e_federation.rs"
+
+# Polylith-style layout: bases/ (shared foundations), components/ (reusable
+# libraries), and the top-level gipsd/gips crates (development/deployable apps).
+[workspace]
+members = [
+    ".",
+    "bases/gips-config",
+    "components/gips-db",
+    "components/gips-gns",
+    "components/gips-http",
+    "components/gips-ipfs",
+    "components/gips-nar",
+    "components/gips-scheme-config",
+    "components/gips-trust",
+    "gipsd",
+    "gips",
+]
+resolver = "2"
+
+[workspace.dependencies]
+sqlx = { version = "0.8.1", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
+tokio = { version = "1.37.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+axum = { version = "0.7", features = ["macros", "http1", "json"] }
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+ed25519-dalek = { version = "2.1.0", features = ["pkcs8", "pem"] }
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+tar = "0.4"
+
+[dev-dependencies]
+gips-config = { path = "bases/gips-config" }
+gips-db = { path = "components/gips-db" }
+gips-gns = { path = "components/gips-gns" }
+gips-http = { path = "components/gips-http" }
+gips-ipfs = { path = "components/gips-ipfs" }
+gips-nar = { path = "components/gips-nar" }
+gips-trust = { path = "components/gips-trust" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tar = { workspace = true }
+tempfile = "3"
+bytes = "1.6"
+futures-util = "0.3"
+sha2 = "0.10"
+multibase = "0.9"
+base64 = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -120,6 +120,43 @@ if command -v guile &> /dev/null; then
     fi
     echo
 
+    # GIPS (GNU Guix IPFS Substitutes) tests.
+    if [ -f "postinstall/recipes/add/gips.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Post-Install Recipe...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s postinstall/recipes/add/gips.scm --self-test; then
+            echo -e "${GREEN}[OK] GIPS recipe self-tests passed${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS recipe self-tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
+    if [ -f "gips/test_api.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Scheme API Suite...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s gips/test_api.scm; then
+            echo -e "${GREEN}[OK] GIPS Scheme API tests passed (15/15 verdicts)${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS Scheme API tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
+    if [ -f "gips/test_sign.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Narinfo Signing Suite...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s gips/test_sign.scm; then
+            echo -e "${GREEN}[OK] GIPS narinfo signing tests passed (4/4 verdicts)${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS narinfo signing tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
     # Test converted scripts (if any)
     CONVERTED_TESTS_DIR="tools/converted-scripts"
     if [ -d "$CONVERTED_TESTS_DIR" ]; then

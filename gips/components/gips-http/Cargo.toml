@@ -1,0 +1,36 @@
+[package]
+name = "gips-http"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gips-config = { path = "../../bases/gips-config" }
+gips-db = { path = "../gips-db" }
+gips-gns = { path = "../gips-gns" }
+gips-ipfs = { path = "../gips-ipfs" }
+gips-nar = { path = "../gips-nar" }
+axum = { workspace = true }
+tower-http = { version = "0.5.2", features = ["timeout", "limit"] }
+tower = { version = "0.4", features = ["limit", "util"] }
+subtle = "2.5"
+bytes = "1.6"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+gips-trust = { path = "../gips-trust" }
+anyhow = { workspace = true }
+futures-util = "0.3"
+moka = { version = "0.12", features = ["future"] }
+tokio = { workspace = true }
+tempfile = "3.27.0"
+tar = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+multibase = "0.9"
+sha2 = "0.10"
+# Test-only: decodes the `Signature:` payload back into the s-expression, so
+# the assertion is about the bytes a Guix client would see rather than about
+# the string this crate happened to build.
+base64 = { workspace = true }

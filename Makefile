@@ -13,7 +13,8 @@ SUBNET_ID ?= $(ORACLE_SUBNET_ID)
 INSTANCE_ID ?= $(ORACLE_INSTANCE_ID)
 EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
-.PHONY: help test check manifest oracle-help oracle-test oracle-test-all
+.PHONY: help test check manifest gips-test gips-rust-test gips-check
+.PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
@@ -26,6 +27,9 @@ help:
 	@echo "  make test               Run the complete local test suite"
 	@echo "  make check              Run pre-deploy validation and the complete test suite"
 	@echo "  make manifest           Regenerate SOURCE_MANIFEST.txt"
+	@echo "  make gips-test          Run GIPS Guile Scheme test suite"
+	@echo "  make gips-rust-test     Run GIPS Rust workspace test suite"
+	@echo "  make gips-check         Run both Scheme and Rust GIPS test suites"
 	@echo "  make oracle-help        Show Oracle validation targets"
 
 test:
@@ -37,6 +41,20 @@ check:
 
 manifest:
 	./update-manifest.sh
+
+gips-test:
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --self-test
+	$(GUILE) --no-auto-compile -s gips/test_api.scm
+	$(GUILE) --no-auto-compile -s gips/test_sign.scm
+
+gips-rust-test:
+	@command -v cargo >/dev/null 2>&1 || { echo "cargo is required for Rust tests" >&2; exit 2; }
+	cd gips && cargo test --workspace
+
+gips-check: gips-test
+	@if command -v cargo >/dev/null 2>&1; then \
+		(cd gips && cargo test --workspace); \
+	fi
 
 oracle-help:
 	@echo "Read-only/local targets:"

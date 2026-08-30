@@ -13,6 +13,11 @@ host. `oracle-test-all` adds both and fails clearly when `guix` is absent.
 Focused `oracle-test-*` targets make it cheap to rerun only the affected
 boundary while editing.
 
+`gips-test` runs the offline GIPS recipe self-test, Scheme API test suite, and
+Guix narinfo signing suite. `gips-rust-test` runs the complete Rust workspace
+test suite using Cargo. `gips-check` runs both suites, verifying full Scheme
+and Rust parity.
+
 `ORACLE_SOURCE` and `ORACLE_COMMAND` are optional `.env` defaults for repeated
 one-shot runs. They are deliberately non-secret and remain visible in
 `oracle-help`; command-line `SOURCE=` and `COMMAND=` assignments override them.

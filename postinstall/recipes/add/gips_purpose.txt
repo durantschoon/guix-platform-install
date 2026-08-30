@@ -1,0 +1,53 @@
+postinstall/recipes/add/gips.scm
+=================================
+
+PURPOSE
+-------
+Provides an automated and interactive post-install configuration recipe for
+deploying and configuring GIPS (GNU Guix IPFS Substitutes & P2P Mirror Fabric)
+on freshly installed Guix machines (Framework 13, Cloudzy VPS, Oracle Always Free, etc.).
+
+STRUCTURE & JUSTIFICATIONS
+--------------------------
+
+1. Shebang:
+   `#!/run/current-system/profile/bin/guile \`
+   `--no-auto-compile -s`
+   `!#`
+   - Purpose: Follows repository policy for Guile scripts targeting Guix systems.
+   - Omission: Does not use `#!/bin/bash` or `#!/usr/bin/env guile`, as `/bin` on Guix
+     contains only `sh` and `/usr/bin/env` is a store symlink.
+
+2. ASCII Output & ANSI Escapes:
+   - Uses `[OK]`, `[WARN]`, `[ERROR]` without Unicode characters (e.g. checkmarks or emojis).
+   - Uses `\x1b[` for color codes instead of `\033[`, because Guile has no octal escape syntax.
+   - Purpose: Preserves readability over low-capability ISO serial consoles and cloud serial ports.
+
+3. Interactive Input from `/dev/tty`:
+   - Uses `read-tty-line` opening `/dev/tty` rather than reading from `stdin`.
+   - Purpose: Enables piping the script down `wget ... | guile -s /dev/stdin` or curl without
+     accidentally consuming the script body as user input.
+
+4. Fail-Closed Permission Enforcement:
+   - Enforces `0700` on `~/.config/gips/` and `0600` on private signing keys (`signing-key.sec`)
+     and configuration files (`gipsd.toml`).
+   - Purpose: Protects private Ed25519/ECDSA narinfo signing keys from world-readable exposure.
+
+5. Headless / Batch Mode Support:
+   - Accepts `--headless` or `--batch` flags for non-interactive execution.
+   - Purpose: Allows seamless invocation from `guix-personal.scm` contract steps without blocking
+     automated deployment pipelines.
+
+6. Built-in Self-Test (`--self-test`):
+   - Tests directory permission enforcement, TOML generation, and key pair creation offline.
+   - Purpose: Allows automated test runners (`run-tests.sh`) to verify recipe logic without
+     requiring live cloud or network access.
+
+STATEMENTS OF OMISSION
+----------------------
+- Omission: Does not automatically overwrite existing user signing keys if they exist.
+  Reason: Overwriting keys would invalidate existing signed substitutes and break web-of-trust vouches.
+- Omission: Does not execute `sudo guix archive --authorize` without user confirmation or explicit instructions.
+  Reason: Modifying `/etc/guix/acl` requires root privileges and should not happen silently as a side effect.
+- Omission: Does not bind GIPS daemon to public interfaces by default (`0.0.0.0`).
+  Reason: Defaults to `127.0.0.1:8080` to prevent unintended open substitute proxying without explicit opt-in.

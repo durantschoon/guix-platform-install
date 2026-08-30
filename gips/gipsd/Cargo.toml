@@ -1,0 +1,21 @@
+[package]
+name = "gipsd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gips-config = { path = "../bases/gips-config" }
+gips-db = { path = "../components/gips-db" }
+gips-http = { path = "../components/gips-http" }
+gips-scheme-config = { path = "../components/gips-scheme-config" }
+anyhow = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+gips-ipfs = { path = "../components/gips-ipfs" }
+gips-trust = { version = "0.1.0", path = "../components/gips-trust" }
+
+[dev-dependencies]
+tempfile = "3"

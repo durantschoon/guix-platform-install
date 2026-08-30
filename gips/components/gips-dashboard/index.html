@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>GIPS Telemetry</title>
+<!--
+  The GIPS telemetry dashboard.
+
+  Compiled into gipsd via `include_str!` and served at GET /dashboard, which
+  makes it same-origin with /metrics: no CORS header has to be opened for this
+  page to read the daemon.
+
+  Three constraints shaped every choice below.
+
+  1. NO NETWORK BUT THIS DAEMON. Everything — layout, charts, fonts, icons — is
+     in this one file. No CDN, no webfont, no build step, no node_modules. The
+     charts are hand-drawn SVG built through DOM calls; there is no charting
+     library because a charting library would be a supply-chain dependency
+     sitting in front of a security daemon's operational data. gipsd also sends
+     a `default-src 'none'; connect-src 'self'` CSP with this page, so the
+     browser enforces the rule rather than trusting this comment.
+
+  2. NO DATA IS EVER INVENTED. Every number drawn here came from /metrics or
+     from a benchmark file the operator chose. A series with no samples renders
+     as an explicit "no samples yet" state, never as a zero, and the comparison
+     chart says "no benchmark loaded" rather than showing a plausible-looking
+     bar. A dashboard that guesses is worse than no dashboard.
+
+  3. NOTHING FROM THE WIRE BECOMES MARKUP. All text goes in through
+     `textContent` and all attributes through `setAttribute`. There is no
+     `innerHTML` assignment anywhere in this file that takes a value from
+     /metrics or from a loaded file.
+
+  Colours are the validated data-viz palette: the three categorical slots
+  (blue / orange / aqua) clear the CVD, normal-vision and contrast gates on
+  both surfaces used here, all-pairs. A fourth series would not, which is why
+  the time-series chart caps at three and everything else is single-series.
+-->
+<style>
+/* ------------------------------------------------------------------ tokens */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces. --surface is the colour the charts are validated against. */
+  --plane: #0a0b12;
+  --surface: #16171f;
+  --surface-raised: #1d1f2a;
+  --glass: rgba(30, 32, 44, 0.55);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-edge-strong: rgba(255, 255, 255, 0.16);
+
+  /* Ink. */
+  --ink-1: #f5f6fa;
+  --ink-2: #b7bbcb;
+  --ink-muted: #868b9e;
+
+  /* Chart chrome — recessive hairlines, never dashed. */
+  --grid: #24262f;
+  --axis: #363946;
+
+  /* Categorical slots, dark steps. Assigned by series identity, in fixed
+     order, never by rank and never cycled. */
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+
+  /* Status. Reserved: these never stand in for a series. */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+
+  /* Ambient gradient — decoration on the page plane only. No data is ever
+     encoded in a gradient. */
+  --aurora-a: rgba(74, 58, 167, 0.42);
+  --aurora-b: rgba(57, 135, 229, 0.34);
+  --aurora-c: rgba(25, 158, 112, 0.24);
+
+  --radius: 18px;
+  --radius-sm: 10px;
+  --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.85);
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --plane: #eceef5;
+  --surface: #fbfbfd;
+  --surface-raised: #ffffff;
+  --glass: rgba(255, 255, 255, 0.66);
+  --glass-edge: rgba(11, 11, 11, 0.10);
+  --glass-edge-strong: rgba(11, 11, 11, 0.18);
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --aurora-a: rgba(74, 58, 167, 0.20);
+  --aurora-b: rgba(42, 120, 214, 0.18);
+  --aurora-c: rgba(27, 175, 122, 0.14);
+  --shadow: 0 24px 60px -34px rgba(11, 11, 11, 0.30);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--plane);
+  color: var(--ink-1);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* The aurora. Three slow-drifting radial washes behind the glass — this is
+   what the backdrop-filter on the cards has to work with. */
+.aurora {
+  position: fixed;
+  inset: -25vh -25vw;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vw 38vw at 18% 12%, var(--aurora-a), transparent 62%),
+    radial-gradient(44vw 44vw at 82% 22%, var(--aurora-b), transparent 64%),
+    radial-gradient(40vw 40vw at 50% 92%, var(--aurora-c), transparent 66%);
+  filter: blur(28px) saturate(120%);
+  animation: drift 44s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-2.5%, 2%, 0) scale(1.07); }
+  100% { transform: translate3d(2.5%, -2%, 0) scale(1.03); }
+}
+
+.wrap { max-width: 1220px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* ------------------------------------------------------------------ header */
+header.bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-edge);
+}
+.bar-inner {
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 11px; margin-right: auto; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 11px;
+  background: linear-gradient(140deg, var(--s1), #7d5bd6 55%, var(--s3));
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 14px; color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(57, 135, 229, 0.8);
+}
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-text b { font-size: 15px; letter-spacing: 0.2px; }
+.brand-text span { font-size: 12px; color: var(--ink-muted); }
+
+.live {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--ink-2);
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--glass-edge);
+  background: rgba(127, 127, 145, 0.10);
+  white-space: nowrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.live[data-state="live"] .dot { background: var(--good); animation: beat 2s ease-out infinite; }
+.live[data-state="error"] .dot { background: var(--critical); }
+.live[data-state="paused"] .dot { background: var(--warning); }
+@keyframes beat {
+  0%   { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(12, 163, 12, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0); }
+}
+
+/* ------------------------------------------------------- controls & inputs */
+button, input, select {
+  font: inherit;
+  color: var(--ink-1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-edge);
+  background: var(--surface-raised);
+  padding: 7px 12px;
+}
+button { cursor: pointer; transition: transform .14s ease, border-color .14s ease, background .14s ease; }
+button:hover { border-color: var(--glass-edge-strong); transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+button.primary {
+  background: linear-gradient(135deg, var(--s1), #6a4fd0);
+  border-color: transparent; color: #fff; font-weight: 600;
+}
+:is(button, input, select, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--s1);
+  outline-offset: 2px;
+}
+input { font-family: var(--mono); font-size: 13px; min-width: 0; max-width: 100%; }
+input::placeholder { color: var(--ink-muted); }
+/* Flex children default to min-width:auto, which is what makes a long input
+   push the page wider than the viewport. */
+.bar-inner > *, .controls > * { min-width: 0; }
+.bar-inner input { flex: 1 1 150px; }
+#benchfile { flex: 1 1 190px; }
+
+.controls {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 26px 0 22px;
+  padding: 13px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+.controls label { font-size: 12.5px; color: var(--ink-muted); }
+.seg { display: inline-flex; border: 1px solid var(--glass-edge); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button {
+  border: 0; border-radius: 0; background: transparent;
+  padding: 6px 12px; font-size: 13px; color: var(--ink-2);
+}
+.seg button + button { border-left: 1px solid var(--glass-edge); }
+.seg button[aria-pressed="true"] { background: var(--s1); color: #fff; font-weight: 600; }
+.seg button:hover { transform: none; background: rgba(127, 127, 145, 0.14); }
+.seg button[aria-pressed="true"]:hover { background: var(--s1); }
+.spacer { flex: 1 1 auto; }
+
+/* -------------------------------------------------------------- hero intro */
+.hero { padding: 46px 0 6px; max-width: 720px; }
+.hero h1 {
+  margin: 0 0 12px;
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.9px;
+  font-weight: 680;
+  background: linear-gradient(120deg, var(--ink-1) 18%, var(--s1) 58%, var(--s3) 96%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.hero p { margin: 0; color: var(--ink-2); font-size: 16px; }
+
+/* ------------------------------------------------------------------- cards */
+.card {
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+.card h2 { margin: 0 0 3px; font-size: 15.5px; font-weight: 620; letter-spacing: -0.1px; }
+.card .sub { margin: 0 0 16px; font-size: 12.5px; color: var(--ink-muted); }
+
+/* Scroll-driven reveal. Cards rise as they enter the viewport. */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s ease, transform .6s cubic-bezier(.22,.8,.3,1); }
+.reveal.in { opacity: 1; transform: none; }
+
+.grid { display: grid; gap: 18px; }
+/* `min(…, 100%)` on the track floor: a bare `minmax(430px, 1fr)` forces the
+   page wider than a 420px viewport instead of collapsing to one column. */
+.tiles { grid-template-columns: repeat(auto-fit, minmax(min(216px, 100%), 1fr)); margin-bottom: 18px; }
+.two { grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr)); margin-bottom: 18px; }
+
+/* -------------------------------------------------------------- stat tiles */
+.tile { position: relative; overflow: hidden; padding: 18px 20px 14px; }
+.tile .k { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.7px; }
+.tile .v {
+  /* Proportional figures: tabular-nums would make a display-size number look
+     loose. The table view below is where digits align. */
+  font-size: 36px; font-weight: 660; letter-spacing: -1.2px; line-height: 1.15;
+  margin-top: 6px; display: flex; align-items: baseline; gap: 6px;
+}
+.tile .u { font-size: 14px; font-weight: 500; color: var(--ink-muted); letter-spacing: 0; }
+.tile .n { font-size: 12.5px; color: var(--ink-muted); margin-top: 3px; min-height: 19px; }
+.tile .spark { display: block; margin-top: 10px; width: 100%; height: 30px; }
+.tile[data-status="good"]::after,
+.tile[data-status="critical"]::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+}
+.tile[data-status="good"]::after { background: var(--good); }
+.tile[data-status="critical"]::after { background: var(--critical); }
+
+/* ------------------------------------------------------------------ charts */
+figure { margin: 0; }
+figcaption { font-size: 12.5px; color: var(--ink-muted); margin-top: 10px; }
+/* No `height` attribute is ever set on these: width 100% plus a viewBox lets
+   the height follow the aspect ratio, so a chart fills its card at any width
+   and the x-axis band is inside the box rather than cropped out of it. */
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+svg[hidden] { display: none; }
+.chart text { font-family: var(--font); }
+.tick { font-size: 11px; fill: var(--ink-muted); }
+.axis-title { font-size: 11px; fill: var(--ink-muted); letter-spacing: 0.5px; text-transform: uppercase; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.axisline { stroke: var(--axis); stroke-width: 1; }
+.dlabel { font-size: 11.5px; font-weight: 600; fill: var(--ink-1); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; }
+.legend .item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.legend .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+.empty {
+  display: grid; place-items: center; text-align: center;
+  min-height: 150px; padding: 22px;
+  border: 1px dashed var(--glass-edge-strong); border-radius: var(--radius-sm);
+  color: var(--ink-muted); font-size: 13.5px;
+}
+.empty code { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+
+/* Tooltip: enhances, never gates — every value is also in the table view. */
+.tip {
+  position: fixed; z-index: 90; pointer-events: none;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .12s ease, transform .12s ease;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-edge-strong);
+  background: var(--surface-raised);
+  box-shadow: 0 16px 40px -18px rgba(0,0,0,.7);
+  font-size: 12.5px; max-width: 280px;
+}
+.tip.on { opacity: 1; transform: none; }
+.tip b { display: block; margin-bottom: 4px; font-size: 12px; color: var(--ink-muted); font-weight: 500; }
+.tip .row { display: flex; align-items: center; gap: 7px; }
+.tip .row .swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.tip .row .val { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ table view */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+td { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+td:first-child { font-family: var(--font); }
+td .desc { display: block; font-size: 11.5px; color: var(--ink-muted); font-family: var(--font); }
+.scroll-x { overflow-x: auto; }
+
+/* ------------------------------------------------------- pipeline diagram */
+.pipe { width: 100%; height: auto; display: block; overflow: visible; }
+.pipe .node-ring { fill: none; stroke: var(--s1); stroke-width: 2; }
+.pipe .node-core { fill: var(--s1); }
+.pipe .edge { stroke: var(--axis); stroke-width: 2; fill: none; }
+.pipe .node-label { font-size: 11.5px; fill: var(--ink-2); }
+.pipe .node-value { font-size: 12px; font-weight: 640; fill: var(--ink-1); font-variant-numeric: tabular-nums; }
+.pulse { animation: pulse 1.6s ease-out; }
+@keyframes pulse {
+  0%   { r: var(--r0); opacity: .85; }
+  100% { r: calc(var(--r0) * 3.2); opacity: 0; }
+}
+
+footer.note {
+  margin-top: 34px; padding: 20px 22px;
+  font-size: 12.5px; color: var(--ink-muted);
+  border-top: 1px solid var(--glass-edge);
+}
+footer.note b { color: var(--ink-2); font-weight: 600; }
+footer.note ul { margin: 8px 0 0; padding-left: 18px; }
+footer.note li { margin: 4px 0; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 620px) {
+  .wrap { padding: 0 14px 72px; }
+  .bar-inner { padding: 12px 14px; gap: 10px; }
+  .brand { margin-right: 0; }
+  .card { padding: 16px 14px; }
+  .tile .v { font-size: 30px; }
+  .controls { padding: 12px; gap: 8px; }
+}
+
+/* Every animation here is decoration. Anyone who has asked the OS to stop
+   moving things gets a fully static, fully legible dashboard. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">G</div>
+      <div class="brand-text">
+        <b>GIPS Telemetry</b>
+        <span>peer-to-peer Guix substitutes</span>
+      </div>
+    </div>
+
+    <div class="live" id="live" data-state="idle" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span><span id="live-text">not connected</span>
+    </div>
+
+    <label class="sr-only" for="endpoint">Daemon base URL</label>
+    <input id="endpoint" size="20" value="" placeholder="http://127.0.0.1:8080">
+
+    <label class="sr-only" for="token">Auth token</label>
+    <input id="token" type="password" size="18" placeholder="auth token"
+           autocomplete="off" spellcheck="false">
+
+    <button class="primary" id="connect">Connect</button>
+    <button id="theme" aria-label="Switch to light theme" title="Switch theme">&#9681;</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>What this node actually costs.</h1>
+    <p>
+      Live latency from <code>gipsd</code>: how long a narinfo takes to answer,
+      how long IPFS takes to hand over a nar, and what verifying it costs.
+      Measured, not estimated.
+    </p>
+  </section>
+
+  <!-- One filter row, above everything it scopes. Every chart re-renders
+       against the same slice. -->
+  <div class="controls" role="group" aria-label="Dashboard controls">
+    <label for="interval">Refresh</label>
+    <div class="seg" id="interval" role="group" aria-label="Refresh interval">
+      <button data-ms="2000" aria-pressed="true">2s</button>
+      <button data-ms="5000" aria-pressed="false">5s</button>
+      <button data-ms="15000" aria-pressed="false">15s</button>
+      <button data-ms="0" aria-pressed="false">off</button>
+    </div>
+
+    <label for="series">Distribution</label>
+    <select id="series" aria-label="Series shown in the distribution chart"></select>
+
+    <div class="spacer"></div>
+
+    <label for="benchfile">Benchmark</label>
+    <input type="file" id="benchfile" accept=".json,application/json"
+           aria-label="Load a benchmark-sync.sh result file">
+
+    <div class="seg" id="view" role="group" aria-label="View mode">
+      <button data-view="charts" aria-pressed="true">Charts</button>
+      <button data-view="table" aria-pressed="false">Table</button>
+    </div>
+  </div>
+
+  <main id="charts-view">
+    <div class="grid tiles" id="tiles"></div>
+
+    <div class="grid two">
+      <section class="card reveal">
+        <h2>Latency over time</h2>
+        <p class="sub">
+          Mean latency per refresh interval &mdash; the change in total time
+          divided by the change in sample count, so it tracks recent behaviour
+          rather than a lifetime average.
+        </p>
+        <div class="legend" id="ts-legend"></div>
+        <figure>
+          <svg class="chart" id="timeseries" role="img"
+               aria-label="Line chart of mean latency in milliseconds over time"></svg>
+          <figcaption id="ts-caption">Waiting for the second sample &mdash; a rate needs two points.</figcaption>
+        </figure>
+      </section>
+
+      <section class="card reveal">
+        <h2>Where the time goes</h2>
+        <p class="sub">
+          Median and 90th percentile for every instrumented stage, since the
+          daemon started. Bars are bucket-resolution upper bounds.
+        </p>
+        <figure>
+          <svg class="chart" id="stages" role="img"
+               aria-label="Bar chart of median latency per pipeline stage, in milliseconds"></svg>
+          <figcaption>Solid bar: p50. Outline: p90. Stages with no samples are listed but not drawn.</figcaption>
+        </figure>
+      </section>
+    </div>
+
+    <div class="grid two">
+      <section class="card reveal">
+        <h2>Latency distribution</h2>
+        <p class="sub" id="dist-sub">How the samples for one series are spread across latency buckets.</p>
+        <figure>
+          <svg class="chart" id="histogram" role="img"
+               aria-label="Histogram of request counts by latency bucket"></svg>
+          <figcaption>Each bar counts samples at or below its bucket bound and above the previous one.</figcaption>
+        </figure>
+      </section>
+
+      <section class="card reveal">
+        <h2>GIPS vs. a central substitute server</h2>
+        <p class="sub">
+          Wall-clock timings from <code>scripts/benchmark-sync.sh</code>. This
+          panel stays empty until you load a result file &mdash; it will not
+          show a comparison that was never run.
+        </p>
+        <div class="legend" id="bench-legend"></div>
+        <figure>
+          <svg class="chart" id="benchmark" role="img"
+               aria-label="Grouped bar chart comparing GIPS and baseline substitute timings"></svg>
+          <figcaption id="bench-caption"></figcaption>
+        </figure>
+      </section>
+    </div>
+
+    <section class="card reveal">
+      <h2>Verification pipeline</h2>
+      <p class="sub">
+        Every stage a proxied substitute passes through. Each node is sized by
+        its share of median latency and pulses when new samples land there.
+      </p>
+      <figure>
+        <svg class="pipe" id="pipeline" role="img"
+             aria-label="Flow diagram of the substitute verification pipeline with per-stage median latency"></svg>
+        <figcaption>Node area is proportional to that stage&rsquo;s p50. A dimmed node has recorded nothing yet.</figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <main id="table-view" hidden>
+    <section class="card">
+      <h2>Latency series</h2>
+      <p class="sub">Every histogram in the <code>/metrics</code> payload, in milliseconds.</p>
+      <div class="scroll-x">
+        <table id="hist-table">
+          <thead><tr>
+            <th scope="col">Series</th><th scope="col">Samples</th>
+            <th scope="col">p50</th><th scope="col">p90</th><th scope="col">p99</th>
+            <th scope="col">mean</th><th scope="col">min</th><th scope="col">max</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:18px">
+      <h2>Event counters</h2>
+      <p class="sub">Outcomes a latency curve cannot express.</p>
+      <div class="scroll-x">
+        <table id="counter-table">
+          <thead><tr><th scope="col">Counter</th><th scope="col">Value</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="note">
+    <b>What these numbers are.</b>
+    <ul>
+      <li>Percentiles are <em>bucket-resolution</em>: each is the upper bound of
+        the bucket the percentile falls in, so it over-reports rather than
+        interpolating a value that was never measured.</li>
+      <li>Histograms are cumulative since the daemon started. The
+        &ldquo;latency over time&rdquo; chart differences them; everything else
+        is lifetime.</li>
+      <li>The benchmark panel compares whatever
+        <code>scripts/benchmark-sync.sh</code> actually ran. Without Guix
+        installed the script records GIPS-side latency only and reports no
+        baseline &mdash; that is a missing comparison, not a won one.</li>
+      <li><code>/metrics</code> carries no store paths, CIDs, GNS names, keys or
+        tokens &mdash; only fixed series names and integers.</li>
+    </ul>
+  </footer>
+</div>
+
+<div class="tip" id="tip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+"use strict";
+(function () {
+  const SVG = "http://www.w3.org/2000/svg";
+  const SCHEMA = "gips.metrics.v1";
+  const BENCH_SCHEMA = "gips.benchmark.v1";
+  const MAX_POINTS = 90;
+
+  // Categorical slots, assigned by series identity and never re-assigned. The
+  // CSS custom property is read at draw time so a theme switch repaints
+  // without changing which slot a series owns.
+  const SLOT = ["--s1", "--s2", "--s3"];
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  /** Series drawn on the time chart. Three, deliberately: a fourth
+   *  categorical hue does not clear the colour-vision gates. */
+  const TS_SERIES = [
+    { key: "narinfo_response_ms", label: "narinfo response" },
+    { key: "nar_fetch_ipfs_ms",  label: "nar fetch (IPFS)" },
+    { key: "signature_verify_ms", label: "signature verify" },
+  ];
+
+  /** Stage order for the "where the time goes" chart and the pipeline. */
+  const STAGES = [
+    { key: "gns_resolve_ms",      label: "GNS resolve" },
+    { key: "manifest_resolve_ms", label: "manifest resolve" },
+    { key: "db_query_ms",         label: "DB query" },
+    { key: "nar_fetch_local_ms",  label: "snapshot (local)" },
+    { key: "nar_fetch_ipfs_ms",   label: "nar fetch (IPFS)" },
+    { key: "nar_verify_ms",       label: "CID + NarHash verify" },
+    { key: "signature_verify_ms", label: "signature verify" },
+    { key: "narinfo_response_ms", label: "narinfo response" },
+  ];
+
+  const PIPELINE = [
+    { key: "gns_resolve_ms",      label: "GNS" },
+    { key: "nar_fetch_ipfs_ms",   label: "IPFS" },
+    { key: "nar_verify_ms",       label: "verify" },
+    { key: "signature_verify_ms", label: "signature" },
+    { key: "narinfo_response_ms", label: "serve" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------------------------------------------------------------- state
+  const state = {
+    endpoint: "",
+    token: "",
+    intervalMs: 2000,
+    timer: null,
+    latest: null,          // last /metrics payload
+    previous: null,        // the one before it, for interval rates
+    history: [],           // [{ t, values: { key: meanMs|null } }]
+    counterBase: null,     // counter values at connect, for "since connect"
+    distKey: "narinfo_response_ms",
+    bench: null,
+    pulseCounts: {},
+  };
+
+  // ------------------------------------------------------------- utilities
+  /** Formats milliseconds at a precision that suits the magnitude. */
+  function ms(v) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    if (v === 0) return "0";
+    if (v < 1) return v.toFixed(2);
+    if (v < 10) return v.toFixed(2);
+    if (v < 100) return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  }
+  const int = (v) => (v === null || v === undefined ? "—" : Number(v).toLocaleString());
+
+  function el(tag, attrs, text) {
+    const node = document.createElementNS(SVG, tag);
+    for (const k in attrs) node.setAttribute(k, String(attrs[k]));
+    if (text !== undefined) node.textContent = String(text);
+    return node;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  /** "Nice" axis ticks: 1/2/5 x 10^n covering [0, max].
+   *
+   *  The last tick is always >= max. That is not cosmetic: every chart here
+   *  scales its marks by the last tick, so a top tick below the maximum draws
+   *  the tallest line or bar outside the plot area and over the legend. */
+  function ticks(max, count) {
+    if (!(max > 0)) return [0, 1];
+    const raw = max / count;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    const top = Math.ceil(max / step) * step;
+    const out = [];
+    for (let i = 0; i * step <= top + step * 1e-9; i++) {
+      out.push(Number((i * step).toFixed(10)));
+    }
+    return out;
+  }
+
+  const hist = (payload, key) =>
+    payload ? payload.histograms.find((h) => h.name === key) || null : null;
+
+  // ------------------------------------------------------------ the tooltip
+  const tip = $("tip");
+  function showTip(evt, title, rows) {
+    clear(tip);
+    const head = document.createElement("b");
+    head.textContent = title;
+    tip.appendChild(head);
+    for (const row of rows) {
+      const line = document.createElement("div");
+      line.className = "row";
+      if (row.color) {
+        const sw = document.createElement("span");
+        sw.className = "swatch";
+        sw.style.background = row.color;
+        line.appendChild(sw);
+      }
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      line.appendChild(label);
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = row.value;
+      line.appendChild(val);
+      tip.appendChild(line);
+    }
+    tip.classList.add("on");
+    tip.setAttribute("aria-hidden", "false");
+    const pad = 14;
+    const r = tip.getBoundingClientRect();
+    let x = evt.clientX + pad;
+    let y = evt.clientY + pad;
+    if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
+    if (y + r.height > window.innerHeight - 8) y = evt.clientY - r.height - pad;
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  }
+  function hideTip() {
+    tip.classList.remove("on");
+    tip.setAttribute("aria-hidden", "true");
+  }
+  document.addEventListener("scroll", hideTip, { passive: true });
+
+  /** An invisible, generously sized hit target over a mark. */
+  function hit(parent, box, title, rows) {
+    const r = el("rect", {
+      x: box.x, y: box.y, width: Math.max(box.width, 1), height: Math.max(box.height, 1),
+      fill: "transparent", "pointer-events": "all",
+    });
+    r.addEventListener("pointermove", (e) => showTip(e, title, rows()));
+    r.addEventListener("pointerleave", hideTip);
+    parent.appendChild(r);
+  }
+
+  // ------------------------------------------------------------- stat tiles
+  function counterValue(payload, name) {
+    const c = payload.counters.find((x) => x.name === name);
+    return c ? c.value : 0;
+  }
+
+  function renderTiles() {
+    const host = $("tiles");
+    clear(host);
+    const p = state.latest;
+    if (!p) return;
+
+    const narinfo = hist(p, "narinfo_response_ms");
+    const fetched = hist(p, "nar_fetch_ipfs_ms");
+    const served = counterValue(p, "narinfo_served") + counterValue(p, "nar_served");
+    const refused =
+      counterValue(p, "nar_rejected") +
+      counterValue(p, "narinfo_refused") +
+      counterValue(p, "signature_rejected");
+
+    const uptime = p.uptime_seconds;
+    const uptimeText =
+      uptime < 90 ? Math.round(uptime) + " s"
+      : uptime < 5400 ? (uptime / 60).toFixed(1) + " min"
+      : (uptime / 3600).toFixed(1) + " h";
+
+    const tiles = [
+      {
+        k: "narinfo p50", v: narinfo && narinfo.count ? ms(narinfo.p50_ms) : null, u: "ms",
+        n: narinfo && narinfo.count ? int(narinfo.count) + " samples" : "no requests yet",
+        spark: "narinfo_response_ms",
+      },
+      {
+        k: "nar fetch p50", v: fetched && fetched.count ? ms(fetched.p50_ms) : null, u: "ms",
+        n: fetched && fetched.count ? int(fetched.count) + " fetches from IPFS" : "no IPFS fetches yet",
+        spark: "nar_fetch_ipfs_ms",
+      },
+      { k: "objects served", v: int(served), u: "", n: "uptime " + uptimeText, status: served > 0 ? "good" : null },
+      {
+        k: "refused", v: int(refused), u: "",
+        n: refused > 0 ? "failed verification or trust" : "nothing refused",
+        status: refused > 0 ? "critical" : null,
+      },
+    ];
+
+    for (const t of tiles) {
+      const card = document.createElement("div");
+      card.className = "card tile reveal in";
+      if (t.status) card.setAttribute("data-status", t.status);
+
+      const k = document.createElement("div");
+      k.className = "k"; k.textContent = t.k;
+      card.appendChild(k);
+
+      const v = document.createElement("div");
+      v.className = "v";
+      const num = document.createElement("span");
+      num.textContent = t.v === null ? "—" : t.v;
+      v.appendChild(num);
+      if (t.u && t.v !== null) {
+        const u = document.createElement("span");
+        u.className = "u"; u.textContent = t.u;
+        v.appendChild(u);
+      }
+      card.appendChild(v);
+
+      const n = document.createElement("div");
+      n.className = "n"; n.textContent = t.n;
+      card.appendChild(n);
+
+      if (t.spark) card.appendChild(sparkline(t.spark));
+      host.appendChild(card);
+    }
+  }
+
+  /** A bare trend line — no axis, no labels. The number above it is the
+   *  value; this only says "rising" or "steady". */
+  function sparkline(key) {
+    const svg = el("svg", { class: "spark", viewBox: "0 0 200 30", preserveAspectRatio: "none" });
+    svg.setAttribute("aria-hidden", "true");
+    const pts = state.history.map((h) => h.values[key]).filter((v) => v !== null && v !== undefined);
+    if (pts.length < 2) return svg;
+    const max = Math.max(...pts, 0.0001);
+    const step = 200 / (pts.length - 1);
+    let d = "";
+    pts.forEach((v, i) => {
+      const x = i * step;
+      const y = 28 - (v / max) * 26;
+      d += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1);
+    });
+    svg.appendChild(el("path", {
+      d, fill: "none", stroke: cssVar("--s1"), "stroke-width": 2,
+      "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke",
+    }));
+    return svg;
+  }
+
+  // -------------------------------------------------- chart: latency / time
+  function renderTimeseries() {
+    const svg = $("timeseries");
+    clear(svg);
+    const legend = $("ts-legend");
+    clear(legend);
+
+    for (let i = 0; i < TS_SERIES.length; i++) {
+      const item = document.createElement("span");
+      item.className = "item";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = cssVar(SLOT[i]);
+      item.appendChild(sw);
+      const txt = document.createElement("span");
+      txt.textContent = TS_SERIES[i].label;
+      item.appendChild(txt);
+      legend.appendChild(item);
+    }
+
+    const caption = $("ts-caption");
+    const points = state.history;
+    const anyValue = points.some((p) => TS_SERIES.some((s) => p.values[s.key] !== null));
+    if (points.length < 2 || !anyValue) {
+      svg.setAttribute("viewBox", "0 0 640 40");
+      caption.textContent = points.length < 2
+        ? "Waiting for the second sample — a rate needs two points."
+        : "Connected, but no requests have been served during these intervals.";
+      return;
+    }
+    caption.textContent =
+      "One point per refresh. A gap means no samples were recorded in that interval.";
+
+    const W = 640, H = 260, L = 52, R = 14, T = 12, B = 34;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const pw = W - L - R, ph = H - T - B;
+
+    let max = 0;
+    for (const p of points) {
+      for (const s of TS_SERIES) {
+        const v = p.values[s.key];
+        if (v !== null && v > max) max = v;
+      }
+    }
+    const yt = ticks(max, 4);
+    const yMax = yt[yt.length - 1] || 1;
+    const t0 = points[0].t;
+    const span = Math.max(points[points.length - 1].t - t0, 1);
+    const X = (t) => L + ((t - t0) / span) * pw;
+    const Y = (v) => T + ph - (v / yMax) * ph;
+
+    for (const t of yt) {
+      svg.appendChild(el("line", { class: "gridline", x1: L, x2: L + pw, y1: Y(t), y2: Y(t) }));
+      svg.appendChild(el("text", { class: "tick", x: L - 8, y: Y(t) + 4, "text-anchor": "end" }, ms(t)));
+    }
+    svg.appendChild(el("line", { class: "axisline", x1: L, x2: L + pw, y1: T + ph, y2: T + ph }));
+    svg.appendChild(el("text", { class: "axis-title", x: L, y: H - 4 }, "seconds ago"));
+    svg.appendChild(el("text", {
+      class: "axis-title", x: 12, y: T + ph / 2, transform: "rotate(-90 12 " + (T + ph / 2) + ")",
+      "text-anchor": "middle",
+    }, "ms"));
+
+    const last = points[points.length - 1].t;
+    for (const p of [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]]) {
+      svg.appendChild(el("text", {
+        class: "tick", x: X(p.t), y: T + ph + 16, "text-anchor": "middle",
+      }, Math.round((last - p.t) / 1000) + "s"));
+    }
+
+    const endpoints = [];
+    TS_SERIES.forEach((s, i) => {
+      const color = cssVar(SLOT[i]);
+      // Break the path wherever an interval had no samples, rather than
+      // bridging the gap with a line that implies measurements we do not have.
+      let d = "", pen = false, lastPt = null;
+      for (const p of points) {
+        const v = p.values[s.key];
+        if (v === null) { pen = false; continue; }
+        d += (pen ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(v).toFixed(1);
+        pen = true;
+        lastPt = { x: X(p.t), y: Y(v), v };
+      }
+      if (!d) return;
+      svg.appendChild(el("path", {
+        d, fill: "none", stroke: color, "stroke-width": 2,
+        "stroke-linecap": "round", "stroke-linejoin": "round",
+      }));
+      if (lastPt) {
+        // A 2px surface ring, not a border, so overlapping endpoints stay
+        // readable where two series converge.
+        svg.appendChild(el("circle", {
+          cx: lastPt.x, cy: lastPt.y, r: 4, fill: color,
+          stroke: cssVar("--surface"), "stroke-width": 2,
+        }));
+        endpoints.push({ ...lastPt, color });
+      }
+    });
+
+    // Selective direct labels: the endpoint of each line, never a number per
+    // point. Endpoints that land within a label height of each other get
+    // pushed apart — three flat series at the bottom of the plot would
+    // otherwise print their values on top of one another.
+    // Resolve from the bottom up: the lowest label keeps its place and each
+    // one above is lifted clear of it. Pushing *down* instead would pile every
+    // near-baseline series onto the same clamped row — which is exactly what
+    // three fast series do.
+    endpoints.sort((a, b) => b.y - a.y);
+    const MIN_GAP = 15;
+    for (let i = 0; i < endpoints.length; i++) {
+      const ceiling = i === 0 ? Infinity : endpoints[i - 1].ly - MIN_GAP;
+      endpoints[i].ly = Math.max(
+        Math.min(endpoints[i].y, ceiling, T + ph - 2),
+        T + 9
+      );
+    }
+    for (const p of endpoints) {
+      const atRightEdge = p.x > L + pw - 46;
+      // A leader in the series colour where the label had to move: identity
+      // stays with the coloured mark, and the number itself wears text ink.
+      if (Math.abs(p.ly - p.y) > 2) {
+        svg.appendChild(el("line", {
+          x1: p.x, y1: p.y, x2: atRightEdge ? p.x - 5 : p.x + 5, y2: p.ly - 4,
+          stroke: p.color, "stroke-width": 1.5, opacity: 0.7,
+        }));
+      }
+      svg.appendChild(el("text", {
+        class: "dlabel", x: atRightEdge ? p.x - 8 : p.x + 8, y: p.ly - 3,
+        "text-anchor": atRightEdge ? "end" : "start",
+      }, ms(p.v)));
+    }
+
+    // A crosshair band per point: the hit target is the whole column.
+    const bandW = pw / Math.max(points.length - 1, 1);
+    points.forEach((p) => {
+      hit($("timeseries"), { x: X(p.t) - bandW / 2, y: T, width: bandW, height: ph },
+        Math.round((last - p.t) / 1000) + "s ago",
+        () => TS_SERIES.map((s, i) => ({
+          color: cssVar(SLOT[i]), label: s.label,
+          value: p.values[s.key] === null ? "no samples" : ms(p.values[s.key]) + " ms",
+        })));
+    });
+  }
+
+  // ------------------------------------------------------- chart: stages
+  function renderStages() {
+    const svg = $("stages");
+    clear(svg);
+    const p = state.latest;
+    if (!p) return;
+
+    const rows = STAGES.map((s) => ({ ...s, h: hist(p, s.key) })).filter((r) => r.h);
+    const withData = rows.filter((r) => r.h.count > 0);
+
+    if (!withData.length) {
+      svg.setAttribute("viewBox", "0 0 640 60");
+      svg.appendChild(el("text", { class: "tick", x: 0, y: 24 },
+        "No stage has recorded a sample yet. Serve a narinfo or a nar and this fills in."));
+      return;
+    }
+
+    const rowH = 30, T = 10, B = 34, L = 150, R = 58;
+    const W = 640, H = T + withData.length * rowH + B;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const pw = W - L - R;
+
+    const max = Math.max(...withData.map((r) => r.h.p90_ms || r.h.p50_ms || 0));
+    const xt = ticks(max, 4);
+    const xMax = xt[xt.length - 1] || 1;
+    const X = (v) => L + (v / xMax) * pw;
+
+    for (const t of xt) {
+      svg.appendChild(el("line", { class: "gridline", x1: X(t), x2: X(t), y1: T, y2: T + withData.length * rowH }));
+      svg.appendChild(el("text", {
+        class: "tick", x: X(t), y: T + withData.length * rowH + 16, "text-anchor": "middle",
+      }, ms(t)));
+    }
+    svg.appendChild(el("text", { class: "axis-title", x: L, y: H - 4 }, "milliseconds"));
+
+    const color = cssVar("--s1");
+    withData.forEach((r, i) => {
+      // 2px gap between adjacent bars, not a border around them.
+      const y = T + i * rowH + 4;
+      const barH = rowH - 10;
+      svg.appendChild(el("text", { class: "tick", x: L - 10, y: y + barH / 2 + 4, "text-anchor": "end" }, r.label));
+
+      const p90 = r.h.p90_ms || 0, p50 = r.h.p50_ms || 0;
+      if (p90 > p50) {
+        svg.appendChild(el("rect", {
+          x: X(0), y, width: Math.max(X(p90) - X(0), 2), height: barH, rx: 4,
+          fill: "none", stroke: color, "stroke-width": 1.5, opacity: 0.55,
+        }));
+      }
+      svg.appendChild(el("rect", {
+        x: X(0), y, width: Math.max(X(p50) - X(0), 2), height: barH, rx: 4, fill: color,
+      }));
+      svg.appendChild(el("text", {
+        class: "dlabel", x: X(Math.max(p50, p90)) + 7, y: y + barH / 2 + 4,
+      }, ms(p50)));
+
+      hit(svg, { x: L, y: y - 4, width: pw, height: rowH }, r.label, () => [
+        { label: "samples", value: int(r.h.count) },
+        { color, label: "p50", value: ms(r.h.p50_ms) + " ms" },
+        { label: "p90", value: ms(r.h.p90_ms) + " ms" },
+        { label: "p99", value: ms(r.h.p99_ms) + " ms" },
+        { label: "max", value: ms(r.h.max_ms) + " ms" },
+      ]);
+    });
+  }
+
+  // ---------------------------------------------------- chart: distribution
+  function renderHistogram() {
+    const svg = $("histogram");
+    clear(svg);
+    const p = state.latest;
+    if (!p) return;
+    const h = hist(p, state.distKey);
+    $("dist-sub").textContent = h
+      ? h.description.charAt(0).toUpperCase() + h.description.slice(1) + "."
+      : "";
+
+    if (!h || !h.count) {
+      svg.setAttribute("viewBox", "0 0 640 60");
+      svg.appendChild(el("text", { class: "tick", x: 0, y: 24 },
+        "No samples recorded for this series yet."));
+      return;
+    }
+
+    // Trim leading and trailing empty buckets so the occupied range fills the
+    // plot instead of being squeezed against one edge.
+    let lo = 0, hi = h.buckets.length - 1;
+    while (lo < hi && h.buckets[lo].count === 0) lo++;
+    while (hi > lo && h.buckets[hi].count === 0) hi--;
+    const buckets = h.buckets.slice(lo, hi + 1);
+
+    const W = 640, H = 250, L = 46, R = 12, T = 12, B = 44;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const pw = W - L - R, ph = H - T - B;
+
+    const max = Math.max(...buckets.map((b) => b.count));
+    const yt = ticks(max, 4);
+    const yMax = yt[yt.length - 1] || 1;
+    for (const t of yt) {
+      const y = T + ph - (t / yMax) * ph;
+      svg.appendChild(el("line", { class: "gridline", x1: L, x2: L + pw, y1: y, y2: y }));
+      svg.appendChild(el("text", { class: "tick", x: L - 8, y: y + 4, "text-anchor": "end" }, int(t)));
+    }
+    svg.appendChild(el("line", { class: "axisline", x1: L, x2: L + pw, y1: T + ph, y2: T + ph }));
+    svg.appendChild(el("text", { class: "axis-title", x: L, y: H - 4 }, "bucket upper bound (ms)"));
+    svg.appendChild(el("text", {
+      class: "axis-title", x: 10, y: T + ph / 2,
+      transform: "rotate(-90 10 " + (T + ph / 2) + ")", "text-anchor": "middle",
+    }, "samples"));
+
+    // Cap the bar width so a distribution that occupies two buckets draws two
+    // reasonable bars rather than two slabs half the card wide, and centre what
+    // is left.
+    const slot = Math.min(pw / buckets.length, 78);
+    const originX = L + (pw - slot * buckets.length) / 2;
+    const gap = 2; // surface gap between adjacent fills
+    const color = cssVar("--s1");
+    buckets.forEach((b, i) => {
+      const label = b.le_ms === null ? "∞" : ms(b.le_ms);
+      const x = originX + i * slot;
+      const bh = (b.count / yMax) * ph;
+      if (b.count > 0) {
+        svg.appendChild(el("rect", {
+          x: x + gap / 2, y: T + ph - bh, width: Math.max(slot - gap, 1),
+          height: Math.max(bh, 2), rx: 4, fill: color,
+        }));
+      }
+      if (buckets.length <= 10 || i % 2 === 0) {
+        svg.appendChild(el("text", {
+          class: "tick", x: x + slot / 2, y: T + ph + 15, "text-anchor": "middle",
+        }, label));
+      }
+      hit(svg, { x, y: T, width: slot, height: ph },
+        "≤ " + label + " ms",
+        () => [{ color, label: "samples", value: int(b.count) },
+               { label: "share", value: ((b.count / h.count) * 100).toFixed(1) + "%" }]);
+    });
+  }
+
+  // ------------------------------------------------------ chart: benchmark
+  function renderBenchmark() {
+    const svg = $("benchmark");
+    const legend = $("bench-legend");
+    const caption = $("bench-caption");
+    clear(svg); clear(legend);
+    svg.removeAttribute("hidden");
+    const old = document.getElementById("bench-empty");
+    if (old) old.remove();
+
+    if (!state.bench) {
+      // Hidden, not sized to nothing: an `svg` with `height:auto` and a 1x1
+      // viewBox would render as a giant empty square.
+      svg.setAttribute("hidden", "hidden");
+      const box = document.createElement("div");
+      box.id = "bench-empty";
+      box.className = "empty";
+      const p1 = document.createElement("div");
+      p1.textContent = "No benchmark loaded.";
+      const p2 = document.createElement("div");
+      p2.style.marginTop = "8px";
+      const code = document.createElement("code");
+      code.textContent = "./scripts/benchmark-sync.sh --out bench.json";
+      p2.appendChild(code);
+      const p3 = document.createElement("div");
+      p3.style.marginTop = "6px";
+      p3.textContent = "then pick the file with the Benchmark control above.";
+      box.append(p1, p2, p3);
+      svg.parentNode.insertBefore(box, svg);
+      caption.textContent = "";
+      return;
+    }
+
+    const rows = state.bench.comparisons || [];
+    const drawable = rows.filter((r) => typeof r.gips_ms === "number");
+    if (!drawable.length) {
+      svg.setAttribute("viewBox", "0 0 640 60");
+      svg.appendChild(el("text", { class: "tick", x: 0, y: 24 },
+        "The loaded file records no timings."));
+      caption.textContent = "";
+      return;
+    }
+
+    const hasBaseline = drawable.some((r) => typeof r.baseline_ms === "number");
+    const series = hasBaseline
+      ? [{ label: "GIPS (local, IPFS)", slot: 0, field: "gips_ms" },
+         { label: state.bench.baseline_url || "central substitute server", slot: 1, field: "baseline_ms" }]
+      : [{ label: "GIPS (local, IPFS)", slot: 0, field: "gips_ms" }];
+
+    for (const s of series) {
+      const item = document.createElement("span");
+      item.className = "item";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = cssVar(SLOT[s.slot]);
+      item.appendChild(sw);
+      const txt = document.createElement("span");
+      txt.textContent = s.label;
+      item.appendChild(txt);
+      legend.appendChild(item);
+    }
+
+    caption.textContent = hasBaseline
+      ? "Lower is faster. " + (state.bench.note || "")
+      : "No baseline was measured in this run — GIPS timings are shown alone, "
+        + "and no speed-up is claimed. " + (state.bench.note || "");
+
+    const rowH = 46, T = 10, B = 34, L = 170, R = 62;
+    const W = 640, H = T + drawable.length * rowH + B;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const pw = W - L - R;
+
+    let max = 0;
+    for (const r of drawable) for (const s of series) {
+      const v = r[s.field];
+      if (typeof v === "number" && v > max) max = v;
+    }
+    const xt = ticks(max, 4);
+    const xMax = xt[xt.length - 1] || 1;
+    const X = (v) => L + (v / xMax) * pw;
+
+    for (const t of xt) {
+      svg.appendChild(el("line", { class: "gridline", x1: X(t), x2: X(t), y1: T, y2: T + drawable.length * rowH }));
+      svg.appendChild(el("text", {
+        class: "tick", x: X(t), y: T + drawable.length * rowH + 16, "text-anchor": "middle",
+      }, ms(t)));
+    }
+    svg.appendChild(el("text", { class: "axis-title", x: L, y: H - 4 }, "milliseconds"));
+
+    drawable.forEach((r, i) => {
+      const top = T + i * rowH;
+      svg.appendChild(el("text", {
+        class: "tick", x: L - 10, y: top + rowH / 2 + 4, "text-anchor": "end",
+      }, r.label));
+
+      const barH = (rowH - 12) / series.length - 2; // 2px gap between the pair
+      series.forEach((s, si) => {
+        const v = r[s.field];
+        const y = top + 5 + si * (barH + 2);
+        if (typeof v !== "number") {
+          svg.appendChild(el("text", { class: "tick", x: L + 4, y: y + barH / 2 + 4 }, "not measured"));
+          return;
+        }
+        const color = cssVar(SLOT[s.slot]);
+        svg.appendChild(el("rect", {
+          x: L, y, width: Math.max(X(v) - L, 2), height: barH, rx: 4, fill: color,
+        }));
+        svg.appendChild(el("text", { class: "dlabel", x: X(v) + 7, y: y + barH / 2 + 4 }, ms(v)));
+      });
+
+      hit(svg, { x: L, y: top, width: pw, height: rowH }, r.label,
+        () => series.map((s) => ({
+          color: cssVar(SLOT[s.slot]), label: s.label,
+          value: typeof r[s.field] === "number" ? ms(r[s.field]) + " ms" : "not measured",
+        })));
+    });
+  }
+
+  // -------------------------------------------------- diagram: the pipeline
+  function renderPipeline() {
+    const svg = $("pipeline");
+    clear(svg);
+    const p = state.latest;
+    if (!p) return;
+
+    const nodes = PIPELINE.map((n) => ({ ...n, h: hist(p, n.key) }));
+    const maxP50 = Math.max(0.0001, ...nodes.map((n) => (n.h && n.h.count ? n.h.p50_ms || 0 : 0)));
+
+    // A wider viewBox than the other charts because this card is full-width:
+    // a 640-unit box stretched to ~1150px would render every label at double
+    // size. Matching the box to the rendered width keeps the type at the size
+    // the rest of the page uses.
+    const W = 1100, H = 128, pad = 96;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const step = (W - pad * 2) / (nodes.length - 1);
+    const cy = 58;
+    const color = cssVar("--s1");
+
+    for (let i = 0; i < nodes.length - 1; i++) {
+      svg.appendChild(el("line", {
+        class: "edge", x1: pad + i * step + 24, x2: pad + (i + 1) * step - 24, y1: cy, y2: cy,
+      }));
+    }
+
+    nodes.forEach((n, i) => {
+      const cx = pad + i * step;
+      const has = n.h && n.h.count > 0;
+      // Area, not radius, is proportional to p50 — a radius-proportional node
+      // would exaggerate the biggest stage by its square.
+      const r = has ? 9 + 13 * Math.sqrt((n.h.p50_ms || 0) / maxP50) : 8;
+
+      if (has && !reduceMotion) {
+        const seen = state.pulseCounts[n.key];
+        if (seen !== undefined && n.h.count > seen) {
+          const ping = el("circle", { cx, cy, r, fill: "none", stroke: color, "stroke-width": 2 });
+          ping.style.setProperty("--r0", r + "px");
+          ping.classList.add("pulse");
+          ping.addEventListener("animationend", () => ping.remove());
+          svg.appendChild(ping);
+        }
+      }
+      if (n.h) state.pulseCounts[n.key] = n.h.count;
+
+      svg.appendChild(el("circle", {
+        cx, cy, r, class: "node-ring", stroke: color, opacity: has ? 1 : 0.3,
+      }));
+      svg.appendChild(el("circle", {
+        cx, cy, r: Math.max(r - 6, 3), class: "node-core", fill: color, opacity: has ? 0.9 : 0.22,
+      }));
+      svg.appendChild(el("text", {
+        class: "node-label", x: cx, y: cy + 40, "text-anchor": "middle",
+      }, n.label));
+      svg.appendChild(el("text", {
+        class: "node-value", x: cx, y: cy - 34, "text-anchor": "middle",
+      }, has ? ms(n.h.p50_ms) + " ms" : "—"));
+
+      hit(svg, { x: cx - step / 2, y: 0, width: step, height: H }, n.label, () =>
+        n.h && n.h.count
+          ? [{ label: "samples", value: int(n.h.count) },
+             { color, label: "p50", value: ms(n.h.p50_ms) + " ms" },
+             { label: "p90", value: ms(n.h.p90_ms) + " ms" }]
+          : [{ label: "samples", value: "none yet" }]);
+    });
+  }
+
+  // ------------------------------------------------------------ table view
+  function renderTables() {
+    const p = state.latest;
+    const hbody = document.querySelector("#hist-table tbody");
+    const cbody = document.querySelector("#counter-table tbody");
+    clear(hbody); clear(cbody);
+    if (!p) return;
+
+    for (const h of p.histograms) {
+      const tr = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = h.name;
+      const desc = document.createElement("span");
+      desc.className = "desc";
+      desc.textContent = h.description;
+      name.appendChild(desc);
+      tr.appendChild(name);
+      for (const v of [int(h.count), ms(h.p50_ms), ms(h.p90_ms), ms(h.p99_ms),
+                       ms(h.mean_ms), ms(h.min_ms), ms(h.max_ms)]) {
+        const td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      }
+      hbody.appendChild(tr);
+    }
+
+    for (const c of p.counters) {
+      const tr = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = c.name;
+      const desc = document.createElement("span");
+      desc.className = "desc";
+      desc.textContent = c.description;
+      name.appendChild(desc);
+      const val = document.createElement("td");
+      val.textContent = int(c.value);
+      tr.append(name, val);
+      cbody.appendChild(tr);
+    }
+  }
+
+  // ---------------------------------------------------------------- render
+  function renderAll() {
+    renderTiles();
+    renderTimeseries();
+    renderStages();
+    renderHistogram();
+    renderBenchmark();
+    renderPipeline();
+    renderTables();
+  }
+
+  // ------------------------------------------------------------ data intake
+  /** Interval mean = change in total time / change in sample count. Null when
+   *  no samples landed in the window: an empty interval is unknown, not zero. */
+  function intervalMeans(prev, next) {
+    const out = {};
+    for (const s of TS_SERIES) {
+      const a = hist(prev, s.key), b = hist(next, s.key);
+      if (!a || !b) { out[s.key] = null; continue; }
+      const dn = b.count - a.count;
+      const dsum = b.sum_ms - a.sum_ms;
+      out[s.key] = dn > 0 ? dsum / dn : null;
+    }
+    return out;
+  }
+
+  function setLive(stateName, text) {
+    const node = $("live");
+    node.setAttribute("data-state", stateName);
+    $("live-text").textContent = text;
+  }
+
+  async function poll() {
+    const base = state.endpoint.replace(/\/+$/, "");
+    let res;
+    try {
+      res = await fetch(base + "/metrics", {
+        headers: { Authorization: "Bearer " + state.token, Accept: "application/json" },
+        cache: "no-store",
+      });
+    } catch (e) {
+      setLive("error", "cannot reach " + base);
+      return;
+    }
+    if (res.status === 401) {
+      setLive("error", "401 — wrong or missing auth token");
+      return;
+    }
+    if (!res.ok) {
+      setLive("error", "HTTP " + res.status + " from /metrics");
+      return;
+    }
+
+    let payload;
+    try {
+      payload = await res.json();
+    } catch (e) {
+      setLive("error", "/metrics did not return JSON");
+      return;
+    }
+    if (!payload || payload.schema !== SCHEMA) {
+      setLive("error", "unexpected schema — expected " + SCHEMA);
+      return;
+    }
+
+    state.previous = state.latest;
+    state.latest = payload;
+    if (state.previous) {
+      state.history.push({ t: Date.now(), values: intervalMeans(state.previous, payload) });
+      if (state.history.length > MAX_POINTS) state.history.shift();
+    }
+    setLive(state.intervalMs ? "live" : "paused",
+      state.intervalMs ? "live · every " + state.intervalMs / 1000 + "s" : "paused");
+    populateSeriesPicker(payload);
+    renderAll();
+  }
+
+  function populateSeriesPicker(payload) {
+    const sel = $("series");
+    if (sel.options.length === payload.histograms.length) return;
+    clear(sel);
+    for (const h of payload.histograms) {
+      const opt = document.createElement("option");
+      opt.value = h.name;
+      opt.textContent = h.name;
+      sel.appendChild(opt);
+    }
+    sel.value = state.distKey;
+    if (!sel.value && payload.histograms.length) {
+      sel.value = payload.histograms[0].name;
+      state.distKey = sel.value;
+    }
+  }
+
+  function schedule() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = null;
+    if (state.intervalMs > 0) state.timer = setInterval(poll, state.intervalMs);
+  }
+
+  function connect() {
+    state.endpoint = $("endpoint").value.trim() || window.location.origin;
+    state.token = $("token").value;
+    // sessionStorage, not localStorage: the token dies with the tab rather
+    // than sitting on disk. It is never logged and never put in a URL.
+    try {
+      sessionStorage.setItem("gips.endpoint", state.endpoint);
+      sessionStorage.setItem("gips.token", state.token);
+    } catch (e) { /* private mode: keep it in memory only */ }
+    state.history = [];
+    state.previous = null;
+    state.pulseCounts = {};
+    setLive("idle", "connecting…");
+    poll();
+    schedule();
+  }
+
+  // ------------------------------------------------------------------ wiring
+  $("connect").addEventListener("click", connect);
+  $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+  $("endpoint").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+
+  $("interval").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    for (const b of $("interval").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-pressed", "true");
+    state.intervalMs = Number(btn.dataset.ms);
+    schedule();
+    setLive(state.intervalMs ? "live" : "paused",
+      state.intervalMs ? "live · every " + state.intervalMs / 1000 + "s" : "paused");
+  });
+
+  $("series").addEventListener("change", (e) => {
+    state.distKey = e.target.value;
+    renderHistogram();
+  });
+
+  $("view").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const swap = () => {
+      for (const b of $("view").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-pressed", "true");
+      const table = btn.dataset.view === "table";
+      $("charts-view").hidden = table;
+      $("table-view").hidden = !table;
+    };
+    // View Transitions where supported; a plain swap where not.
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap);
+    else swap();
+  });
+
+  $("theme").addEventListener("click", () => {
+    const root = document.documentElement;
+    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    const swap = () => {
+      root.setAttribute("data-theme", next);
+      $("theme").setAttribute("aria-label",
+        next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+      try { sessionStorage.setItem("gips.theme", next); } catch (e) { /* ignore */ }
+      renderAll();
+    };
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap);
+    else swap();
+  });
+
+  // Benchmark files are read locally through the File API. Nothing is uploaded
+  // and no network request is made to load one.
+  $("benchfile").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (parsed.schema !== BENCH_SCHEMA) {
+          setLive("error", "benchmark file is not " + BENCH_SCHEMA);
+          return;
+        }
+        state.bench = parsed;
+        renderBenchmark();
+      } catch (err) {
+        setLive("error", "benchmark file is not valid JSON");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  // Scroll-driven reveal.
+  const io = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("in");
+        io.unobserve(entry.target);
+      }
+    }
+  }, { rootMargin: "0px 0px -8% 0px" });
+  for (const node of document.querySelectorAll(".reveal")) io.observe(node);
+
+  window.addEventListener("resize", () => { if (state.latest) renderAll(); });
+
+  // Restore the last session's endpoint and token, and connect if we have one.
+  (function boot() {
+    let saved = {};
+    try {
+      saved = {
+        endpoint: sessionStorage.getItem("gips.endpoint"),
+        token: sessionStorage.getItem("gips.token"),
+        theme: sessionStorage.getItem("gips.theme"),
+      };
+    } catch (e) { /* ignore */ }
+
+    if (saved.theme) document.documentElement.setAttribute("data-theme", saved.theme);
+    $("endpoint").value = saved.endpoint || window.location.origin;
+    if (saved.token) {
+      $("token").value = saved.token;
+      connect();
+    } else {
+      setLive("idle", "paste the auth token to begin");
+      renderBenchmark();
+    }
+  })();
+})();
+</script>
+</body>
+</html>

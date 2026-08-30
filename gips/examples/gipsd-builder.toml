@@ -1,0 +1,78 @@
+# gipsd.toml — the BUILDER (the machine that compiles and publishes)
+#
+# Copy to <config dir>/gipsd.toml (`~/.config/gips/gipsd.toml` on Linux,
+# `~/Library/Application Support/gips/gipsd.toml` on macOS) and edit the paths
+# and the GNS name. Every field below is parsed by `GipsdConfig` in
+# `bases/gips-config`, and a test in that crate parses this exact file, so if it
+# stops being valid the build stops too.
+#
+# A builder holds BOTH signing keys. They are different keys, in different
+# formats, checked by different programs:
+#
+#   * the FEED key   — `[trust.signing]` below, Ed25519 PKCS#8/SPKI PEM,
+#                      made by `gips key generate-feed`. Another *gipsd*
+#                      checks it before believing this node's feed.
+#   * the GUIX key   — `[guix_signing]` below, a libgcrypt key in Guix's own
+#                      s-expression format, made by `gips key generate-guix`.
+#                      The consumer's *guix-daemon* checks it against
+#                      `/etc/guix/acl` before letting a substitute into the
+#                      store.
+#
+# Neither key can stand in for the other; the formats are not interconvertible.
+# See docs/personal-sync-quickstart.md for the walkthrough this file belongs to.
+
+# Where the local HTTP API and substitute server listen. Loopback on purpose:
+# gipsd only ever needs to talk to the local guix-daemon, and IPFS carries all
+# cross-machine transport. Binding anything else additionally requires
+# `insecure_bind = true`.
+listen = "127.0.0.1:8080"
+
+# SQLite database of published store paths, subscriptions and the search index.
+db_path = "~/.config/gips/gipsd.sqlite"
+
+# The local IPFS (Kubo) daemon's API endpoint — `ipfs daemon` opens this.
+ipfs_api = "http://127.0.0.1:5001"
+
+# The GNUnet CLI used to publish and resolve GNS names.
+gns_command = "gnunet-gns"
+
+[trust]
+# Fail-closed. A builder that also subscribes to other publishers lists them
+# here exactly as the consumer example does; with the list empty (as here) this
+# node accepts nothing from the network, which is the safe default.
+allow_unsigned = false
+
+[trust.signing]
+# REQUIRED on a builder: `POST /publish` signs every feed entry, and with this
+# block (or its `publisher_gns_name`) missing it answers 500 rather than
+# publishing something unsigned. `just sync-push` therefore fails without it.
+#
+# Produced by: gips key generate-feed
+# (writes both halves 0600 inside a 0700 directory and refuses to overwrite)
+#
+# The private half signs this node's feed; the public half is what you copy to
+# every consumer machine, where it goes in `[[trust.trusted_publishers]]`.
+# `gips key export-feed` prints it again whenever you need it.
+narinfo_private_key = "~/.config/gips/feed-signing-key.pem"
+narinfo_public_key = "~/.config/gips/feed-signing-key.pub.pem"
+# The GNS name this node publishes under. It is the name that ends up in the
+# `Signature: 1;<name>;…` line of the feed, and the name a consumer subscribes
+# to with `just subscribe <gns-name>`.
+publisher_gns_name = "desktop-sync.gnu"
+
+[guix_signing]
+# Produced by: gips key generate-guix
+# (the public half is the sibling `signing-key.pub`; there is no second path to
+# configure, so a mismatched .sec/.pub pair cannot be described here)
+#
+# With this block absent, narinfos are served unsigned exactly as they were
+# before signing existed — and the consumer's guix-daemon will refuse them and
+# build from source instead. Absence means off; there is no half-configured
+# state.
+secret_key = "~/.config/gips/signing-key.sec"
+# Optional. What to put in `Signature: 1;<host>;…`. Defaults to this machine's
+# host name, which is what `guix publish` uses.
+# host = "desktop"
+# Optional. The Guile that runs the signing helper; needs guile-gcrypt
+# installed. Defaults to `guile` on PATH.
+# guile = "/usr/bin/guile"

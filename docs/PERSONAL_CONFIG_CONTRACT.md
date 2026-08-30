@@ -216,6 +216,30 @@ repository URL and clone directory are cached in
 existing checkout is not re-cloned — you are offered a `git pull --ff-only`
 instead — and an existing `~/.ssh/id_ed25519` is reused rather than regenerated.
 
+## Peer-to-Peer Package Synchronization (GIPS)
+
+If you maintain multiple Guix machines (for example, a Framework 13 laptop, a
+home server, and an Oracle Always Free cloud instance), you can also declare
+peer-to-peer package substitute synchronization via GIPS in your contract:
+
+```scheme
+(personal-config
+  (version 1)
+  (name "dot_files")
+  (description "Personal config with P2P package sync")
+  (requires "git" "gnu-make" "zsh" "ipfs")
+
+  (steps
+    (step (name "gips")
+          (run "guile -s postinstall/recipes/add/gips.scm --headless")
+          (description "Provision GIPS P2P package substitute daemon")
+          (default? #f))
+    (step (name "home")
+          (run "make apply")
+          (description "Apply home configuration")
+          (default? #t))))
+```
+
 ## Where this sits in the repository's design
 
 `CLAUDE.md` draws a line between the generic installer and one-machine facts:
@@ -231,6 +255,8 @@ installer; this is the handoff at that boundary, not a violation of it.
 
 - `postinstall/recipes/add/personal-config.scm` — the implementation
 - `postinstall/recipes/add/personal-config_purpose.txt` — why each part is there
+- `postinstall/recipes/add/gips.scm` — GIPS post-install setup recipe
+- `postinstall/recipes/add/gips_purpose.txt` — GIPS recipe rationale
 - `oracle/postinstall/README.md` — first boot on an Oracle instance
 - `CHECKLIST.md` R1 — the complementary work: emitting shell and desktop
   preferences into the generated system config at install time

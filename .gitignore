@@ -41,3 +41,7 @@ oracle/image/authorized-key.pub
 
 # Disposable Oracle validation state, snapshots, and ephemeral SSH keys.
 .oracle-validation/
+
+# Ephemeral test configs
+postinstall/tests/test-work.scm
+

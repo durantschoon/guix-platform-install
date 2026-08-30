@@ -1,0 +1,164 @@
+# common commands for GIPS
+
+# Default target: list all available commands
+default:
+    @just --list
+
+# Set up local git hooks
+setup-hooks:
+    #!/usr/bin/env bash
+    if [ -f .git/hooks/pre-commit ]; then
+        echo "pre-commit hook already exists. Refusing to overwrite."
+        exit 1
+    fi
+    cat << 'EOF' > .git/hooks/pre-commit
+    #!/usr/bin/env bash
+    set -e
+    staged_tla_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.tla$' || true)
+    if [ -n "$staged_tla_files" ]; then
+        echo "TLA+ files changed. Generating PDFs..."
+        for file in $staged_tla_files; do
+            ./scripts/tla2pdf.sh "$file"
+            dir=$(dirname "$file")
+            base=$(basename "$file" .tla)
+            pdf_file="$dir/$base.pdf"
+            if [ -f "$pdf_file" ]; then
+                echo "Generated $pdf_file (not staged automatically)"
+            fi
+        done
+        echo "TLA+ PDF generation complete."
+    fi
+    EOF
+    chmod +x .git/hooks/pre-commit
+
+# Build all binaries
+build:
+    cargo build
+
+# Run the daemon
+daemon:
+    cargo run -p gipsd
+
+# Check daemon status
+status:
+    cargo run -p gips -- status
+
+# Run a cargo clean to fix potential permission issues in the target/ directory
+clean:
+    cargo clean
+
+# Run cargo check
+check:
+    cargo check
+
+# Publish a single snapshot via Guile
+# Usage: just snapshot <gns-name> <store-path1> <store-path2> ...
+snapshot gns_name +store_paths:
+    guile scripts/create_snapshot.scm {{gns_name}} {{store_paths}}
+
+# Create an offline snapshot capability from a manifest
+# Computes the manifest's closure with `guix build -m` + `guix gc --requisites`,
+# so it needs Guix on this machine. Add `--gns-name <name>` to publish the
+# resulting snapshot CID under a GNS name.
+# Usage: just snapshot-create my-manifest.scm
+snapshot-create manifest *args:
+    cargo run -p gips -- snapshot create {{manifest}} {{args}}
+
+# Import an offline snapshot capability by CID
+# Usage: just snapshot-import <cid>
+snapshot-import cid:
+    cargo run -p gips -- snapshot import {{cid}}
+
+# --- Personal Sync Workflow ---
+
+# Export the active Guix profile to a declarative manifest
+# Usage: just sync-export
+sync-export:
+    guix package --export-manifest > sync-manifest.scm
+    @echo "Exported current profile to sync-manifest.scm"
+
+# Publish the sync manifest to your personal GNS name
+# Usage: just sync-push <gns-name>
+sync-push gns_name:
+    cargo run -p gips -- snapshot create sync-manifest.scm --gns-name {{gns_name}}
+
+# Pull the sync manifest on a new machine, natively using the local IPFS proxy
+# Usage: just sync-pull <manifest-file>
+sync-pull manifest_file:
+    guix package -m {{manifest_file}} --substitute-urls="http://127.0.0.1:8080"
+
+# Subscribe to a GNS name
+# Usage: just subscribe <gns-name>
+subscribe gns_name:
+    cargo run -p gips -- subscribe {{gns_name}}
+
+# Install a package using GIPS as the substitute server
+# Usage: just install <package>
+# Note: You MUST authorize the publisher's public key first:
+#   gips key fetch-gns --name <publisher.gnu> | sudo guix archive --authorize
+install package:
+    guix install {{package}} --substitute-urls="http://127.0.0.1:8080"
+
+# Run Rust unit tests
+test:
+    cargo test
+
+# Run Scheme tests
+scheme-test:
+    guile test_sign.scm
+    guile test_api.scm
+
+# Launch a Guile REPL with the GIPS scheme library loaded
+repl:
+    ./scheme/run-guile
+
+# Generate a PDF from a TLA+ specification
+# Usage: just tla-pdf docs/tla/FeedSync.tla
+[group('tla')]
+tla-pdf file="docs/tla/FeedSync.tla":
+    ./scripts/tla2pdf.sh {{file}}
+
+# Run the TLC model checker on a TLA+ specification
+# Usage: just tla-check docs/tla/FeedSync.tla
+[group('tla')]
+tla-check file="docs/tla/FeedSync.tla":
+    #!/usr/bin/env bash
+    set -e
+    EXPECTED_SHA="ab323b79802aedc3203b3f9af37c6aca3ed43f4e0225b36f2aa77b26de46c05f"
+    JAR_PATH=".tools/tla2tools.jar"
+    fetch_jar() {
+        echo "Downloading tla2tools.jar..."
+        mkdir -p .tools
+        wget --https-only -qO "$JAR_PATH" https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+    }
+    if [ -f "$JAR_PATH" ]; then
+        ACTUAL_SHA=$(shasum -a 256 "$JAR_PATH" | awk '{print $1}')
+        if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then fetch_jar; fi
+    else
+        fetch_jar
+    fi
+    ACTUAL_SHA=$(shasum -a 256 "$JAR_PATH" | awk '{print $1}')
+    if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then echo "Error: Checksum mismatch!"; exit 1; fi
+    java -cp .tools/tla2tools.jar tlc2.TLC {{file}}
+
+# Check formatting
+fmt-check:
+    cargo fmt --check
+
+# Check markdown linting
+lint:
+    npx markdownlint-cli "**/*.md" --ignore node_modules --ignore target
+
+# Audit dependencies
+audit:
+    cargo deny check || true
+    cargo audit || true
+
+# Test standalone GNU Guix package definition
+package:
+    guile gips.scm
+
+# Build optimized release binaries
+release-build:
+    cargo build --release
+

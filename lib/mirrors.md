@@ -209,6 +209,29 @@ show_mirror_info
 
 ---
 
+## Peer-to-Peer Substitutes: GIPS (IPFS Swarm)
+
+In addition to traditional centralized HTTP substitute mirrors (`ci.guix.gnu.org`, `bordeaux.guix.gnu.org`), this repository supports **GIPS (GNU Guix IPFS Package Substitutes)**.
+
+GIPS distributes substitute binaries over a local IPFS swarm with GNS addressing, transitive web-of-trust capability delegation, and offline snapshot distribution.
+
+### When to use GIPS
+- **Personal multi-machine synchronization:** Share binaries built on your desktop/laptop directly with your cloud VPS (Oracle / Cloudzy) over IPFS without maintaining public build farms or VPNs.
+- **Resilience:** Fall back to peer-to-peer substitute mirrors during upstream build farm outages or rate limits.
+- **Offline & reproducible environments:** Distribute frozen snapshot manifests (.tar bundles or CIDs) across nodes.
+
+### Enabling GIPS Substitutes
+Run the post-install recipe:
+```bash
+guile -s postinstall/recipes/add/gips.scm
+```
+Then configure your `guix-daemon` to include `http://127.0.0.1:8080`:
+```bash
+guix-daemon --substitute-urls="http://127.0.0.1:8080 https://ci.guix.gnu.org"
+```
+
+---
+
 ## References
 
 - [Guix Substitute Servers](https://guix.gnu.org/manual/en/html_node/Substitutes.html)
@@ -216,3 +239,4 @@ show_mirror_info
 - [Nonguix Channel](https://gitlab.com/nonguix/nonguix)
 - [SJTU Mirror Help](https://mirror.sjtu.edu.cn/)
 - [TUNA Mirror Help](https://mirrors.tuna.tsinghua.edu.cn/)
+- [GIPS Documentation](file:///Users/durant/Repos/ds/guix-platform-install/gips/README.md)

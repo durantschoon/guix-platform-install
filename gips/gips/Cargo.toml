@@ -1,0 +1,23 @@
+[package]
+name = "gips"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { workspace = true }
+toml = "0.8"
+dirs = "5.0"
+tokio = { workspace = true }
+gips-trust = { path = "../components/gips-trust" }
+gips-config = { path = "../bases/gips-config" }
+
+[dev-dependencies]
+rand = "0.10.2"
+tempfile = "3"
+# The stub daemon the `snapshot create` tests drive the real HTTP client
+# against: same crate the daemon itself serves with, bound to a loopback port.
+axum = { workspace = true }

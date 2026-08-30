@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Start Guile with GUILE_LOAD_PATH set so (gips api) is found.
+# Run from repo root: ./scheme/run-guile
+set -e
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+export GUILE_LOAD_PATH="$REPO_ROOT/scheme${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}"
+exec guile "$@"

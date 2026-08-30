@@ -1,0 +1,20 @@
+[package]
+name = "gips-ipfs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.37", features = ["fs", "io-util", "macros", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["io"] }
+anyhow = { workspace = true }
+sha2 = "0.10"
+multibase = "0.9"
+bytes = "1.0"
+futures-util = "0.3"
+async-trait = "0.1"
+thiserror = "1.0"
+tracing = { workspace = true }
+base64 = { workspace = true }

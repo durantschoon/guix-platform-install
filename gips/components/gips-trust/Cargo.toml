@@ -1,0 +1,22 @@
+[package]
+name = "gips-trust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+anyhow = { workspace = true }
+zeroize = { version = "1.9", features = ["alloc"] }
+# The feed-key ceremony seeds `SigningKey::from_bytes` from `OsRng`;
+# `SigningKey::generate` is behind dalek's optional `rand_core` feature, which
+# this workspace does not enable. Was a (then unused) dev-dependency.
+rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+# Test-only: lets the oracle test derive the digest Guix will recompute
+# without going through any of the code under test. Nothing in this crate's
+# library code hashes anything.
+sha2 = "0.10"

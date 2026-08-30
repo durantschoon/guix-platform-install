@@ -1,0 +1,46 @@
+# gipsd.toml — the CONSUMER (the laptop that installs what the builder built)
+#
+# Copy to <config dir>/gipsd.toml (`~/.config/gips/gipsd.toml` on Linux,
+# `~/Library/Application Support/gips/gipsd.toml` on macOS) and edit the GNS
+# name and the key path. A test in `bases/gips-config` parses this exact file,
+# so it cannot drift from what gipsd actually accepts.
+#
+# A consumer needs NO keys of its own. It needs two things from the builder,
+# and they are two different things:
+#
+#   * the builder's FEED public key      → `[[trust.trusted_publishers]]` below,
+#                                          so this gipsd believes the feed;
+#   * the builder's GUIX public key      → `sudo guix archive --authorize`,
+#                                          so the local guix-daemon accepts the
+#                                          substitute into the store.
+#
+# Doing only one of the two is the classic failure: everything looks configured
+# and the laptop quietly builds from source. See
+# docs/personal-sync-quickstart.md, "Troubleshooting".
+
+listen = "127.0.0.1:8080"
+db_path = "~/.config/gips/gipsd.sqlite"
+ipfs_api = "http://127.0.0.1:5001"
+gns_command = "gnunet-gns"
+
+[trust]
+# Keep this false. `true` would make gipsd accept feed entries carrying no
+# signature at all — that is, content from anyone who can answer for the name —
+# and there is no situation in this walkthrough that calls for it. Trust here
+# is fail-closed by design: an empty `trusted_publishers` list plus
+# `allow_unsigned = false` means "accept nothing from the network".
+allow_unsigned = false
+
+# One entry per publisher this machine believes. Repeat the whole block to add
+# another; delete a block to stop trusting that publisher.
+[[trust.trusted_publishers]]
+# The name the builder publishes under — its `publisher_gns_name`. Subscribing
+# is a separate step: `just subscribe desktop-sync.gnu` (or
+# `gips subscribe desktop-sync.gnu`). Trusting a publisher does not fetch from
+# it, and subscribing to a publisher does not trust it; both are required.
+gns_name = "desktop-sync.gnu"
+# Where you saved the output of `gips key export-feed` (run on the builder).
+# This is the Ed25519 SPKI PEM — a `-----BEGIN PUBLIC KEY-----` file — not the
+# Guix key, which never appears in this config at all: that one goes into
+# /etc/guix/acl via `sudo guix archive --authorize`.
+public_key = "~/.config/gips/desktop-sync.feed.pub.pem"

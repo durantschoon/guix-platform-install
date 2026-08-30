@@ -1,0 +1,11 @@
+[package]
+name = "gips-nar"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = "0.10"
+
+[dev-dependencies]
+md-5 = "0.10"
+tempfile = "3.27.0"

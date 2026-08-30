@@ -1,0 +1,15 @@
+[package]
+name = "gips-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gips-config = { path = "../../bases/gips-config" }
+gips-trust = { path = "../gips-trust" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = "3.27.0"
