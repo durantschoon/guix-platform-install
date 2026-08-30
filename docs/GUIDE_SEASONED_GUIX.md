@@ -205,6 +205,27 @@ rm -rf /var/guix/substitute-cache/*
 watch -n 1 'du -sh /var/guix/substitute-cache'
 ```
 
+### Peer-to-Peer Substitutes (GIPS) & Web of Trust
+
+For decentralized environments (local LAN clusters, home servers, Oracle Always Free VPS nodes), the **Guix IPFS Package Substitutes (GIPS)** service provides federated P2P substitute distribution with cryptographic integrity:
+
+```bash
+# Point guix-daemon to local GIPS substitute proxy
+guix-daemon --substitute-urls="http://127.0.0.1:8080 https://ci.guix.gnu.org"
+```
+
+#### Web of Trust (WoT) & Capability Delegation
+GIPS uses UCAN-style delegation tokens to establish transitive trust with monotonic capability attenuation:
+- **Depth attenuation**: Delegation depth decrements on every hop.
+- **Prefix constraints**: Capabilities restrict delegation to specific `/gnu/store/...` paths.
+- **Stake decay**: Trust scores decay predictably (15% per hop) across transitive delegations.
+
+#### Objective Cryptographic Fraud Proofs & Gossip
+When a malicious publisher signs invalid metadata or equivocates:
+- **`HashMismatch`**: Proves delivered NAR bytes do not match the signed `NarHash`.
+- **`Equivocation`**: Proves conflicting manifest feeds signed by the same publisher key.
+- **Autonomous Gossip**: Broadcast over IPFS PubSub (`gips.fraud.v1`) and GNUnet CADET. Once received, any downstream Web-of-Trust score is severed to 0, immediately protecting the swarm.
+
 ---
 
 ## System Profiles and Generations

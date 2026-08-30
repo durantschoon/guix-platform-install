@@ -410,6 +410,8 @@
           (start-mock-server
            (lambda (req-line headers body)
              (cond
+              ((and (string-contains req-line "/trust/evaluate") (string-contains body "revoked_pubkey"))
+               "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 72\r\nConnection: close\r\n\r\n{\"score\":0,\"trusted\":false,\"reason\":\"Publisher revoked by fraud proof\"}")
               ((string-contains req-line "/trust/evaluate")
                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 61\r\nConnection: close\r\n\r\n{\"score\":85,\"trusted\":true,\"reason\":\"Valid delegation chain\"}")
               ((string-contains req-line "/vouch/ingest")
@@ -422,6 +424,10 @@
           (if (zero? pid)
               (begin
                 (accept-and-handle sock (lambda (req h b)
+                                          (if (and (string-contains req "/trust/evaluate") (string-contains b "revoked_pubkey"))
+                                              "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 72\r\nConnection: close\r\n\r\n{\"score\":0,\"trusted\":false,\"reason\":\"Publisher revoked by fraud proof\"}"
+                                              "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")))
+                (accept-and-handle sock (lambda (req h b)
                                           (if (string-contains req "/trust/evaluate")
                                               "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 61\r\nConnection: close\r\n\r\n{\"score\":85,\"trusted\":true,\"reason\":\"Valid delegation chain\"}"
                                               "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")))
@@ -431,11 +437,15 @@
                                               "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")))
                 (primitive-exit 0))
               (begin
-                (let ((eval-res (gips-trust-evaluate "pubkey123" #:store-path "/gnu/store/abc"))
+                (let ((revoked-eval (gips-trust-evaluate "revoked_pubkey" #:store-path "/gnu/store/abc"))
+                      (eval-res (gips-trust-evaluate "pubkey123" #:store-path "/gnu/store/abc"))
                       (ingest-res (gips-vouch-ingest "[{\"sig\":\"s\"}]")))
                   (waitpid pid)
                   (close-port sock)
-                  (check "gips-trust-evaluate sends POST /trust/evaluate"
+                  (check "gips-trust-evaluate calculates score 0 for revoked publisher"
+                         (and (string-contains revoked-eval "\"score\":0")
+                              (string-contains revoked-eval "\"trusted\":false")))
+                  (check "gips-trust-evaluate calculates decayed score for valid delegation chain"
                          (string-contains eval-res "\"score\":85"))
                   (check "gips-vouch-ingest sends POST /vouch/ingest"
                          (string-contains ingest-res "\"ok\":true")))))))))

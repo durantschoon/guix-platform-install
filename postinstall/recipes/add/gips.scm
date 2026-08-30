@@ -319,6 +319,28 @@ secret_key = ~s
     (ok "GIPS configuration setup completed successfully.")))
 
 ;;; ---------------------------------------------------------------------------
+;;; Fraud Proof Revocation & ACL Synchronization
+;;; ---------------------------------------------------------------------------
+
+(define (sync-acl-and-revocations)
+  (msg "Checking GIPS Cryptographic Fraud Proofs & Guix ACL")
+  (catch #t
+    (lambda ()
+      (let* ((port (open-pipe* OPEN_READ "curl" "-s" "-m" "2" "http://127.0.0.1:8080/fraud-proof/list"))
+             (out (get-string-all port))
+             (status (close-pipe port)))
+        (if (and (zero? (status:exit-val status)) (not (string-null? out)))
+            (begin
+              (ok "Successfully queried active fraud proofs from GIPS daemon")
+              (info (format #f "Active Revocation Proofs: ~a" (string-trim-both out)))
+              (if (string=? (string-trim-both out) "[]")
+                  (ok "No revoked publishers in local mesh")
+                  (warn "Active fraud proofs present -- verify /etc/guix/acl has revoked keys removed")))
+            (info "No active GIPS daemon reachable to query fraud proofs"))))
+    (lambda (k . args)
+      (info "GIPS daemon not reachable for fraud proof synchronization"))))
+
+;;; ---------------------------------------------------------------------------
 ;;; Self-Test Suite
 ;;; ---------------------------------------------------------------------------
 
@@ -385,6 +407,7 @@ Options:
   --status             Inspect GIPS, IPFS, and ACL configuration status
   --monitor            Display live terminal swarm monitor snapshot
   --monitor-json       Output live telemetry monitor snapshot as JSON
+  --check-revocations  Query active fraud proof revocations from local mesh
   --self-test          Run offline verification test suite
   --help, -h           Show this help message
 "))
@@ -401,6 +424,8 @@ Options:
      (launch-monitor #:json? #f))
     ((or ("--monitor-json"))
      (launch-monitor #:json? #t))
+    ((or ("--check-revocations") ("--sync-revocations"))
+     (sync-acl-and-revocations))
     ((or ("--self-test"))
      (run-self-tests))
     ((or ("--help") ("-h"))
