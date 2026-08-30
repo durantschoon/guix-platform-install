@@ -654,6 +654,7 @@
                      (metrics-hist (gips-metrics-history))
                      (text-snapshot (gips-monitor #:once? #t))
                      (json-snapshot (gips-monitor #:once? #t #:json? #t)))
+                (catch #t (lambda () (kill pid SIGTERM)) (lambda _ #f))
                 (waitpid pid)
                 (close-port sock)
                 (check "gips-metrics parses JSON metrics payload"
