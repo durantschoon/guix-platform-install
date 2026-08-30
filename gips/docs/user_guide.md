@@ -75,6 +75,33 @@ just install <package>
 
 *(You can also set the substitute URL globally in your `guix-daemon` configuration).*
 
+### 5. Running as a Declarative Guix System Service
+
+On GNU Guix System, you can run `gipsd` as a Shepherd system daemon managed declaratively inside `/etc/config.scm`.
+
+Attach the service automatically:
+```bash
+guile lib/guile-config-helper.scm add-gips-service /etc/config.scm
+sudo guix system reconfigure /etc/config.scm
+```
+
+Or declare it directly in `/etc/config.scm`:
+```scheme
+(use-modules (gnu)
+             (gips service))
+
+(operating-system
+  ;; ...
+  (services
+    (append (list (service gips-service-type
+                           (gips-configuration
+                            (gipsd-config
+                             (gipsd-configuration
+                              #:listen "127.0.0.1:8080"
+                              #:db-path "/var/lib/gips/gipsd.sqlite")))))
+            %base-services)))
+```
+
 ---
 
 ## For Guix Publishers (Uploading Substitutes)

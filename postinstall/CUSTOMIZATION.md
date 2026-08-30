@@ -665,6 +665,42 @@ If the autostart script exists but keyboard layout isn't being applied in GNOME:
 
 ---
 
+### Workflow 4: P2P Package Substitute Service (GIPS)
+
+**Goal:** Declarative GIPS daemon (`gipsd`) on Guix System for peer-to-peer substitute downloads.
+
+1. **Automated Setup with Config Helper:**
+   ```bash
+   guile lib/guile-config-helper.scm add-gips-service /etc/config.scm
+   ```
+
+2. **Manual Configuration in `/etc/config.scm`:**
+   Add `(gips service)` to `use-modules`:
+   ```scheme
+   (use-modules (gnu)
+                (gips service))  ; GIPS system service
+   ```
+
+   Add `(service gips-service-type)` to the `services` field:
+   ```scheme
+   (services
+     (append
+      (list (service gips-service-type
+                     (gips-configuration
+                      (gipsd-config
+                       (gipsd-configuration
+                        #:listen "127.0.0.1:8080"
+                        #:db-path "/var/lib/gips/gipsd.sqlite")))))
+      %base-services))
+   ```
+
+3. **Apply changes:**
+   ```bash
+   sudo guix system reconfigure /etc/config.scm
+   ```
+
+---
+
 ## Further Reading
 
 - [Official Guix Manual](https://guix.gnu.org/manual/)

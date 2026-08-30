@@ -145,6 +145,18 @@ if command -v guile &> /dev/null; then
         echo
     fi
 
+    if [ -f "lib/tests/test-config-helper-gips.scm" ]; then
+        echo -e "${YELLOW}Testing GIPS Config Helper Integration...${NC}"
+        echo "----------------------------------------"
+        if guile --no-auto-compile -s lib/tests/test-config-helper-gips.scm; then
+            echo -e "${GREEN}[OK] GIPS config helper tests passed${NC}"
+        else
+            echo -e "${RED}[FAIL] GIPS config helper tests failed${NC}"
+            exit 1
+        fi
+        echo
+    fi
+
     if [ -f "gips/test_sign.scm" ]; then
         echo -e "${YELLOW}Testing GIPS Narinfo Signing Suite...${NC}"
         echo "----------------------------------------"

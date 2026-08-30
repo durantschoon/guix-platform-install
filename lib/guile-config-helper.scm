@@ -105,6 +105,20 @@
     (_ use-modules-expr)))
 
 ;;; Check if a service is in the services list
+(define (service-type-matches? svc target-type)
+  (match svc
+    (('service type-sym _ ...) (eq? type-sym target-type))
+    (('service type-sym) (eq? type-sym target-type))
+    (_ #f)))
+
+(define (has-service-type? services-expr target-type)
+  (match services-expr
+    (('append ('list services ...) rest ...)
+     (any (lambda (s) (service-type-matches? s target-type)) services))
+    (('list services ...)
+     (any (lambda (s) (service-type-matches? s target-type)) services))
+    (_ #f)))
+
 (define (has-service? services-expr service-expr)
   (match services-expr
     (('append ('list services ...) rest ...)
@@ -125,6 +139,10 @@
     ;; Just %base-services - wrap in append
     ('%base-services
      `(append (list ,service-expr) %base-services))
+
+    ;; Just %desktop-services - wrap in append
+    ('%desktop-services
+     `(append (list ,service-expr) %desktop-services))
 
     ;; Simple list - add to it
     (('list services ...)
@@ -617,6 +635,35 @@
                   exprs)))
     (if module (ensure-module edited module) edited)))
 
+(define (config-has-gips-service? exprs)
+  "Check whether any operating-system in EXPRS contains gips-service-type."
+  (any (lambda (expr)
+         (match expr
+           (('operating-system fields ...)
+            (any (lambda (f)
+                   (match f
+                     (('services services-expr)
+                      (has-service-type? services-expr 'gips-service-type))
+                     (_ #f)))
+                 fields))
+           (_ #f)))
+       (filter code? exprs)))
+
+(define (config-add-gips-service exprs . maybe-config)
+  "Pure transform: ensure (gips service) is imported and (service gips-service-type ...)
+   is added to operating-system services without corrupting comments or duplicate entries."
+  (let* ((service-expr (if (and (pair? maybe-config) (car maybe-config))
+                           `(service gips-service-type ,(car maybe-config))
+                           `(service gips-service-type)))
+         (gips-module '(gips service)))
+    (if (config-has-gips-service? exprs)
+        exprs
+        (let ((with-module (ensure-module exprs gips-module)))
+          (map-operating-systems
+           (lambda (os)
+             (modify-os-services os service-expr))
+           with-module)))))
+
 ;;; --- CLI layer --------------------------------------------------------------
 
 (define (run-config-edit config-file transform)
@@ -661,6 +708,24 @@
                                 (config-set-login-shell exprs user-name
                                                         shell-name))))))
 
+(define (cmd-add-gips-service config-file . maybe-config-str)
+  (guarded (lambda ()
+             (let ((custom-config (if (pair? maybe-config-str)
+                                      (call-with-input-string (car maybe-config-str) read)
+                                      #f)))
+               (run-config-edit config-file
+                                (lambda (exprs)
+                                  (if custom-config
+                                      (config-add-gips-service exprs custom-config)
+                                      (config-add-gips-service exprs))))))))
+
+(define (cmd-check-gips-service config-file)
+  (let* ((exprs (read-config config-file))
+         (has?  (config-has-gips-service? exprs)))
+    (if has?
+        (begin (display "yes\n") (exit 0))
+        (begin (display "no\n") (exit 1)))))
+
 ;;; Main entry point
 (define (main args)
   (match args
@@ -669,6 +734,18 @@
 
     ((_ "check-service" config-file service-type)
      (cmd-check-service config-file service-type))
+
+    ((_ "add-gips-service" config-file)
+     (cmd-add-gips-service config-file))
+
+    ((_ "add-gips-service" config-file config-expr-str)
+     (cmd-add-gips-service config-file config-expr-str))
+
+    ((_ "check-gips-service" config-file)
+     (cmd-check-gips-service config-file))
+
+    ((_ "has-gips-service" config-file)
+     (cmd-check-gips-service config-file))
 
     ((_ "switch-to-desktop" config-file)
      (cmd-switch-to-desktop config-file))
@@ -686,6 +763,8 @@
      (display "Usage:\n")
      (display "  guile-config-helper.scm add-service CONFIG-FILE MODULE SERVICE-EXPR\n")
      (display "  guile-config-helper.scm check-service CONFIG-FILE SERVICE-TYPE\n")
+     (display "  guile-config-helper.scm add-gips-service CONFIG-FILE [CONFIG-EXPR]\n")
+     (display "  guile-config-helper.scm check-gips-service CONFIG-FILE\n")
      (display "  guile-config-helper.scm switch-to-desktop CONFIG-FILE\n")
      (display "  guile-config-helper.scm set-host-name CONFIG-FILE HOST-NAME\n")
      (display "  guile-config-helper.scm set-timezone CONFIG-FILE TIMEZONE\n")

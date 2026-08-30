@@ -47,7 +47,7 @@ f856f82f394f1a3d6b982eb61e0fcab1d62a30de59ca01bdd08f6c362e46d25e  lib/postinstal
 
 ## Guile Library Scripts
 
-c7f1547d7273f1b4456879839be923a203f9e031c4fd2fd88af00d5d224d30a2  lib/guile-config-helper.scm
+29f1b3853b6f85ff4e23b86c89578f2c8cdb30726414d35df03c442af42c4ac3  lib/guile-config-helper.scm
 c6cf685b75ed05e77f858a00474a610b2dc1191ea8ed3124a0106ce7de55f45b  lib/bootstrap-postinstall.scm
 89d2c2b52d5da202b0dc4d7de2dc7121bc74c023cd601a4b24a07aee69d81d46  lib/fix-network.scm
 cf72b297e8043a00058ad0f5baa3806b175e91c34c315a21659074d6082925bc  lib/finish-installation.scm
