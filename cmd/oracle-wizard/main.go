@@ -460,6 +460,32 @@ func main() {
 			cmd.Stderr = os.Stderr
 			_ = cmd.Run()
 		}
+	} else {
+		runPersonal := promptConfirm("Would you like to run the personal configuration setup on your instance now?", true)
+		if runPersonal {
+			sshPath, err := exec.LookPath("ssh")
+			if err != nil {
+				fmt.Printf("[ERROR] ssh not found: %v\n", err)
+			} else {
+				remoteCmd := "wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm"
+				sshArgs := []string{
+					"-t",
+					"-o", "StrictHostKeyChecking=accept-new",
+					"-o", "ConnectTimeout=15",
+				}
+				if privKeyPath != "" {
+					if _, err := os.Stat(privKeyPath); err == nil {
+						sshArgs = append(sshArgs, "-i", privKeyPath)
+					}
+				}
+				sshArgs = append(sshArgs, fmt.Sprintf("guix@%s", publicIP), remoteCmd)
+				cmd := exec.Command(sshPath, sshArgs...)
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				_ = cmd.Run()
+			}
+		}
 	}
 
 	fmt.Println()
@@ -475,10 +501,12 @@ func main() {
 	} else {
 		fmt.Println()
 	}
-	fmt.Println("To configure your personal shell, editor, and preferences, run")
-	fmt.Println("this one-liner inside your Guix machine:")
-	fmt.Println("  wget -qO- https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm \\")
-	fmt.Println("    | guile --no-auto-compile -s /dev/stdin")
+	fmt.Println("To run your personal configuration setup at any time:")
+	fmt.Printf("  make personal-setup IP=%s\n", publicIP)
+	fmt.Println()
+	fmt.Println("Or inside your running Guix machine directly:")
+	fmt.Println("  wget -O setup.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm")
+	fmt.Println("  guile --no-auto-compile -s setup.scm")
 	fmt.Println()
 	fmt.Println("[OK] Wizard completed.")
 }

@@ -14,7 +14,7 @@ INSTANCE_ID ?= $(ORACLE_INSTANCE_ID)
 EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
-.PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh
+.PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup
 .PHONY: gips-test gips-rust-test gips-check
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
@@ -30,6 +30,7 @@ help:
 	@echo "  make wizard             Interactive step-by-step setup wizard"
 	@echo "  make download           Download & verify published generic Guix image"
 	@echo "  make ssh IP=...         Connect to running Guix instance (with pre-flight check)"
+	@echo "  make personal-setup IP=... Run interactive personal config setup on instance"
 	@echo ""
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
@@ -232,6 +233,10 @@ download oracle-download:
 
 ssh oracle-ssh:
 	go run ./cmd/oracle-ssh $(if $(IP),-ip "$(IP)",) $(if $(INSTANCE_ID),-instance-id "$(INSTANCE_ID)",) $(if $(KEY),-key "$(KEY)",)
+
+personal-setup:
+	@test -n "$(IP)" || { echo "IP=... is required (e.g. make personal-setup IP=129.159.162.200)" >&2; exit 2; }
+	go run ./cmd/oracle-ssh -ip "$(IP)" $(if $(KEY),-key "$(KEY)",) -t "bash -c 'wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm'"
 
 # Developer aliases
 dev-oracle-test: oracle-test
