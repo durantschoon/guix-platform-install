@@ -1,0 +1,29 @@
+oracle-wizard: interactive step-by-step setup wizard for Guix System on Oracle Cloud.
+
+WHY THIS EXISTS
+Getting a Guix System running on Oracle Cloud involves several distinct phases:
+verifying an account, obtaining an SSH key, downloading the generic image,
+uploading to Object Storage, importing with exact parameters (QCOW2 + PARAVIRTUALIZED),
+configuring network security lists, launching the instance with the user's public key,
+and verifying connectivity.
+While documented in `oracle/README.md` and `web/index.html`, users benefit from
+an interactive terminal companion that:
+  1. Manages a dedicated SSH key pair convention (~/.ssh/id_ed25519_guix_oracle),
+     ensuring personal keys (~/.ssh/id_ed25519) are not overwritten or shared.
+  2. Ensures the generic image is present locally and cryptographically verified.
+  3. Provides exact, numbered copy-paste parameters for each OCI Web Console screen.
+  4. Verifies instance readiness via a multi-stage animated ASCII spinner
+     (TCP reachability, SSH daemon banner, and public key authentication) with
+     clear explanations of first-boot delays (such as 2GB swapfile creation).
+  5. Launches the SSH session seamlessly with safety timeouts and prints first-boot guidance.
+
+STATEMENTS OF OMISSION
+  1. Tempting to automate the entire web browser interaction via Selenium/Playwright.
+     Left out because:
+     - Cloudflare/CAPTCHA and Oracle authentication prevent reliable headless automation.
+     - Asking for OCI console login credentials inside the tool violates repository
+       security boundaries (never handle users' OCI web passwords or OTPs).
+  2. Tempting to depend on the OCI CLI.
+     Left out because friends and new users without Python or OCI API credentials
+     can use this wizard immediately with zero external cloud dependencies. Users
+     with OCI CLI can run `04-deploy.scm` or `make dev-oracle-run`.

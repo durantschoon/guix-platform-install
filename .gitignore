@@ -8,8 +8,9 @@ run-remote-steps
 # IDE and editor files
 .claude/
 
-# ISO files
+# ISO files and cloud VM images
 *.iso.*
+*.qcow2
 
 # API keys and secrets (NEVER commit these!)
 .env

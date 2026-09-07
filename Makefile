@@ -13,7 +13,9 @@ SUBNET_ID ?= $(ORACLE_SUBNET_ID)
 INSTANCE_ID ?= $(ORACLE_INSTANCE_ID)
 EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
-.PHONY: help test check manifest gips-test gips-rust-test gips-check
+.PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
+.PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh
+.PHONY: gips-test gips-rust-test gips-check
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
@@ -21,8 +23,14 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: oracle-run oracle-one-shot oracle-resume-check
 .PHONY: oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-handoff
 .PHONY: oracle-build-generic oracle-upload-generic oracle-import-generic oracle-timings
+.PHONY: dev-oracle-test dev-oracle-test-all dev-oracle-run
 
 help:
+	@echo "Guix on Oracle - User targets:"
+	@echo "  make wizard             Interactive step-by-step setup wizard"
+	@echo "  make download           Download & verify published generic Guix image"
+	@echo "  make ssh IP=...         Connect to running Guix instance (with pre-flight check)"
+	@echo ""
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
 	@echo "  make check              Run pre-deploy validation and the complete test suite"
@@ -30,16 +38,31 @@ help:
 	@echo "  make gips-test          Run GIPS Guile Scheme test suite"
 	@echo "  make gips-rust-test     Run GIPS Rust workspace test suite"
 	@echo "  make gips-check         Run both Scheme and Rust GIPS test suites"
-	@echo "  make oracle-help        Show Oracle validation targets"
+	@echo ""
+	@echo "Developer targets:"
+	@echo "  make dev-check          Run pre-deploy validation and test suite"
+	@echo "  make dev-test           Run local test suite"
+	@echo "  make dev-manifest       Regenerate SOURCE_MANIFEST.txt"
+	@echo "  make dev-help           Show all developer & validation targets"
 
-test:
+dev-help:
+	@echo "Developer & validation targets:"
+	@echo "  make dev-check            Run pre-deploy validation and test suite"
+	@echo "  make dev-test             Run local test suite"
+	@echo "  make dev-manifest         Regenerate SOURCE_MANIFEST.txt"
+	@echo "  make dev-oracle-test      All offline Oracle test suites"
+	@echo "  make dev-oracle-test-all  All four suites (requires Guix)"
+	@echo "  make dev-oracle-run       Run disposable validation instance"
+	@echo "  make oracle-help          Show full Oracle validation & lifecycle targets"
+
+dev-test test:
 	./run-tests.sh
 
-check:
+dev-check check:
 	lib/validate-before-deploy.sh --verbose
 	./run-tests.sh
 
-manifest:
+dev-manifest manifest:
 	./update-manifest.sh
 
 gips-test:
@@ -71,6 +94,11 @@ oracle-help:
 	@echo "  make oracle-timings       # historical median/p90 durations"
 	@echo "  make oracle-instance      # defaults from .env"
 	@echo "  make oracle-evidence      # defaults from .env"
+	@echo ""
+	@echo "Onboarding & access helpers:"
+	@echo "  make wizard               # interactive step-by-step setup wizard"
+	@echo "  make oracle-download      # download and verify published generic image"
+	@echo "  make oracle-ssh IP=...    # connect to running instance with pre-flight check"
 	@echo ""
 	@echo "Disposable lifecycle targets (create an IN_TEST instance):"
 	@echo "  make oracle-build-generic # local x86_64 QCOW2, resumable container"
@@ -190,3 +218,22 @@ oracle-run-status oracle-logs oracle-collect oracle-stop oracle-cleanup oracle-h
 	$(GUILE) --no-auto-compile -s oracle/scripts/validation-lifecycle.scm \
 		$(patsubst oracle-run-status,status,$(patsubst oracle-logs,logs,$(patsubst oracle-collect,collect,$(patsubst oracle-stop,stop,$(patsubst oracle-cleanup,cleanup,$(patsubst oracle-handoff,handoff,$@)))))) \
 		--run-dir '$(RUN_DIR)' $(YES)
+
+# Published image download & instance SSH helpers (Go)
+OUTPUT ?= guix-oracle-generic.qcow2
+IP ?= $(ORACLE_INSTANCE_IP)
+KEY ?= $(ORACLE_SSH_KEY)
+
+wizard oracle-wizard:
+	go run ./cmd/oracle-wizard
+
+download oracle-download:
+	go run ./cmd/oracle-download -output "$(OUTPUT)" $(if $(FORCE),-force,)
+
+ssh oracle-ssh:
+	go run ./cmd/oracle-ssh $(if $(IP),-ip "$(IP)",) $(if $(INSTANCE_ID),-instance-id "$(INSTANCE_ID)",) $(if $(KEY),-key "$(KEY)",)
+
+# Developer aliases
+dev-oracle-test: oracle-test
+dev-oracle-test-all: oracle-test-all
+dev-oracle-run: oracle-run

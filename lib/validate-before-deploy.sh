@@ -406,13 +406,14 @@ check_function_signatures
 echo
 echo "Running compilation check..."
 check_compilation() {
-    if go build -o /tmp/validate-build ./run-remote-steps.go 2>/tmp/validate-build.log; then
+    local tmp="${TMPDIR:-/tmp}"
+    if go build -o "$tmp/validate-build" ./run-remote-steps.go 2>"$tmp/validate-build.log"; then
         log_test PASS "Code compiles successfully"
-        rm -f /tmp/validate-build
+        rm -f "$tmp/validate-build"
     else
         log_test FAIL "Compilation failed"
-        verbose_log "See: /tmp/validate-build.log"
-        cat /tmp/validate-build.log
+        verbose_log "See: $tmp/validate-build.log"
+        cat "$tmp/validate-build.log"
     fi
 }
 check_compilation

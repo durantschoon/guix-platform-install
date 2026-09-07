@@ -1,0 +1,26 @@
+Purpose of cmd/oracle-ssh:
+Establishes an interactive SSH session to a Guix System running on Oracle Cloud
+Infrastructure (OCI) with intelligent pre-flight readiness waiting and fallback
+resolution.
+
+Features:
+- Automatic multi-stage readiness verification with animated ASCII spinner:
+  1. TCP port reachability: ensures OCI Security List and routing allow port 22.
+  2. SSH protocol banner: ensures VM kernel has booted and sshd has started.
+  3. Public key authorization: ensures OCI metadata service has injected authorized_keys.
+- Clear user feedback explaining first-boot initialization delays (e.g. 2GB swapfile
+  creation on VM.Standard.E2.1.Micro).
+- Graceful interruption: intercepts Ctrl+C during wait without hanging or leaving
+  orphaned processes.
+- Automatic key discovery: automatically detects the dedicated key
+  ~/.ssh/id_ed25519_guix_oracle if neither --key nor ORACLE_SSH_KEY/KEY are specified.
+- Public IP discovery: accepts explicit IP, environment variables (ORACLE_INSTANCE_IP,
+  ORACLE_HOST), .env file, or resolves dynamically via OCI CLI if --instance-id is given.
+- Interactive safety options: includes ConnectTimeout, ServerAliveInterval, and
+  ServerAliveCountMax to prevent silent hangs on network disruptions.
+
+Statements of omission:
+- Omitted an internal pure-Go SSH client terminal; external OpenSSH is executed directly
+  to preserve user terminal emulations, ssh-agent sessions, and custom ~/.ssh/config rules.
+- Omitted non-standard unicode spinner characters; strictly adheres to repository ASCII
+  conventions for OCI serial console and terminal compatibility.
