@@ -553,18 +553,22 @@ func main() {
 	fmt.Println("================================================================")
 	fmt.Println("                     Next Steps on First Boot                   ")
 	fmt.Println("================================================================")
-	fmt.Println("Whenever you want to reconnect, run:")
-	fmt.Printf("  make ssh IP=%s\n", publicIP)
+	fmt.Println("Whenever you want to reconnect, simply run:")
+	fmt.Println("  make ssh")
+	fmt.Println("  (or with agent forwarding: make ssh AGENT=1)")
 	if privKeyPath != "" && strings.HasSuffix(privKeyPath, dedicatedSSHKeyName) {
-		fmt.Printf("  (dedicated key ~/.ssh/%s is used automatically)\n\n", dedicatedSSHKeyName)
+		fmt.Printf("  (IP %s saved to .env; key ~/.ssh/%s used automatically)\n\n", publicIP, dedicatedSSHKeyName)
 	} else if privKeyPath != "" {
-		fmt.Printf("  (or: make ssh IP=%s KEY=%s)\n\n", publicIP, privKeyPath)
+		fmt.Printf("  (IP %s saved to .env; key: %s)\n\n", publicIP, privKeyPath)
 	} else {
-		fmt.Println()
+		fmt.Printf("  (IP %s saved to .env)\n\n", publicIP)
 	}
 	fmt.Println("To run your personal configuration setup at any time:")
-	fmt.Printf("  make personal-setup IP=%s\n", publicIP)
+	fmt.Println("  make personal-setup")
+	fmt.Println("  (or with agent forwarding: make personal-setup AGENT=1)")
 	fmt.Println()
+	fmt.Println("To update or clear the saved IP in the future:")
+	fmt.Println("  make set-ip IP=<new-ip>")
 	fmt.Println("Or inside your running Guix machine directly:")
 	fmt.Println("  wget -O setup.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm")
 	fmt.Println("  guile --no-auto-compile -s setup.scm")

@@ -19,7 +19,7 @@ f10bcba49ce7e09627d77e7ac2d145da55b89d51b9eb700671a7a020037f0277  ./cmd/oracle-d
 1a82694bf3322517f235af74b82653b464fcdb817730c65c34c0552e7e39c9e6  ./cmd/oracle-ssh/main_test.go
 8bb0eb00458ee73922975da709e172854c9ea66370414b7db16f00967f3d3025  ./cmd/oracle-ssh/main.go
 01ac5dd4cf5b462f430c92609a4de27999f8fb4b2624c5aba88bf90afa5642a3  ./cmd/oracle-wizard/main_test.go
-b50930af42adc362ea5806a8e8c40972773979b0aec4d92611b7aa92f53e5c0f  ./cmd/oracle-wizard/main.go
+73dbc5f8671aa48bd6bc222f9d32484cd08314a33dde0e686b7900840c459358  ./cmd/oracle-wizard/main.go
 8f182be114dd652fc8c1c6ec48b722709b58a1bc7e7cb492d846c9e18723dd4b  ./cmd/recovery/main.go
 62e75320502e863ae1e927d75cf9e61aa89acbefe56f7293fc10c3451ff59eac  ./framework-dual/install/01-partition-check_test.go
 bd9b4134a571950587bd34384d64c894b0f3b748a4c5903fa3dc1a1629acb6f0  ./framework-dual/install/01-partition-check.go
