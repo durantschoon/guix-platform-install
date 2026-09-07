@@ -75,6 +75,8 @@ func main() {
 	timeoutSec := flag.Int("timeout", 4, "TCP port check timeout in seconds (when wait=false)")
 	agentFlag := flag.Bool("agent", false, "Enable SSH agent forwarding (-A) for git authentication")
 	flag.BoolVar(agentFlag, "forward-agent", false, "Alias for -agent")
+	ttyCmdFlag := flag.String("t", "", "Allocate a pseudo-terminal and execute command")
+	execCmdFlag := flag.String("cmd", "", "Command to execute on remote host")
 
 	flag.Parse()
 
@@ -251,8 +253,17 @@ func main() {
 		sshArgs = append(sshArgs, "-i", resolvedKey)
 	}
 
+	if *ttyCmdFlag != "" {
+		sshArgs = append(sshArgs, "-t")
+	}
+
 	sshArgs = append(sshArgs, destination)
-	if len(extraArgs) > 0 {
+
+	if *ttyCmdFlag != "" {
+		sshArgs = append(sshArgs, *ttyCmdFlag)
+	} else if *execCmdFlag != "" {
+		sshArgs = append(sshArgs, *execCmdFlag)
+	} else if len(extraArgs) > 0 {
 		sshArgs = append(sshArgs, extraArgs...)
 	}
 
