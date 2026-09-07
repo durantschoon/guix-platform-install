@@ -14,7 +14,7 @@ INSTANCE_ID ?= $(ORACLE_INSTANCE_ID)
 EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
-.PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup
+.PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
 .PHONY: gips-test gips-rust-test gips-check
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
@@ -31,6 +31,7 @@ help:
 	@echo "  make download           Download & verify published generic Guix image"
 	@echo "  make ssh [IP=...] [AGENT=1] Connect to Guix instance (optional SSH agent forwarding)"
 	@echo "  make personal-setup [IP=...] [AGENT=1] Run personal config setup on instance"
+	@echo "  make set-ip IP=...      Update ORACLE_INSTANCE_IP in .env (or 'make set-ip IP=' to clear)"
 	@echo ""
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
@@ -239,6 +240,19 @@ ssh oracle-ssh:
 personal-setup:
 	@test -n "$(IP)" || { echo "IP is required. Set ORACLE_INSTANCE_IP in .env or pass IP=... (e.g. make personal-setup IP=129.159.162.200)" >&2; exit 2; }
 	go run ./cmd/oracle-ssh -ip "$(IP)" $(if $(KEY),-key "$(KEY)",) $(AGENT_FLAG) -t "bash -c 'wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm'"
+
+set-ip:
+	@touch .env
+	@if grep -qE '^#?[[:space:]]*(export[[:space:]]+)?ORACLE_INSTANCE_IP=' .env; then \
+		awk -v new_ip="$(IP)" 'BEGIN{FS=OFS="="} $$1 ~ /^#?[[:space:]]*(export[[:space:]]+)?ORACLE_INSTANCE_IP$$/ { $$0="ORACLE_INSTANCE_IP=" new_ip } { print }' .env > .env.tmp && mv .env.tmp .env; \
+	else \
+		echo "ORACLE_INSTANCE_IP=$(IP)" >> .env; \
+	fi
+	@if [ -n "$(IP)" ]; then \
+		echo "[OK] Updated ORACLE_INSTANCE_IP=$(IP) in .env"; \
+	else \
+		echo "[OK] Cleared ORACLE_INSTANCE_IP in .env"; \
+	fi
 
 # Developer aliases
 dev-oracle-test: oracle-test
