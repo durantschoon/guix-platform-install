@@ -1,0 +1,36 @@
+oracle-download: download and verify the generic Guix System Oracle Cloud QCOW2 image.
+
+WHY THIS EXISTS
+Oracle Cloud Infrastructure (OCI) requires custom disk images to be uploaded to
+Object Storage before launching an instance. The repository builds and publishes
+a generic, keyless Guix image as a GitHub release asset. Manually copying release
+URLs, fetching 585 MB, and verifying the SHA-256 hash by hand is error-prone.
+This tool automates:
+  1. Fetching the canonical published generic image over HTTPS.
+  2. Streaming verification of the cryptographic SHA-256 hash during download.
+  3. Safe atomic writing via a `.part` file to prevent corrupted partial downloads.
+  4. Idempotent check: skips re-downloading if the file already exists with a
+     matching SHA-256 hash.
+
+FLAGS AND DEFAULTS
+  -url: Defaults to the verified release asset:
+    https://github.com/durantschoon/guix-platform-install/releases/download/oracle-image-20260811/guix-oracle-generic.qcow2
+  -sha256: Defaults to the recorded release hash:
+    327ae991eebdd333baf00f315d038113b902564bdea257758aa22baf55106592
+  -output: Defaults to "guix-oracle-generic.qcow2" in the current directory.
+  -force: Overrides the idempotency check to re-download.
+  -verify-only: Verifies the checksum of an existing local file and exits.
+
+STATEMENTS OF OMISSION
+  1. Tempting to upload directly to OCI Object Storage from this tool.
+     Left out because doing so would require large third-party Go dependencies
+     (oracle/oci-go-sdk) or requiring the Python `oci` CLI to be configured.
+     Users can upload via the OCI web console or using `oracle/scripts/04-deploy.scm`
+     or `make oracle-upload-generic`.
+  2. Tempting to use external downloaders (curl, wget, aria2c).
+     Left out to ensure zero external system dependencies beyond the Go standard
+     library (`net/http`, `crypto/sha256`), making it portable across macOS,
+     Linux, Termux, etc.
+  3. Tempting to use ANSI cursor movements or colors.
+     Left out in accordance with repository ASCII logging conventions:
+     `[OK]`, `[WARN]`, `[INFO]`, and `[ERROR]`.

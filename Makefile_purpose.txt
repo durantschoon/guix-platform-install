@@ -22,3 +22,22 @@ work, so operators must review it before setting `YES=--yes`.
 Cloud lifecycle targets remain explicit. There is no display-name-based or
 generic destroy shortcut: mutation and cleanup continue through the exact-run
 ownership gate in `validation-lifecycle.scm`.
+
+`wizard`, `oracle-download` (or `download`), and `oracle-ssh` (or `ssh`) simplify user onboarding:
+- `wizard` runs an interactive terminal wizard walking the user through account verification,
+  SSH key detection/generation, image downloading, numbered copy-paste OCI console instructions,
+  and connection verification.
+- `download` fetches and verifies the canonical generic image published
+  on GitHub Releases, preventing manual download and checksum verification mistakes.
+  It is intentionally idempotent and skips re-download if the valid image exists.
+- `ssh` connects to the running instance with automatic target resolution
+  (CLI arg, .env, or OCI CLI) and provides pre-flight TCP reachability diagnostics
+  for common OCI security list omissions.
+
+Target separation:
+Repository workflows are divided between user-facing onboarding targets (`download`, `ssh`)
+and developer-facing targets (`dev-check`, `dev-test`, `dev-manifest`, `dev-oracle-*`).
+`make help` surfaces the simple user flow first to keep onboarding focused, while
+`make dev-help` and `make oracle-help` provide discoverability for development, testing,
+and full cloud lifecycle validation. Backward-compatible aliases (`check`, `test`, etc.)
+are preserved.

@@ -1,0 +1,30 @@
+Purpose of internal/sshwait:
+Provides an interactive, multi-stage SSH readiness waiter and animated ASCII terminal
+spinner for Oracle Cloud instances.
+
+Problem solved:
+On Oracle Cloud Always Free micro shapes (e.g. VM.Standard.E2.1.Micro), first boot performs
+heavy disk I/O to create a 2GB swapfile (dd if=/dev/zero) and queries instance metadata
+to inject authorized SSH keys. During this 2-3 minute window, TCP port 22 may accept
+connections while OpenSSH daemon has not yet emitted its protocol banner or accepted key
+authentication. When an SSH client connects without progressive feedback, the terminal
+appears completely hung, leaving users confused about whether the machine is dead or booting.
+
+Design:
+1. Animated ASCII spinner (| / - \) with an elapsed-seconds counter and TTY autodetection.
+   On TTY terminals, it cleanly overwrites the current line using \r. On non-interactive or
+   piped outputs, it reports periodic progress lines without terminal escape spam.
+2. Progressive 3-stage validation:
+   - Stage 1 (TCP): Probes port 22 to confirm VCN Security List and routing are active.
+   - Stage 2 (Banner): Reads SSH-2.0-* protocol banner to confirm kernel boot and sshd.
+   - Stage 3 (Key Auth): Uses batch-mode SSH probe to verify metadata key installation.
+3. Clean signal handling: intercepts SIGINT (Ctrl+C) to restore cursor/newline and abort
+   gracefully without leaving lingering processes.
+4. Pure Go standard library: no external modules or dependencies added to go.mod.
+
+Statements of omission:
+- Tempting to use unicode/ANSI spinner glyphs (such as Braille patterns); omitted because
+  the repository strictly enforces pure ASCII for OCI serial console and terminal compatibility.
+- Tempting to embed an interactive SSH client using golang.org/x/crypto/ssh; omitted to
+  avoid external dependencies and because invoking system OpenSSH inherits user agents,
+  known_hosts, and terminal pty settings seamlessly.
