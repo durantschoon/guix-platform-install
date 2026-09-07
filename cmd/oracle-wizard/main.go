@@ -139,6 +139,57 @@ func findExistingSSHKey() (pubPath string, pubContent string) {
 	return "", ""
 }
 
+func readDotEnvKey(envPath, key string) string {
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return ""
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == key {
+			return strings.Trim(strings.TrimSpace(parts[1]), "\"'")
+		}
+	}
+	return ""
+}
+
+func updateOrAppendDotEnv(envPath, key, value string) error {
+	var lines []string
+	found := false
+
+	if data, err := os.ReadFile(envPath); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(data)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, key+"=") || strings.HasPrefix(trimmed, "export "+key+"=") {
+				lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+				found = true
+			} else {
+				lines = append(lines, line)
+			}
+		}
+	}
+
+	if !found {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	output := strings.Join(lines, "\n")
+	if !strings.HasSuffix(output, "\n") {
+		output += "\n"
+	}
+	return os.WriteFile(envPath, []byte(output), 0600)
+}
+
 func verifyFileSHA256(path, expectedHash string) (bool, string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -405,14 +456,24 @@ func main() {
 	fmt.Println()
 
 	// Step 5: IP Resolution & Verification
+	existingEnvIP := readDotEnvKey(".env", "ORACLE_INSTANCE_IP")
+	if existingEnvIP == "" {
+		existingEnvIP = os.Getenv("ORACLE_INSTANCE_IP")
+	}
+
 	var publicIP string
 	for {
-		publicIP = promptLine("Enter your instance Public IP address", "")
+		publicIP = promptLine("Enter your instance Public IP address", existingEnvIP)
 		if publicIP == "" {
 			fmt.Println("[WARN] Please enter a valid public IP address.")
 			continue
 		}
 		break
+	}
+
+	// Persist to .env so future make ssh / make personal-setup commands work without IP=...
+	if err := updateOrAppendDotEnv(".env", "ORACLE_INSTANCE_IP", publicIP); err == nil {
+		fmt.Printf("[OK]    Saved ORACLE_INSTANCE_IP=%s to .env\n", publicIP)
 	}
 
 	fmt.Printf("\n[INFO]  Checking instance readiness on %s:22...\n", publicIP)

@@ -235,7 +235,7 @@ ssh oracle-ssh:
 	go run ./cmd/oracle-ssh $(if $(IP),-ip "$(IP)",) $(if $(INSTANCE_ID),-instance-id "$(INSTANCE_ID)",) $(if $(KEY),-key "$(KEY)",)
 
 personal-setup:
-	@test -n "$(IP)" || { echo "IP=... is required (e.g. make personal-setup IP=129.159.162.200)" >&2; exit 2; }
+	@test -n "$(IP)" || { echo "IP is required. Set ORACLE_INSTANCE_IP in .env or pass IP=... (e.g. make personal-setup IP=129.159.162.200)" >&2; exit 2; }
 	go run ./cmd/oracle-ssh -ip "$(IP)" $(if $(KEY),-key "$(KEY)",) -t "bash -c 'wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm'"
 
 # Developer aliases
