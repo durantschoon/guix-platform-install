@@ -29,8 +29,8 @@ help:
 	@echo "Guix on Oracle - User targets:"
 	@echo "  make wizard             Interactive step-by-step setup wizard"
 	@echo "  make download           Download & verify published generic Guix image"
-	@echo "  make ssh IP=...         Connect to running Guix instance (with pre-flight check)"
-	@echo "  make personal-setup IP=... Run interactive personal config setup on instance"
+	@echo "  make ssh [IP=...] [AGENT=1] Connect to Guix instance (optional SSH agent forwarding)"
+	@echo "  make personal-setup [IP=...] [AGENT=1] Run personal config setup on instance"
 	@echo ""
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
@@ -231,12 +231,14 @@ wizard oracle-wizard:
 download oracle-download:
 	go run ./cmd/oracle-download -output "$(OUTPUT)" $(if $(FORCE),-force,)
 
+AGENT_FLAG := $(if $(filter 1 true yes,$(AGENT)$(FORWARD_AGENT)$(ORACLE_FORWARD_AGENT)),-agent,)
+
 ssh oracle-ssh:
-	go run ./cmd/oracle-ssh $(if $(IP),-ip "$(IP)",) $(if $(INSTANCE_ID),-instance-id "$(INSTANCE_ID)",) $(if $(KEY),-key "$(KEY)",)
+	go run ./cmd/oracle-ssh $(if $(IP),-ip "$(IP)",) $(if $(INSTANCE_ID),-instance-id "$(INSTANCE_ID)",) $(if $(KEY),-key "$(KEY)",) $(AGENT_FLAG)
 
 personal-setup:
 	@test -n "$(IP)" || { echo "IP is required. Set ORACLE_INSTANCE_IP in .env or pass IP=... (e.g. make personal-setup IP=129.159.162.200)" >&2; exit 2; }
-	go run ./cmd/oracle-ssh -ip "$(IP)" $(if $(KEY),-key "$(KEY)",) -t "bash -c 'wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm'"
+	go run ./cmd/oracle-ssh -ip "$(IP)" $(if $(KEY),-key "$(KEY)",) $(AGENT_FLAG) -t "bash -c 'wget -O ~/.personal-config.scm https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/personal-config.scm && guile --no-auto-compile -s ~/.personal-config.scm'"
 
 # Developer aliases
 dev-oracle-test: oracle-test

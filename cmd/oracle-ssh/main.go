@@ -73,6 +73,8 @@ func main() {
 	bannerOnlyFlag := flag.Bool("banner-only", false, "Wait only for SSH banner, skip key authentication probe")
 	skipCheck := flag.Bool("skip-check", false, "Skip SSH readiness check and connect immediately")
 	timeoutSec := flag.Int("timeout", 4, "TCP port check timeout in seconds (when wait=false)")
+	agentFlag := flag.Bool("agent", false, "Enable SSH agent forwarding (-A) for git authentication")
+	flag.BoolVar(agentFlag, "forward-agent", false, "Alias for -agent")
 
 	flag.Parse()
 
@@ -216,12 +218,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	forwardAgent := *agentFlag
+	if !forwardAgent {
+		if envVal := os.Getenv("ORACLE_FORWARD_AGENT"); envVal != "" {
+			forwardAgent = envVal == "1" || strings.ToLower(envVal) == "true" || strings.ToLower(envVal) == "yes"
+		} else if envVal := os.Getenv("FORWARD_AGENT"); envVal != "" {
+			forwardAgent = envVal == "1" || strings.ToLower(envVal) == "true" || strings.ToLower(envVal) == "yes"
+		} else if val, ok := envMap["ORACLE_FORWARD_AGENT"]; ok && val != "" {
+			forwardAgent = val == "1" || strings.ToLower(val) == "true" || strings.ToLower(val) == "yes"
+		} else if val, ok := envMap["FORWARD_AGENT"]; ok && val != "" {
+			forwardAgent = val == "1" || strings.ToLower(val) == "true" || strings.ToLower(val) == "yes"
+		}
+	}
+
 	destination := fmt.Sprintf("%s@%s", targetUser, targetHost)
 	sshArgs := []string{
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "ConnectTimeout=15",
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
+	}
+
+	if forwardAgent {
+		sshArgs = append(sshArgs, "-A")
 	}
 
 	if targetPort != "22" {
