@@ -54,7 +54,7 @@ Put `guix-personal.scm` at the root of your configuration repository.
   (description "Durant's personal configuration")
 
   ;; Installed into the user profile before any step runs.
-  (requires "git" "gnu-make" "zsh")
+  (requires "git" "make" "zsh")
 
   ;; Optional: copied to ~/.config/guix/channels.scm, with confirmation.
   (channels "channels.scm")
@@ -227,7 +227,7 @@ peer-to-peer package substitute synchronization via GIPS in your contract:
   (version 1)
   (name "dot_files")
   (description "Personal config with P2P package sync")
-  (requires "git" "gnu-make" "zsh" "ipfs")
+  (requires "git" "make" "zsh" "ipfs")
 
   (steps
     (step (name "gips")

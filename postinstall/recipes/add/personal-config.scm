@@ -556,7 +556,7 @@ mostly file paths."
         (if (string-null? command)
             (begin (info "Skipped.") #f)
             (begin
-              (ensure-packages! '("gnu-make"))
+              (ensure-packages! '("make"))
               (run (format #f "cd ~s && ~a" repo-dir command)))))))))
 
 
@@ -601,7 +601,7 @@ enough phony targets to produce an unreadable single line otherwise."
      "\n"
      "  ;; Installed into the user profile before any step runs.  A fresh Guix\n"
      "  ;; system has none of these.\n"
-     "  (requires \"git\"" (if has-make? " \"gnu-make\"" "") ")\n"
+     "  (requires \"git\"" (if has-make? " \"make\"" "") ")\n"
      "\n"
      (if has-channels?
          (string-append

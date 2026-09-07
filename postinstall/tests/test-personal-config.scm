@@ -133,7 +133,7 @@
   "(personal-config
   (version 1)
   (name \"test-config\")
-  (requires \"git\" \"gnu-make\")
+  (requires \"git\" \"make\")
   (steps
     (step (name \"links\")
           (run \"make set_up_links\")
@@ -159,7 +159,7 @@
     (check "plan shows the optional step's command"
            (contains? text "make setup-keyd") text)
     (check "plan lists required packages"
-           (contains? text "git gnu-make") text)
+           (contains? text "git make") text)
 
     ;; default? is what separates "part of the one command" from "offered",
     ;; so it has to be visible before anything runs.
@@ -292,8 +292,8 @@ setup-keyd:
 
           ;; It must reflect what was actually in the repository, or the user
           ;; is editing a template rather than a starting point.
-          (check "picked up gnu-make for a Makefile repo"
-                 (contains? text "gnu-make") text)
+          (check "picked up make for a Makefile repo"
+                 (contains? text "\"make\"") text)
           (check "picked up channels.scm"
                  (contains? text "(channels \"channels.scm\")") text)
           (check "listed the Makefile's phony targets"
