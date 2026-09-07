@@ -305,32 +305,37 @@ func main() {
 	fmt.Println("Keep this key ready; you will paste it when creating the instance.")
 	pauseForEnter("Press [Enter] to continue to image preparation...")
 
-	// Step 3: Image Download
+	// Step 3: Generic Image Download & Verification
 	fmt.Println("--- Step 3: Generic Image Download ---")
 	targetPath, _ := filepath.Abs(defaultOutput)
 	imageReady := false
 
-	if _, err := os.Stat(targetPath); err == nil {
-		fmt.Printf("[INFO]  Checking existing %s...\n", targetPath)
-		matches, actual, err := verifyFileSHA256(targetPath, defaultSHA256)
-		if err == nil && matches {
-			fmt.Printf("[OK]    Image is already downloaded and verified (SHA-256 matches).\n")
-			imageReady = true
-		} else {
-			fmt.Printf("[WARN]  Local image checksum mismatch (found %s). Needs re-download.\n", actual)
-		}
-	}
-
-	if !imageReady {
-		downloadNow := promptConfirm("Download published generic image (585 MB) now?", true)
-		if !downloadNow {
-			fmt.Println("[WARN]  Skipping download. You can download later using 'make download'.")
-		} else {
-			if err := downloadImage(targetPath); err != nil {
-				fmt.Printf("[ERROR] Download failed: %v\n", err)
-				os.Exit(1)
+	alreadyUploaded := promptConfirm("Do you already have the image uploaded to your Oracle Cloud account?", false)
+	if alreadyUploaded {
+		fmt.Println("[OK]    Using existing cloud image upload.")
+	} else {
+		if _, err := os.Stat(targetPath); err == nil {
+			fmt.Printf("[INFO]  Checking existing %s...\n", targetPath)
+			matches, actual, err := verifyFileSHA256(targetPath, defaultSHA256)
+			if err == nil && matches {
+				fmt.Printf("[OK]    Image is already downloaded and verified (SHA-256 matches).\n")
+				imageReady = true
+			} else {
+				fmt.Printf("[WARN]  Local image checksum mismatch (found %s). Needs re-download.\n", actual)
 			}
-			fmt.Println("[OK]    Download complete and SHA-256 verified.")
+		}
+
+		if !imageReady {
+			downloadNow := promptConfirm("Download published generic image (585 MB) now?", true)
+			if !downloadNow {
+				fmt.Println("[WARN]  Skipping download. You can download later using 'make download'.")
+			} else {
+				if err := downloadImage(targetPath); err != nil {
+					fmt.Printf("[ERROR] Download failed: %v\n", err)
+					os.Exit(1)
+				}
+				fmt.Println("[OK]    Download complete and SHA-256 verified.")
+			}
 		}
 	}
 	pauseForEnter("Press [Enter] to continue to OCI Console deployment...")
@@ -338,32 +343,52 @@ func main() {
 	// Step 4: Guided Console Deployment
 	fmt.Println("--- Step 4: Deploying on Oracle Cloud (Web Console) ---")
 	fmt.Println()
-	fmt.Println("[1/4] Upload image to Object Storage:")
-	fmt.Println("  1. In browser, log into: https://cloud.oracle.com")
-	fmt.Println("  2. Open Navigation Menu (top left) -> Storage -> Buckets.")
-	fmt.Println("  3. Click 'Create Bucket' -> name it 'guix-images' -> Create.")
-	fmt.Println("  4. Click into 'guix-images', click 'Upload', and choose file:")
-	fmt.Printf("     %s\n", targetPath)
-	pauseForEnter("Press [Enter] once the upload finishes...")
 
-	fmt.Println("[2/4] Import Custom Image:")
-	fmt.Println("  1. Navigation Menu -> Compute -> Custom Images.")
-	fmt.Println("  2. Click 'Import Image' and fill in:")
-	fmt.Println("     - Name: guix-oracle")
-	fmt.Println("     - Source: Object Storage Bucket")
-	fmt.Println("     - Bucket: guix-images")
-	fmt.Println("     - Object: guix-oracle-generic.qcow2")
-	fmt.Println("     - Image Type: QCOW2                         <-- CRITICAL")
-	fmt.Println("     - Launch Mode: PARAVIRTUALIZED              <-- CRITICAL")
-	fmt.Println("  3. Click 'Import Image'.")
-	fmt.Println("     (It takes a few minutes to reach 'Available' state).")
-	pauseForEnter("Press [Enter] once the Custom Image reaches 'Available'...")
+	if alreadyUploaded {
+		fmt.Println("[1/4] Upload image to Object Storage: [SKIPPED - already uploaded]")
+	} else {
+		uploadedNow := promptConfirm("Have you already uploaded the image to an Object Storage bucket?", false)
+		if uploadedNow {
+			fmt.Println("[1/4] Upload image to Object Storage: [SKIPPED - already uploaded]")
+		} else {
+			fmt.Println("[1/4] Upload image to Object Storage:")
+			fmt.Println("  1. In browser, log into: https://cloud.oracle.com")
+			fmt.Println("  2. Open Navigation Menu (top left) -> Storage -> Buckets.")
+			fmt.Println("  3. Click 'Create Bucket' -> name it 'guix-images' -> Create.")
+			fmt.Println("  4. Click into 'guix-images', click 'Upload', and choose file:")
+			fmt.Printf("     %s\n", targetPath)
+			pauseForEnter("Press [Enter] once the upload finishes...")
+		}
+	}
 
-	fmt.Println("[3/4] Virtual Cloud Network (VCN):")
-	fmt.Println("  1. Navigation Menu -> Networking -> Virtual Cloud Networks.")
-	fmt.Println("  2. Click 'Start VCN Wizard' -> 'Create VCN with Internet Connectivity'.")
-	fmt.Println("  3. Click 'Start VCN Wizard', keep defaults, and click 'Create'.")
-	pauseForEnter("Press [Enter] once your VCN is ready...")
+	alreadyImported := promptConfirm("Have you already imported the Custom Image ('guix-oracle') into Compute?", false)
+	if alreadyImported {
+		fmt.Println("[2/4] Import Custom Image: [SKIPPED - already imported]")
+	} else {
+		fmt.Println("[2/4] Import Custom Image:")
+		fmt.Println("  1. Navigation Menu -> Compute -> Custom Images.")
+		fmt.Println("  2. Click 'Import Image' and fill in:")
+		fmt.Println("     - Name: guix-oracle")
+		fmt.Println("     - Source: Object Storage Bucket")
+		fmt.Println("     - Bucket: guix-images (or your chosen bucket)")
+		fmt.Println("     - Object: guix-oracle-generic.qcow2 (or your uploaded filename)")
+		fmt.Println("     - Image Type: QCOW2                         <-- CRITICAL")
+		fmt.Println("     - Launch Mode: PARAVIRTUALIZED              <-- CRITICAL")
+		fmt.Println("  3. Click 'Import Image'.")
+		fmt.Println("     (It takes a few minutes to reach 'Available' state).")
+		pauseForEnter("Press [Enter] once the Custom Image reaches 'Available'...")
+	}
+
+	alreadyVCN := promptConfirm("Do you already have a Virtual Cloud Network (VCN) with internet connectivity?", false)
+	if alreadyVCN {
+		fmt.Println("[3/4] Virtual Cloud Network (VCN): [SKIPPED - already created]")
+	} else {
+		fmt.Println("[3/4] Virtual Cloud Network (VCN):")
+		fmt.Println("  1. Navigation Menu -> Networking -> Virtual Cloud Networks.")
+		fmt.Println("  2. Click 'Start VCN Wizard' -> 'Create VCN with Internet Connectivity'.")
+		fmt.Println("  3. Click 'Start VCN Wizard', keep defaults, and click 'Create'.")
+		pauseForEnter("Press [Enter] once your VCN is ready...")
+	}
 
 	fmt.Println("[4/4] Launch Instance:")
 	fmt.Println("  1. Navigation Menu -> Compute -> Instances -> 'Create Instance'.")
