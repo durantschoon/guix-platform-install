@@ -74,6 +74,11 @@ This checklist tracks remaining work for the guix-platform-install project.
     instance confirmed `TERMINATED`
   - Deferred post-release: retained-instance task joining and MCP facade
 
+### GIPS Live Testing & Dual-Image Strategy (Roadmap)
+- Step 1: Live testing with GIPS on Oracle instances (peer discovery, narinfo signing, substitute serving over OCI VNIC)
+- Step 2: Build & publish a GIPS-enabled Oracle image variant with declarative `(service gips-service-type ...)`
+- Step 3: Dual-image availability decision: decide if GIPS is default or opt-in, while always offering the baseline minimal image (`guix-oracle-generic.qcow2`) without P2P daemons for users who prefer it
+
 **Primary Focus: Cloudzy Installation Testing**
 
 ### Cloudzy Installation Testing (CURRENT PRIORITY)

@@ -251,17 +251,48 @@ The honest recommendation: build the presentation-only version first. It is most
 of the value at a fraction of the risk, and OCI's console already provides the
 authenticated UI.
 
+## Step 7 — GIPS Integration & Dual-Image Strategy (Planned)
+
+GNU Guix IPFS Package Substitutes (GIPS) provides peer-to-peer substitute
+distribution and multi-machine package cache synchronization. Stages 10–15
+merged the daemon, CLI, declarative service, and validation harness on `main`.
+
+Now that the baseline generic image workflow is proven, GIPS integration proceeds
+in three deliberate phases:
+
+1. **Test with GIPS on live Oracle instances**:
+   - Validate peer discovery, narinfo signing, substitute serving, and swarm
+     telemetry over live OCI VNIC network boundaries.
+   - Run the post-install recipe (`postinstall/recipes/add/gips.scm`) and
+     personal sync recipe (`postinstall/recipes/add/personal-sync.scm`) on a
+     retained instance.
+2. **Build and publish a GIPS-enabled image**:
+   - Create a variant of `oracle/image/oracle-image.scm` that pre-bakes the
+     declarative `(service gips-service-type ...)` system service and IPFS
+     daemon into the operating system.
+3. **Decide optional vs default with dual-image availability**:
+   - Once GIPS reaches operational maturity, determine whether it should be
+     the recommended default for new users or remain opt-in.
+   - **Crucial principle**: always preserve and offer the minimal baseline
+     image (`guix-oracle-generic.qcow2`) without GIPS/IPFS alongside the
+     GIPS-enabled image. Users who prefer a minimal upstream Guix installation
+     or have bandwidth/resource/policy constraints against peer-to-peer daemons
+     must always retain a first-class keyless baseline image choice.
+   - Surface the choice in `make wizard`, `make download`, and the web UI.
+
 ## Order and effort
 
 | Step | Effort | Blocked by |
 |---|---|---|
 | 1. Metadata SSH keys | Medium | **DONE and VERIFIED** on a live instance 2026-08-11 |
 | 2. Publish generic image | Small | ✅ **DONE** 2026-08-11 — released, imported, launched, verified keyless |
-| 3. Console-only path docs | Small | **UNBLOCKED — the only step left** |
+| 3. Console-only path docs | Small | **UNBLOCKED — the only step left for 1.0** |
 | 4. Preferences at first boot | Medium | Step 1 verified |
 | 5. Capacity handling | Small | **DONE** — stage 01; reasoned, never seen a real refusal |
 | 6. Web UI (presentation) | Medium | **DONE** — `web/index.html`; accurately marks step 3's screenshot gap |
+| 7. GIPS Live Testing & Dual Image | Medium | Step 3 & live recipe validation on retained instance |
 
 The original live-instance gate passed on 2026-08-11. Step 3 is now independent
 documentation work; the separate remote-compute release path is tracked in
-`ORACLE_VALIDATION_STAGES.md`.
+`ORACLE_VALIDATION_STAGES.md`. GIPS roadmap items proceed under Step 7.
+
