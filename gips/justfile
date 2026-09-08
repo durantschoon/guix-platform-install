@@ -45,8 +45,8 @@ setup:
 
 # Initialize this machine as GIPS Hub (Builder / Publisher)
 hub:
-    guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --hub
     @just start
+    guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --hub
 
 # Connect this machine as GIPS Spoke (Consumer) to the Hub
 spoke hub_key_file="":

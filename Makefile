@@ -110,8 +110,8 @@ HUB_KEY_FILE ?=
 
 gips-hub:
 	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
-	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --hub
 	@$(MAKE) gips-start
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --hub
 
 gips-spoke:
 	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
@@ -122,6 +122,10 @@ gips-spoke:
 
 gips-start:
 	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
+	@if [ ! -f "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.toml" ] || [ ! -f "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/signing-key.sec" ]; then \
+		echo "[INFO] GIPS configuration or keys missing; initializing defaults..."; \
+		$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --headless; \
+	fi
 	@if ! command -v ipfs >/dev/null 2>&1; then \
 		echo "[ERROR] 'ipfs' command not found. Run 'make gips-bundle' or 'guix install go-ipfs'." >&2; \
 		exit 1; \
