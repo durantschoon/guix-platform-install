@@ -75,6 +75,9 @@ See [`QUICKSTART.md`](QUICKSTART.md) for complete instructions.
   Configure Guix channels (nonguix, custom repos)
 - 🌍 **Mirror Configuration**: See [`lib/mirrors.md`](lib/mirrors.md) -
   Optimize download speeds globally
+- 🔄 **P2P Binary Sync (GIPS)**: See
+  [`docs/GIPS_MULTI_MACHINE_SYNC.md`](docs/GIPS_MULTI_MACHINE_SYNC.md) -
+  Zero-config binary substitute sharing between home and cloud via IPFS
 - 📚 **Installation Knowledge**: See
   [`docs/INSTALLATION_KNOWLEDGE.md`](docs/INSTALLATION_KNOWLEDGE.md) -
   Deep technical details and lessons learned
