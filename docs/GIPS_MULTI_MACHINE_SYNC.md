@@ -1,12 +1,12 @@
 # GIPS Multi-Machine Binary Sync Guide
 
-Accelerate package installations and share build artifacts across your personal Guix devices (e.g., a home Docker host / Mac Mini and a remote Oracle Cloud instance) using **GNU Guix IPFS Package Substitutes (GIPS)**.
+Accelerate package installations and share build artifacts across your personal Guix devices (e.g., between two Oracle Cloud instances, or between a home Docker host and a remote VPS) using **GNU Guix IPFS Package Substitutes (GIPS)**.
 
 ---
 
 ## The Problem GIPS Solves
 
-Compiling large packages on a resource-constrained cloud machine (like Oracle's 1-core Always Free micro instance) is slow and risks running out of memory.
+Compiling large packages on a resource-constrained machine (like Oracle's 1-core Always Free micro instance) is slow and risks running out of memory.
 
 Traditional binary-sharing tools have friction:
 - `guix publish` requires fixed public IPs, VPNs (like Tailscale), or router port-forwarding.
@@ -22,97 +22,106 @@ Traditional binary-sharing tools have friction:
 ## Architecture Compatibility
 
 Guix store paths are content-addressed and architecture-specific:
-- **x86_64 machines** (e.g. Intel/AMD Docker host and Oracle `VM.Standard.E2.1.Micro`) share x86_64 binaries.
-- **ARM64 machines** (e.g. Apple Silicon M-series Mac Mini running ARM64 Docker and Oracle `VM.Standard.A1.Flex` Ampere instances) share aarch64 binaries natively with zero emulation overhead.
+- **x86_64 machines** (e.g. Oracle `VM.Standard.E2.1.Micro`, Framework laptops, x86_64 VPS) share x86_64 binaries.
+- **ARM64 machines** (e.g. Apple Silicon Macs, Oracle `VM.Standard.A1.Flex` Ampere instances, Raspberry Pi) share aarch64 binaries natively.
 
 ---
 
 ## Step-by-Step Setup
 
-### Step 1: Start IPFS & GIPS on Your Home Seeder (e.g. Mac Mini / Docker)
+### Step 1: Install GIPS Tooling on Both Machines
 
-From the root of this repository on your home machine:
+> [!NOTE]
+> **IPFS Package Name in GNU Guix:**
+> In GNU Guix, the IPFS (Kubo) package is named **`go-ipfs`** (`gnu/packages/ipfs.scm`). Running `guix install ipfs` will fail with `unknown package`.
 
-```bash
-# 1. Start the IPFS (Kubo) container with swarm ports mapped
-make ipfs-docker
-
-# 2. Start the GIPS daemon
-make gips-daemon
-```
-
-In a second terminal, export your public signing keys:
+To install all GIPS build, runtime, and cryptographic dependencies in one shot (`go-ipfs`, `rust`, `cargo`, `pkg-config`, `openssl`, `sqlite`, `guile-gcrypt`, `just`, `curl`, `jq`), run on each machine:
 
 ```bash
-cd gips
-cargo run -p gips -- key export-feed > ~/feed-signing.pub
-cargo run -p gips -- key export-guix > ~/guix-signing.pub
-```
-
-- **`feed-signing.pub`**: Authorizes your feed updates over IPFS.
-- **`guix-signing.pub`**: Authorizes your binary substitutes inside Guix's `/etc/guix/acl`.
-
----
-
-### Step 2: Set Up GIPS on Your Oracle Cloud Instance
-
-Connect to your Oracle instance:
-
-```bash
-make ssh
-```
-
-Run the automated GIPS post-install recipe on the instance:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/durantschoon/guix-platform-install/main/postinstall/recipes/add/gips.scm | guile --no-auto-compile -s /dev/stdin
-```
-
-Or start the IPFS and GIPS daemon manually:
-```bash
-ipfs daemon &
-gipsd &
+# From repository root:
+make gips-bundle
+# Or directly via Guix:
+guix package -m gips/manifest.scm
 ```
 
 ---
 
-### Step 3: Authorize Keys & Subscribe
+### Step 2: Initialize Keys and Daemons
 
-1. **Authorize the seeder's Guix key** on the Oracle instance so `guix-daemon` trusts its binaries:
-   ```bash
-   sudo guix archive --authorize < guix-signing.pub
-   ```
-
-2. **Add the seeder's feed key to your `~/.config/gips/gipsd.toml`** under `[[trust.trusted_publishers]]`:
-   ```toml
-   [[trust.trusted_publishers]]
-   gns_name = "home-builder.gnu"
-   public_key = "/path/to/feed-signing.pub"
-   ```
-
-3. **Subscribe to the feed**:
-   ```bash
-   gips subscribe home-builder.gnu
-   ```
-
----
-
-### Step 4: Verify Connectivity & Accelerated Installs
-
-Check that your nodes have discovered each other:
+On both machines:
 
 ```bash
-# On your local machine or Oracle instance:
+# 1. Generate narinfo signing keys (signing-key.sec/pub with mode 0600) and create ~/.config/gips/gipsd.toml
+make gips-setup
+
+# 2. Start IPFS and GIPS daemons in the background (with log redirection to ~/.config/gips/)
+make gips-start
+
+# 3. Check service health
 make gips-status
 ```
 
-Now, whenever you install packages on your Oracle instance, point Guix to your local GIPS proxy:
+---
 
+### Step 3: Link Your Machines (The 2-Key Ceremony)
+
+GIPS relies on two separate keys:
+1. **Feed Key (Ed25519 PEM)**: GIPS-internal key to sign feed snapshots.
+2. **Guix Key (libgcrypt s-expression)**: Guix-native key that signs `.narinfo` files.
+
+#### On Machine 1 (Producer / Builder):
+
+Export the public halves:
 ```bash
-guix install <package> --substitute-urls="http://127.0.0.1:8080 https://ci.guix.gnu.org"
+# Print feed public key
+cd gips && cargo run -p gips -- key export-feed
+
+# Print Guix signing public key
+cat ~/.config/gips/signing-key.pub
 ```
 
-If the package was already built on your home machine, it downloads directly over IPFS in seconds!
+#### On Machine 2 (Consumer / Client):
+
+1. **Authorize Machine 1's Guix key** in Guix's ACL:
+   ```bash
+   sudo guix archive --authorize
+   # Paste Machine 1's signing-key.pub s-expression and press Ctrl+D
+   ```
+
+2. **Trust Machine 1's feed key** in `~/.config/gips/gipsd.toml`:
+   ```toml
+   [[trust.trusted_publishers]]
+   name = "machine1"
+   public_key = "<paste Machine 1's feed public key PEM>"
+   ```
+
+3. **Restart GIPS daemon on Machine 2**:
+   ```bash
+   make gips-stop
+   make gips-start
+   ```
+
+---
+
+### Step 4: Share and Substitute Packages
+
+- **On Machine 1 (Producer)**:
+  Publish your current profile snapshot to IPFS:
+  ```bash
+  make gips-push GNS_NAME=cluster.gnu
+  ```
+
+- **On Machine 2 (Consumer)**:
+  Install packages using your local GIPS proxy:
+  ```bash
+  guix install <package> --substitute-urls="http://127.0.0.1:8080 https://ci.guix.gnu.org"
+  ```
+  Or pull an entire manifest:
+  ```bash
+  make gips-pull MANIFEST=sync-manifest.scm
+  ```
+
+Substitutes will be downloaded peer-to-peer over the IPFS swarm in seconds without compiling from source!
 
 ---
 
@@ -120,10 +129,18 @@ If the package was already built on your home machine, it downloads directly ove
 
 | Target | Description |
 |---|---|
-| `make ipfs-docker` | Starts a persistent `ipfs/kubo` container exposing swarm port `4001` and local API `5001`. |
-| `make gips-daemon` | Starts the local GIPS daemon (`gipsd`) connected to IPFS. |
-| `make gips-status` | Inspects daemon health, peer connections, and trusted subscriptions. |
+| `make gips-bundle` | Installs complete GIPS tooling bundle (`go-ipfs`, `rust`, `guile-gcrypt`, etc.) via `gips/manifest.scm`. |
+| `make gips-setup` | Runs the post-install recipe: creates secure config dir, generates keys (`0600`/`0700`), and writes default config. |
+| `make gips-start` | Starts `ipfs daemon` and `gipsd` in the background with logging to `~/.config/gips/`. |
+| `make gips-stop` | Stops background `gipsd` and `ipfs daemon` processes cleanly. |
+| `make gips-status` | Inspects IPFS swarm connections, daemon health, metrics, and Guix ACL state. |
+| `make gips-push` | Exports active Guix profile to a manifest and creates a GIPS snapshot on IPFS. |
+| `make gips-pull` | Installs packages substituting from local GIPS proxy (`http://127.0.0.1:8080`). |
+| `make gips-daemon` | Starts the local GIPS daemon (`gipsd`) in the foreground. |
+| `make ipfs-docker` | Starts a persistent `ipfs/kubo` container (for non-Guix Docker hosts). |
 | `make gips-test` | Runs the offline Scheme API & signing test suite. |
-| `make gips-rust-test` | Runs all Rust unit and integration tests. |
+| `make gips-rust-test` | Runs all Rust workspace unit and integration tests. |
+| `make gips-check` | Runs both Scheme and Rust test suites verifying parity. |
 
 For deep technical details and protocol invariants, see [`gips/docs/personal-sync-quickstart.md`](../gips/docs/personal-sync-quickstart.md) and [`gips/docs/architecture.md`](../gips/docs/architecture.md).
+

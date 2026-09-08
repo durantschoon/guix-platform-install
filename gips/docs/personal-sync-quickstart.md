@@ -52,6 +52,14 @@ On the **consumer** (the laptop that installs):
 - **Guix**, **IPFS (Kubo)**, and **GIPS**. No Guile and no GNUnet are needed
   to *consume*, and the consumer generates no keys of its own.
 
+> [!TIP]
+> **One-Command Setup on Guix System:**
+> You can install all prerequisites on GNU Guix (including `go-ipfs`, Rust, `guile-gcrypt`, etc.) in one command using the unified manifest:
+> ```bash
+> make gips-bundle   # or: guix package -m gips/manifest.scm
+> ```
+> Note: On GNU Guix, IPFS is packaged under `go-ipfs` (`gnu/packages/ipfs.scm`).
+
 ## The two keys
 
 GIPS has two signing keys and they are not interchangeable. Almost every
