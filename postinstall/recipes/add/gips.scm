@@ -342,6 +342,7 @@ secret_key = ~s
                   (warn "Active fraud proofs present -- verify /etc/guix/acl has revoked keys removed")))
             (info "No active GIPS daemon reachable to query fraud proofs"))))
     (lambda (k . args)
+      (info "GIPS daemon not reachable for fraud proof synchronization"))))
 ;;; ---------------------------------------------------------------------------
 ;;; Hub & Spoke Role Setup
 ;;; ---------------------------------------------------------------------------
