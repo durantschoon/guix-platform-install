@@ -230,7 +230,12 @@ secret_key = ~s
   ;; 1. Check IPFS
   (if (command-in-path? "ipfs")
       (ok "IPFS CLI (kubo) is installed in PATH")
-      (warn "IPFS CLI ('ipfs') is not in PATH. Install with: guix install ipfs"))
+      (begin
+        (warn "IPFS CLI ('ipfs') is not in PATH.")
+        (info "In GNU Guix, the package is 'go-ipfs' (not 'ipfs'):")
+        (info "  guix install go-ipfs")
+        (info "Or install the complete GIPS toolchain bundle:")
+        (info "  guix package -m gips/manifest.scm (or 'make gips-bundle')")))
 
   ;; 2. Check GIPS binaries
   (if (command-in-path? "gips")
@@ -296,25 +301,24 @@ secret_key = ~s
 
     ;; Step 4: Guidance and next actions
     (msg "Next Steps & Integration Guidance")
-    (info "1. Start or enable IPFS daemon:")
-    (info "     ipfs init  # if first time")
-    (info "     ipfs daemon &")
+    (info "1. Install GIPS tooling bundle (if not already installed):")
+    (info "     make gips-bundle    (or: guix package -m gips/manifest.scm)")
     (newline)
-    (info "2. Start the GIPS daemon:")
-    (info "     gipsd --config ~/.config/gips/gipsd.toml &")
+    (info "2. Start IPFS and GIPS daemons in background:")
+    (info "     make gips-start     (or: ipfs daemon & and gipsd &)")
     (newline)
     (info "3. Open the Telemetry Dashboard:")
     (info "     http://127.0.0.1:8080/dashboard")
     (newline)
     (info "4. View Live Swarm Monitor in terminal:")
-    (info "     guile postinstall/recipes/add/gips.scm --monitor")
+    (info "     make gips-status    (or: guile postinstall/recipes/add/gips.scm --status)")
     (newline)
-    (info "5. Configure Guix to use GIPS substitutes:")
-    (info "     Add http://127.0.0.1:8080 to your substitute URLs:")
-    (info "     guix-daemon --substitute-urls=\"http://127.0.0.1:8080 https://ci.guix.gnu.org\"")
-    (newline)
-    (info "6. Authorize GIPS public key in Guix ACL:")
+    (info "5. Authorize GIPS public key in Guix ACL:")
     (info (format #f "     sudo guix archive --authorize < ~a/signing-key.pub" config-dir))
+    (newline)
+    (info "6. Share / consume package substitutes:")
+    (info "     make gips-push GNS_NAME=cluster.gnu   # on producer")
+    (info "     make gips-pull                        # on consumer")
     (newline)
     (ok "GIPS configuration setup completed successfully.")))
 
@@ -392,6 +396,28 @@ secret_key = ~s
           (format #t "\x1b[1;31m[FAIL]\x1b[0m ~a test(s) failed.\n" failures)
           (exit 1)))))
 
+(define (install-bundle)
+  (msg "Installing GIPS Tooling Bundle")
+  (if (not (command-in-path? "guix"))
+      (err "'guix' command not found in PATH.")
+      (let* ((repo-manifest "gips/manifest.scm")
+             (manifest-path (if (file-exists? repo-manifest)
+                                repo-manifest
+                                (string-append (user-home) "/Repos/ds/guix-platform-install/gips/manifest.scm"))))
+        (if (file-exists? manifest-path)
+            (begin
+              (info (format #f "Installing bundle from ~a..." manifest-path))
+              (let ((status (system* "guix" "package" "-m" manifest-path)))
+                (if (zero? (status:exit-val status))
+                    (ok "Successfully installed GIPS tooling bundle.")
+                    (err "Failed to install GIPS manifest."))))
+            (begin
+              (info "Manifest file not found locally; falling back to direct package installation...")
+              (let ((status (system* "guix" "install" "go-ipfs" "rust" "pkg-config" "openssl" "sqlite" "guile-gcrypt" "just" "curl" "jq")))
+                (if (zero? (status:exit-val status))
+                    (ok "Successfully installed GIPS packages.")
+                    (err "Failed to install GIPS packages."))))))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Entry Point
 ;;; ---------------------------------------------------------------------------
@@ -404,6 +430,7 @@ Post-install recipe for GNU Guix IPFS Package Substitutes (GIPS).
 Options:
   (no arguments)       Run interactive setup wizard
   --headless, --batch  Run non-interactive setup with safe defaults
+  --install-bundle     Install GIPS tooling bundle (go-ipfs, rust, guile-gcrypt, etc.)
   --status             Inspect GIPS, IPFS, and ACL configuration status
   --monitor            Display live terminal swarm monitor snapshot
   --monitor-json       Output live telemetry monitor snapshot as JSON
@@ -418,6 +445,8 @@ Options:
      (run-setup #f))
     ((or ("--headless") ("--batch"))
      (run-setup #t))
+    ((or ("--install-bundle") ("--bundle"))
+     (install-bundle))
     ((or ("--status"))
      (check-gips-status))
     ((or ("--monitor"))

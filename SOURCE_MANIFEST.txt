@@ -12,27 +12,27 @@ afe036905ac887402c9cec059a441340f81663adc5c595ff6afa99d2807bf77b  ./cloudzy/inst
 6c48ca627b53d3bac4f7012490c076f2036c9a8d6c781025da6afbe627e09d46  ./cloudzy/install/03-config.go
 17524ad3186281cbc8a8c25d818d2351e4a458d3600fb4450fc043019be1039b  ./cloudzy/install/04-system-init.go
 2f5888d739db6a21bf724a73712cf6b4299355cc42bb694c39d65f328d322e49  ./cloudzy/install/state.go
-2a6a93d83ad59fd45b081a76d09dddf94c19cf052dc2f56eb4e8dc0613847fed  ./cmd/hash-to-words/main_test.go
 b2d66c39f05a9943073c963eb1763993f4873841c28eab1e888c7500fc09d20b  ./cmd/hash-to-words/main.go
-f10bcba49ce7e09627d77e7ac2d145da55b89d51b9eb700671a7a020037f0277  ./cmd/oracle-download/main_test.go
+2a6a93d83ad59fd45b081a76d09dddf94c19cf052dc2f56eb4e8dc0613847fed  ./cmd/hash-to-words/main_test.go
 5c3930aca4ccfdc258c5d1ad9027edd2e1b64ad9ad69c87284e72f97f1ea070d  ./cmd/oracle-download/main.go
-1a82694bf3322517f235af74b82653b464fcdb817730c65c34c0552e7e39c9e6  ./cmd/oracle-ssh/main_test.go
+f10bcba49ce7e09627d77e7ac2d145da55b89d51b9eb700671a7a020037f0277  ./cmd/oracle-download/main_test.go
 8bb0eb00458ee73922975da709e172854c9ea66370414b7db16f00967f3d3025  ./cmd/oracle-ssh/main.go
-01ac5dd4cf5b462f430c92609a4de27999f8fb4b2624c5aba88bf90afa5642a3  ./cmd/oracle-wizard/main_test.go
+1a82694bf3322517f235af74b82653b464fcdb817730c65c34c0552e7e39c9e6  ./cmd/oracle-ssh/main_test.go
 73dbc5f8671aa48bd6bc222f9d32484cd08314a33dde0e686b7900840c459358  ./cmd/oracle-wizard/main.go
+01ac5dd4cf5b462f430c92609a4de27999f8fb4b2624c5aba88bf90afa5642a3  ./cmd/oracle-wizard/main_test.go
 8f182be114dd652fc8c1c6ec48b722709b58a1bc7e7cb492d846c9e18723dd4b  ./cmd/recovery/main.go
-62e75320502e863ae1e927d75cf9e61aa89acbefe56f7293fc10c3451ff59eac  ./framework-dual/install/01-partition-check_test.go
 bd9b4134a571950587bd34384d64c894b0f3b748a4c5903fa3dc1a1629acb6f0  ./framework-dual/install/01-partition-check.go
-f14b5c13b9f056167119b6d33d1ca684202eb7b729db09c9abd967d56bb54882  ./framework-dual/install/02-mount-existing_test.go
+62e75320502e863ae1e927d75cf9e61aa89acbefe56f7293fc10c3451ff59eac  ./framework-dual/install/01-partition-check_test.go
 cb21308d6873b378ee6a6db59c2fb86b31a317cd3ccedde9783150b94ddeb811  ./framework-dual/install/02-mount-existing.go
-2a6f53312dbd769654f06fc5fb46b65c5a60147f8c764af89ee30644d8f65a19  ./framework-dual/install/03-config-dual-boot_test.go
+f14b5c13b9f056167119b6d33d1ca684202eb7b729db09c9abd967d56bb54882  ./framework-dual/install/02-mount-existing_test.go
 f48de5fe152bb5bcd5b72cbcc36f037375bd3e6a0b35c761eb555e5f41517451  ./framework-dual/install/03-config-dual-boot.go
+2a6f53312dbd769654f06fc5fb46b65c5a60147f8c764af89ee30644d8f65a19  ./framework-dual/install/03-config-dual-boot_test.go
 5a8e7614862d195466c887d21df1d8016e8cbabd357047745fe5044724b5f462  ./framework-dual/install/04-system-init.go
 8fb7f99a29777c429c071e0eeb2e09055fe3b63e4eef37b03373f73daa501441  ./framework-dual/install/state.go
 feb2b8b8e2cb190fb35cb7a359015ab197d0d555fcc717d2c9fcb2243f0b8ead  ./framework/install/01-partition.go
 032b5ca87fe76594bd9072939c895e560c510a15ee3e050fb8bee3dd33ec4550  ./framework/install/02-mount.go
-d1471db6cd0d6ce0b5d3942a49c37e44f9c42d2a4624c2fdc0969e96e57c6573  ./framework/install/03-config_test.go
 b47c2f4e3819bd25bc64e0866e58ef3c243b5693ebccf609800dd689e487e09e  ./framework/install/03-config.go
+d1471db6cd0d6ce0b5d3942a49c37e44f9c42d2a4624c2fdc0969e96e57c6573  ./framework/install/03-config_test.go
 66fb5d50255d179a67be2886fb2d7cf0adbb14ef07f70d859d760980802c67be  ./framework/install/04-system-init.go
 abc5adff7532385203b236564f6aa59b1755f1f3e091cb5f3b66ae1e9cffc39f  ./framework/install/state.go
 a2a252e8fc90cdb8fa3dc2e17e449fedaefb752709e6e95d84aeabab91db373f  ./internal/sshwait/probe.go
@@ -41,8 +41,8 @@ dafd07497889efa73fb7599ebd25000790e6b99675135b7a9ae401f8df64f5af  ./internal/ssh
 ed08d6b8761ee8ad2a57b235dc1998ebfbf929e35b3ad301bb040d3d71c7adfc  ./internal/sshwait/wait.go
 cf0e0f9a551560cf335782c3cf1e8301c044911eec3a302e0cacf489b6fd2e68  ./lib/check-kernel-modules.go
 499c5b966dee469aa4c2e23e58e33a43108b5126649210d1477357b31b6b2a4a  ./lib/colors.go
-ed2ccf69d3b348a271f7c589a1b5b02b587099eac3a78518a04d59b2f2d55c9c  ./lib/common_test.go
 0b7b5229750366f4f7bdfd5d39ed32dcf5ad718821d9d599b581853a3a827ff9  ./lib/common.go
+ed2ccf69d3b348a271f7c589a1b5b02b587099eac3a78518a04d59b2f2d55c9c  ./lib/common_test.go
 fcf87db6aaf77059af1026e3dce07d3ebd91d6a7567d49731360d3cee82c8203  ./run-remote-steps.go
 
 ## Critical Shell Scripts
@@ -83,7 +83,7 @@ f6c1207f91bce6538f2de25252655713b0fc78758998717f205038fe14d8fd2e  investigate-ke
 94714bf2656f986027c08e24bc14526ee4e8cb852ae455c7aed818f4f69b2598  postinstall/recipes/add/development.scm
 914927d63d9e6287d5a47c781dd0be708ed318ebac1da820950f784886c0cbb4  postinstall/recipes/add/doom/emacs.scm
 3f5f86f76fc80fe89f55ab007ee5d8427a86f34230f93863e40ec02b45fccf58  postinstall/recipes/add/fonts.scm
-e2d04ffe7704931f8b6d71c3cafeff83dd145a65ed0fb1617defabe158b6f1d8  postinstall/recipes/add/gips.scm
+1558863b7ce5c837eacd4b2c280af3e775e9daa17a4000114589f44735f11e0e  postinstall/recipes/add/gips.scm
 ef4e6c1fc9aaa8df6583c46ac69219a79bf4dea1ab00fc11ca6ddddb14166cc7  postinstall/recipes/add/personal-config.scm
 c453611a2164ccb6869b11d1233be238b5fee02a788437e8f0b148f9c15fa2a0  postinstall/recipes/add/personal-sync.scm
 a3e1f1ebf33957dcc351cb6c45cb4ff78df484e1305c73444e65a4302a241045  postinstall/recipes/add/spacemacs.scm

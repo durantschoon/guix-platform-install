@@ -1,0 +1,41 @@
+gips/manifest.scm
+=================
+
+PURPOSE
+-------
+Provides a single, declarative GNU Guix manifest bundling all runtime, build,
+and diagnostic dependencies for GIPS (GNU Guix IPFS Package Substitutes).
+Allows operators on GNU Guix to install or enter an environment with IPFS (Kubo),
+Rust/Cargo, libgcrypt signing helpers, and supporting utilities in one command:
+  guix package -m gips/manifest.scm
+or:
+  guix shell -m gips/manifest.scm
+
+STRUCTURE & JUSTIFICATIONS
+--------------------------
+1. Resilient Specification Resolution:
+   - Uses `safe-specification->package` with fallbacks (`go-ipfs` -> `ipfs`,
+     `guile` -> `guile-3.0`).
+   - In GNU Guix, the Kubo IPFS implementation is packaged under `go-ipfs` (which
+     provides `/bin/ipfs`). If a user attempts `guix install ipfs`, Guix errors
+     with 'unknown package'. Resolving `go-ipfs` solves this cleanly.
+   - Non-existent packages fail closed to `#f` and are filtered out, avoiding
+     hard evaluation aborts across different Guix channel revisions.
+
+2. Comprehensive Toolchain:
+   - Includes `go-ipfs` for the peer-to-peer substitute transport.
+   - Includes `rust`, `cargo`, `pkg-config`, `openssl`, and `sqlite` for building
+     and running the `gips` CLI and `gipsd` daemon.
+   - Includes `guile` and `guile-gcrypt` for libgcrypt narinfo s-expression signing.
+   - Includes `just`, `curl`, and `jq` for workflow execution and telemetry queries.
+
+3. Pure Declarative Profile:
+   - Evaluates to a `<manifest>` via `packages->manifest`.
+   - Idempotent and portable across any GNU Guix installation.
+
+STATEMENTS OF OMISSION
+----------------------
+- Omission: Does not bundle binary precompiled blobs from external CDNs.
+  Reason: Preserves Guix's reproducible source-to-binary trust chain.
+- Omission: Does not hardcode GNUnet unless needed.
+  Reason: GIPS operates natively over IPFS without requiring a running GNUnet daemon.

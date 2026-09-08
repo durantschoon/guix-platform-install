@@ -43,6 +43,10 @@ STRUCTURE & JUSTIFICATIONS
    - Purpose: Allows automated test runners (`run-tests.sh`) to verify recipe logic without
      requiring live cloud or network access.
 
+7. Package Detection & Bundle Installation (`--install-bundle`):
+   - Explicitly warns that GNU Guix packages the Kubo IPFS daemon under `go-ipfs` (which supplies the `ipfs` command), preventing user confusion from running `guix install ipfs`.
+   - Provides `--install-bundle` to install the complete GIPS dependencies manifest (`gips/manifest.scm`) via `guix package -m`.
+
 STATEMENTS OF OMISSION
 ----------------------
 - Omission: Does not automatically overwrite existing user signing keys if they exist.

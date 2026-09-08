@@ -35,6 +35,49 @@ setup-hooks:
 build:
     cargo build
 
+# Install GIPS dependencies and runtime tools via Guix manifest
+bundle:
+    guix package -m manifest.scm
+
+# Run post-install configuration wizard
+setup:
+    guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm
+
+# Start IPFS and GIPS daemons in background
+start:
+    #!/usr/bin/env bash
+    set -e
+    config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/gips"
+    mkdir -p "$config_dir"
+    if ! command -v ipfs >/dev/null 2>&1; then \
+        echo "[ERROR] 'ipfs' not found. Run 'just bundle' or 'guix install go-ipfs'."; \
+        exit 1; \
+    fi
+    if [ ! -d "${IPFS_PATH:-$HOME/.ipfs}" ]; then \
+        echo "[INFO] Initializing IPFS repository..."; \
+        ipfs init || true; \
+    fi
+    if pgrep -x ipfs >/dev/null 2>&1 || curl -s -m 1 http://127.0.0.1:5001/api/v0/id >/dev/null 2>&1; then \
+        echo "[OK] IPFS daemon is already running."; \
+    else \
+        echo "[INFO] Starting IPFS daemon in background..."; \
+        nohup ipfs daemon > "$$config_dir/ipfs.log" 2>&1 & \
+        sleep 2; \
+    fi
+    if pgrep -x gipsd >/dev/null 2>&1 || curl -s -m 1 http://127.0.0.1:8080/status >/dev/null 2>&1; then \
+        echo "[OK] GIPS daemon is already running."; \
+    else \
+        echo "[INFO] Starting GIPS daemon in background..."; \
+        nohup cargo run -p gipsd -- --config "$$config_dir/gipsd.toml" > "$$config_dir/gipsd.log" 2>&1 & \
+        sleep 2; \
+    fi
+    echo "[OK] Services running."
+
+# Stop background daemons
+stop:
+    pkill -x gipsd >/dev/null 2>&1 && echo "[OK] Stopped gipsd." || true
+    pkill -x ipfs >/dev/null 2>&1 && echo "[OK] Stopped ipfs." || true
+
 # Run the daemon
 daemon:
     cargo run -p gipsd

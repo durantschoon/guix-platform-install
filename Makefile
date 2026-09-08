@@ -16,6 +16,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
 .PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
 .PHONY: gips-test gips-rust-test gips-check gips-daemon gips-status ipfs-docker
+.PHONY: gips-bundle gips-install gips-setup gips-start gips-stop gips-push gips-pull
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
@@ -33,6 +34,15 @@ help:
 	@echo "  make personal-setup [IP=...] [AGENT=1] Run personal config setup on instance"
 	@echo "  make set-ip IP=...      Update ORACLE_INSTANCE_IP in .env (or 'make set-ip IP=' to clear)"
 	@echo ""
+	@echo "GIPS (P2P Package Substitute Sharing):"
+	@echo "  make gips-bundle        Install complete GIPS tooling bundle into Guix profile"
+	@echo "  make gips-setup         Run GIPS post-install configuration wizard"
+	@echo "  make gips-start         Start IPFS and GIPS daemons in background"
+	@echo "  make gips-stop          Stop background IPFS and GIPS daemons"
+	@echo "  make gips-status        Check GIPS daemon and IPFS status"
+	@echo "  make gips-push [GNS_NAME=...] Export profile and publish snapshot to IPFS"
+	@echo "  make gips-pull [MANIFEST=...] Install packages substituting from local GIPS proxy"
+	@echo ""
 	@echo "Repository targets:"
 	@echo "  make test               Run the complete local test suite"
 	@echo "  make check              Run pre-deploy validation and the complete test suite"
@@ -40,8 +50,7 @@ help:
 	@echo "  make gips-test          Run GIPS Guile Scheme test suite"
 	@echo "  make gips-rust-test     Run GIPS Rust workspace test suite"
 	@echo "  make gips-check         Run both Scheme and Rust GIPS test suites"
-	@echo "  make gips-daemon        Start GIPS daemon (gipsd) locally"
-	@echo "  make gips-status        Check GIPS daemon status and peer connectivity"
+	@echo "  make gips-daemon        Start GIPS daemon (gipsd) locally in foreground"
 	@echo "  make ipfs-docker        Run Kubo IPFS daemon via Docker with swarm port 4001"
 	@echo ""
 	@echo "Developer targets:"
@@ -86,13 +95,98 @@ gips-check: gips-test
 		(cd gips && cargo test --workspace); \
 	fi
 
+gips-bundle gips-install:
+	@command -v guix >/dev/null 2>&1 || { echo "guix is required to install the GIPS manifest" >&2; exit 2; }
+	guix package -m gips/manifest.scm
+	@echo "[OK] GIPS toolchain bundle installed successfully."
+
+gips-setup:
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm
+
+gips-start:
+	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
+	@if ! command -v ipfs >/dev/null 2>&1; then \
+		echo "[ERROR] 'ipfs' command not found. Run 'make gips-bundle' or 'guix install go-ipfs'." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -d "$${IPFS_PATH:-$$HOME/.ipfs}" ]; then \
+		echo "[INFO] Initializing IPFS repository..."; \
+		ipfs init || true; \
+	fi
+	@if pgrep -x ipfs >/dev/null 2>&1 || curl -s -m 1 http://127.0.0.1:5001/api/v0/id >/dev/null 2>&1; then \
+		echo "[OK] IPFS daemon is already running."; \
+	else \
+		echo "[INFO] Starting IPFS daemon in background..."; \
+		nohup ipfs daemon > "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/ipfs.log" 2>&1 & \
+		sleep 2; \
+		if pgrep -x ipfs >/dev/null 2>&1 || curl -s -m 2 http://127.0.0.1:5001/api/v0/id >/dev/null 2>&1; then \
+			echo "[OK] IPFS daemon started successfully."; \
+		else \
+			echo "[WARN] IPFS daemon launched (log: ~/.config/gips/ipfs.log)."; \
+		fi; \
+	fi
+	@if pgrep -x gipsd >/dev/null 2>&1 || curl -s -m 1 http://127.0.0.1:8080/status >/dev/null 2>&1; then \
+		echo "[OK] GIPS daemon (gipsd) is already running."; \
+	else \
+		echo "[INFO] Starting GIPS daemon (gipsd) in background..."; \
+		if command -v gipsd >/dev/null 2>&1; then \
+			nohup gipsd --config "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.toml" > "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.log" 2>&1 & \
+		elif command -v cargo >/dev/null 2>&1; then \
+			(cd gips && nohup cargo run -p gipsd -- --config "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.toml" > "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.log" 2>&1 &); \
+		else \
+			echo "[ERROR] Neither 'gipsd' nor 'cargo' found. Run 'make gips-bundle'." >&2; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+		if curl -s -m 2 http://127.0.0.1:8080/status >/dev/null 2>&1; then \
+			echo "[OK] GIPS daemon started successfully on http://127.0.0.1:8080."; \
+		else \
+			echo "[INFO] GIPS daemon starting (log: ~/.config/gips/gipsd.log)."; \
+		fi; \
+	fi
+
+gips-stop:
+	@echo "[INFO] Stopping GIPS daemon and IPFS daemon..."
+	@pkill -x gipsd >/dev/null 2>&1 && echo "[OK] Stopped gipsd." || echo "[INFO] gipsd was not running."
+	@pkill -x ipfs >/dev/null 2>&1 && echo "[OK] Stopped ipfs daemon." || echo "[INFO] ipfs daemon was not running."
+
+GNS_NAME ?= cluster.gnu
+MANIFEST ?= sync-manifest.scm
+
+gips-push:
+	@command -v guix >/dev/null 2>&1 || { echo "guix is required to export and snapshot manifests" >&2; exit 2; }
+	@echo "[INFO] Exporting active Guix profile to $(MANIFEST)..."
+	guix package --export-manifest > $(MANIFEST)
+	@echo "[INFO] Creating GIPS snapshot and publishing to IPFS (GNS: $(GNS_NAME))..."
+	@if command -v gips >/dev/null 2>&1; then \
+		gips snapshot create $(MANIFEST) --gns-name $(GNS_NAME); \
+	elif command -v cargo >/dev/null 2>&1; then \
+		cd gips && cargo run -p gips -- snapshot create ../$(MANIFEST) --gns-name $(GNS_NAME); \
+	else \
+		echo "[ERROR] 'gips' or 'cargo' required. Run 'make gips-bundle'." >&2; exit 1; \
+	fi
+
+gips-pull:
+	@command -v guix >/dev/null 2>&1 || { echo "guix is required to pull packages" >&2; exit 2; }
+	@if [ ! -f "$(MANIFEST)" ]; then \
+		echo "[ERROR] Manifest file '$(MANIFEST)' not found. Specify with MANIFEST=path/to/manifest.scm" >&2; exit 1; \
+	fi
+	@echo "[INFO] Pulling substitutes from local GIPS proxy (http://127.0.0.1:8080)..."
+	guix package -m $(MANIFEST) --substitute-urls="http://127.0.0.1:8080 https://ci.guix.gnu.org"
+
 gips-daemon:
 	@command -v cargo >/dev/null 2>&1 || { echo "cargo is required to run gipsd" >&2; exit 2; }
 	cd gips && cargo run -p gipsd
 
 gips-status:
-	@command -v cargo >/dev/null 2>&1 || { echo "cargo is required to run gips status" >&2; exit 2; }
-	cd gips && cargo run -p gips -- status
+	@if [ -f "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips/gipsd.toml" ] || curl -s -m 1 http://127.0.0.1:8080/status >/dev/null 2>&1; then \
+		$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --status 2>/dev/null || true; \
+	fi
+	@if command -v gips >/dev/null 2>&1; then \
+		gips status; \
+	elif command -v cargo >/dev/null 2>&1; then \
+		(cd gips && cargo run -p gips -- status); \
+	fi
 
 ipfs-docker:
 	@command -v docker >/dev/null 2>&1 || { echo "docker is required to run ipfs container" >&2; exit 2; }
