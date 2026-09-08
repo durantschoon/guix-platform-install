@@ -15,7 +15,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
 .PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
-.PHONY: gips-test gips-rust-test gips-check
+.PHONY: gips-test gips-rust-test gips-check gips-daemon gips-status ipfs-docker
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
@@ -40,6 +40,9 @@ help:
 	@echo "  make gips-test          Run GIPS Guile Scheme test suite"
 	@echo "  make gips-rust-test     Run GIPS Rust workspace test suite"
 	@echo "  make gips-check         Run both Scheme and Rust GIPS test suites"
+	@echo "  make gips-daemon        Start GIPS daemon (gipsd) locally"
+	@echo "  make gips-status        Check GIPS daemon status and peer connectivity"
+	@echo "  make ipfs-docker        Run Kubo IPFS daemon via Docker with swarm port 4001"
 	@echo ""
 	@echo "Developer targets:"
 	@echo "  make dev-check          Run pre-deploy validation and test suite"
@@ -82,6 +85,23 @@ gips-check: gips-test
 	@if command -v cargo >/dev/null 2>&1; then \
 		(cd gips && cargo test --workspace); \
 	fi
+
+gips-daemon:
+	@command -v cargo >/dev/null 2>&1 || { echo "cargo is required to run gipsd" >&2; exit 2; }
+	cd gips && cargo run -p gipsd
+
+gips-status:
+	@command -v cargo >/dev/null 2>&1 || { echo "cargo is required to run gips status" >&2; exit 2; }
+	cd gips && cargo run -p gips -- status
+
+ipfs-docker:
+	@command -v docker >/dev/null 2>&1 || { echo "docker is required to run ipfs container" >&2; exit 2; }
+	docker run -d --name ipfs \
+		--restart unless-stopped \
+		-v ipfs_staging:/export -v ipfs_data:/data/ipfs \
+		-p 4001:4001 -p 4001:4001/udp -p 127.0.0.1:8080:8080 -p 127.0.0.1:5001:5001 \
+		ipfs/kubo:latest
+	@echo "[OK] IPFS (Kubo) container started. Swarm port 4001/tcp+udp and local API 5001 are active."
 
 oracle-help:
 	@echo "Read-only/local targets:"
