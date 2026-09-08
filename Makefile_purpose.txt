@@ -18,10 +18,11 @@ Guix narinfo signing suite. `gips-rust-test` runs the complete Rust workspace
 test suite using Cargo. `gips-check` runs both suites, verifying full Scheme
 and Rust parity.
 
-GIPS lifecycle targets (`gips-bundle`, `gips-setup`, `gips-start`, `gips-stop`,
-`gips-status`, `gips-push`, `gips-pull`) provide single-command operations for
-installing the complete GIPS dependencies manifest (`gips/manifest.scm`),
-running key generation and permission setup, managing background IPFS and
+GIPS lifecycle targets (`gips-bundle`, `gips-setup`, `gips-hub`, `gips-spoke`,
+`gips-start`, `gips-stop`, `gips-status`, `gips-push`, `gips-pull`) provide
+single-command operations for installing the complete GIPS dependencies manifest
+(`gips/manifest.scm`), initializing Hub (builder) or Spoke (consumer) roles with
+automatic key generation and ACL authorization, managing background IPFS and
 `gipsd` daemons with log redirection, inspecting status, and publishing or
 consuming package substitute snapshots across a cluster of Guix machines.
 

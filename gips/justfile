@@ -43,6 +43,21 @@ bundle:
 setup:
     guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm
 
+# Initialize this machine as GIPS Hub (Builder / Publisher)
+hub:
+    guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --hub
+    @just start
+
+# Connect this machine as GIPS Spoke (Consumer) to the Hub
+spoke hub_key_file="":
+    #!/usr/bin/env bash
+    if [ -n "{{hub_key_file}}" ]; then \
+        guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --spoke --hub-key-file="{{hub_key_file}}"; \
+    else \
+        guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --spoke; \
+    fi
+    just start
+
 # Start IPFS and GIPS daemons in background
 start:
     #!/usr/bin/env bash

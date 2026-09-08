@@ -16,7 +16,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
 .PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
 .PHONY: gips-test gips-rust-test gips-check gips-daemon gips-status ipfs-docker
-.PHONY: gips-bundle gips-install gips-setup gips-start gips-stop gips-push gips-pull
+.PHONY: gips-bundle gips-install gips-setup gips-hub gips-spoke gips-start gips-stop gips-push gips-pull
 .PHONY: oracle-help oracle-test oracle-test-all
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
@@ -36,6 +36,8 @@ help:
 	@echo ""
 	@echo "GIPS (P2P Package Substitute Sharing):"
 	@echo "  make gips-bundle        Install complete GIPS tooling bundle into Guix profile"
+	@echo "  make gips-hub           Initialize this machine as the GIPS Hub (builder/publisher)"
+	@echo "  make gips-spoke         Connect this machine as a Spoke (consumer) to the Hub"
 	@echo "  make gips-setup         Run GIPS post-install configuration wizard"
 	@echo "  make gips-start         Start IPFS and GIPS daemons in background"
 	@echo "  make gips-stop          Stop background IPFS and GIPS daemons"
@@ -102,6 +104,21 @@ gips-bundle gips-install:
 
 gips-setup:
 	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm
+
+HUB_KEY ?=
+HUB_KEY_FILE ?=
+
+gips-hub:
+	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --hub
+	@$(MAKE) gips-start
+
+gips-spoke:
+	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"
+	$(GUILE) --no-auto-compile -s postinstall/recipes/add/gips.scm --spoke \
+		$(if $(strip $(HUB_KEY_FILE)),--hub-key-file='$(HUB_KEY_FILE)',) \
+		$(if $(strip $(HUB_KEY)),--hub-key='$(HUB_KEY)',)
+	@$(MAKE) gips-start
 
 gips-start:
 	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"

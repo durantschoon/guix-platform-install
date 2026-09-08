@@ -342,7 +342,102 @@ secret_key = ~s
                   (warn "Active fraud proofs present -- verify /etc/guix/acl has revoked keys removed")))
             (info "No active GIPS daemon reachable to query fraud proofs"))))
     (lambda (k . args)
-      (info "GIPS daemon not reachable for fraud proof synchronization"))))
+;;; ---------------------------------------------------------------------------
+;;; Hub & Spoke Role Setup
+;;; ---------------------------------------------------------------------------
+
+(define* (run-setup-hub #:key (config-dir (gips-config-dir)))
+  (msg "Initializing GIPS Hub (Builder / Publisher)")
+  (info "Configuring this node as a substitute provider for your cluster...")
+  (newline)
+  (let* ((sec-file (string-append config-dir "/signing-key.sec"))
+         (pub-file (string-append config-dir "/signing-key.pub"))
+         (toml-file (string-append config-dir "/gipsd.toml"))
+         (db-file (string-append config-dir "/gipsd.sqlite")))
+    (ensure-private-dir config-dir)
+    (generate-signing-key-if-missing config-dir)
+    (unless (file-exists? toml-file)
+      (call-with-output-file toml-file
+        (lambda (p)
+          (display (default-config-toml db-file "http://127.0.0.1:5001" "127.0.0.1:8080") p)))
+      (chmod toml-file #o600)
+      (ok "Wrote gipsd.toml (mode 0600)"))
+    (let ((pub-key-content
+           (catch #t
+             (lambda ()
+               (if (file-exists? pub-file)
+                   (call-with-input-file pub-file get-string-all)
+                   ""))
+             (lambda _ ""))))
+      (format #t "\n================================================================================\n")
+      (format #t "  [OK] GIPS Hub Configuration Completed Successfully!\n")
+      (format #t "================================================================================\n")
+      (format #t "  Hub Public Key File: ~a\n\n" pub-file)
+      (format #t "  To connect a Spoke node, run this on the Spoke machine:\n")
+      (format #t "    make gips-spoke\n\n")
+      (format #t "  When prompted on the Spoke, paste this Hub signing key:\n\n~a\n\n" (string-trim-both pub-key-content))
+      (format #t "================================================================================\n\n")
+      #t)))
+
+(define* (run-setup-spoke #:key (config-dir (gips-config-dir)) (hub-key #f) (hub-key-file #f) (dry-run? #f))
+  (msg "Configuring GIPS Spoke (Consumer)")
+  (info "Configuring this node to substitute packages from your Hub over IPFS...")
+  (newline)
+  (let* ((toml-file (string-append config-dir "/gipsd.toml"))
+         (db-file (string-append config-dir "/gipsd.sqlite"))
+         (key-text
+          (cond
+           ((and hub-key (not (string-null? hub-key)))
+            hub-key)
+           ((and hub-key-file (file-exists? hub-key-file))
+            (catch #t
+              (lambda () (call-with-input-file hub-key-file get-string-all))
+              (lambda _ #f)))
+           ((not dry-run?)
+            (format #t "Paste the Hub's Guix signing public key below\n")
+            (format #t "(found at ~/.config/gips/signing-key.pub on the Hub):\n")
+            (read-tty-line "Key S-expression:" ""))
+           (else #f))))
+    (ensure-private-dir config-dir)
+    (unless (file-exists? toml-file)
+      (call-with-output-file toml-file
+        (lambda (p)
+          (format p "# GIPS Daemon Configuration (Spoke / Consumer)
+listen = \"127.0.0.1:8080\"
+db_path = ~s
+ipfs_api = \"http://127.0.0.1:5001\"
+dashboard = true
+
+[trust]
+allow_unsigned = false
+" db-file)))
+      (chmod toml-file #o600)
+      (ok "Wrote gipsd.toml for Spoke (mode 0600)"))
+
+    (if (and (string? key-text) (not (string-null? (string-trim-both key-text))))
+        (let ((tmp-key (string-append config-dir "/hub-signing-key.pub")))
+          (call-with-output-file tmp-key
+            (lambda (p) (display (string-trim-both key-text) p) (newline p)))
+          (chmod tmp-key #o600)
+          (ok (format #f "Saved Hub public key to ~a (mode 0600)" tmp-key))
+          (unless dry-run?
+            (info "Authorizing Hub public key in Guix ACL...")
+            (let ((status (system (format #f "sudo guix archive --authorize < ~a 2>/dev/null || guix archive --authorize < ~a 2>/dev/null" tmp-key tmp-key))))
+              (if (zero? status)
+                  (ok "Authorized Hub public key in /etc/guix/acl")
+                  (warn "Could not run 'sudo guix archive --authorize' automatically. Run manually:\n  sudo guix archive --authorize < ~/.config/gips/hub-signing-key.pub")))))
+        (unless dry-run?
+          (warn "No Hub public key provided. Authorize manually with:\n  sudo guix archive --authorize < <hub-pubkey-file>")))
+
+    (format #t "\n================================================================================\n")
+    (format #t "  [OK] GIPS Spoke Configuration Completed!\n")
+    (format #t "================================================================================\n")
+    (format #t "  When Hub publishes packages, substitute them peer-to-peer on this Spoke:\n")
+    (format #t "    make gips-pull\n")
+    (format #t "  Or install individual packages directly:\n")
+    (format #t "    guix install <package> --substitute-urls=\"http://127.0.0.1:8080 https://ci.guix.gnu.org\"\n")
+    (format #t "================================================================================\n\n")
+    #t))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Self-Test Suite
@@ -383,6 +478,24 @@ secret_key = ~s
              (= #o600 (logand (stat:perms (stat sec)) #o777)))
       (check "signing-key.pub has 0600 mode"
              (= #o600 (logand (stat:perms (stat pub)) #o777))))
+
+    ;; Test 4: Hub setup in test directory
+    (let ((hub-dir (string-append test-dir "/hub")))
+      (run-setup-hub #:config-dir hub-dir)
+      (check "run-setup-hub creates directory" (file-exists? hub-dir))
+      (check "run-setup-hub creates gipsd.toml with 0600 mode"
+             (= #o600 (logand (stat:perms (stat (string-append hub-dir "/gipsd.toml"))) #o777)))
+      (check "run-setup-hub creates signing-key.sec with 0600 mode"
+             (= #o600 (logand (stat:perms (stat (string-append hub-dir "/signing-key.sec"))) #o777))))
+
+    ;; Test 5: Spoke setup in test directory
+    (let ((spoke-dir (string-append test-dir "/spoke")))
+      (run-setup-spoke #:config-dir spoke-dir #:hub-key "(public-key (ecc (curve Ed25519) (q #00#)))" #:dry-run? #t)
+      (check "run-setup-spoke creates directory" (file-exists? spoke-dir))
+      (check "run-setup-spoke creates gipsd.toml with 0600 mode"
+             (= #o600 (logand (stat:perms (stat (string-append spoke-dir "/gipsd.toml"))) #o777)))
+      (check "run-setup-spoke saves hub-signing-key.pub with 0600 mode"
+             (= #o600 (logand (stat:perms (stat (string-append spoke-dir "/hub-signing-key.pub"))) #o777))))
 
     ;; Cleanup
     (system* "rm" "-rf" test-dir)
@@ -429,6 +542,10 @@ Post-install recipe for GNU Guix IPFS Package Substitutes (GIPS).
 
 Options:
   (no arguments)       Run interactive setup wizard
+  --hub                Configure this node as a Hub (Builder / Publisher)
+  --spoke              Configure this node as a Spoke (Consumer / Client)
+  --hub-key=KEY        Public key of the Hub to authorize on Spoke
+  --hub-key-file=PATH  Path to file containing Hub public key
   --headless, --batch  Run non-interactive setup with safe defaults
   --install-bundle     Install GIPS tooling bundle (go-ipfs, rust, guile-gcrypt, etc.)
   --status             Inspect GIPS, IPFS, and ACL configuration status
@@ -439,27 +556,73 @@ Options:
   --help, -h           Show this help message
 "))
 
-(let ((args (cdr (command-line))))
-  (match args
-    ('()
-     (run-setup #f))
-    ((or ("--headless") ("--batch"))
-     (run-setup #t))
-    ((or ("--install-bundle") ("--bundle"))
-     (install-bundle))
-    ((or ("--status"))
-     (check-gips-status))
-    ((or ("--monitor"))
-     (launch-monitor #:json? #f))
-    ((or ("--monitor-json"))
-     (launch-monitor #:json? #t))
-    ((or ("--check-revocations") ("--sync-revocations"))
-     (sync-acl-and-revocations))
-    ((or ("--self-test"))
-     (run-self-tests))
-    ((or ("--help") ("-h"))
-     (show-help))
-    (other
-     (err (format #f "Unknown options: ~s" other))
-     (show-help)
-     (exit 1))))
+(define (parse-and-run args)
+  (let loop ((rem args)
+             (mode #f)
+             (hub-key #f)
+             (hub-key-file #f))
+    (if (null? rem)
+        (cond
+         ((eq? mode 'hub)
+          (run-setup-hub))
+         ((eq? mode 'spoke)
+          (run-setup-spoke #:hub-key hub-key #:hub-key-file hub-key-file))
+         ((eq? mode 'headless)
+          (run-setup #t))
+         ((eq? mode 'install-bundle)
+          (install-bundle))
+         ((eq? mode 'status)
+          (check-gips-status))
+         ((eq? mode 'monitor)
+          (launch-monitor #:json? #f))
+         ((eq? mode 'monitor-json)
+          (launch-monitor #:json? #t))
+         ((eq? mode 'check-revocations)
+          (sync-acl-and-revocations))
+         ((eq? mode 'self-test)
+          (run-self-tests))
+         ((eq? mode 'help)
+          (show-help))
+         (else
+          (run-setup #f)))
+        (let ((head (car rem))
+              (tail (cdr rem)))
+          (cond
+           ((string=? head "--hub")
+            (loop tail 'hub hub-key hub-key-file))
+           ((string=? head "--spoke")
+            (loop tail 'spoke hub-key hub-key-file))
+           ((string-prefix? "--hub-key=" head)
+            (loop tail mode (substring head (string-length "--hub-key=")) hub-key-file))
+           ((string=? head "--hub-key")
+            (if (pair? tail)
+                (loop (cdr tail) mode (car tail) hub-key-file)
+                (loop tail mode hub-key hub-key-file)))
+           ((string-prefix? "--hub-key-file=" head)
+            (loop tail mode hub-key (substring head (string-length "--hub-key-file="))))
+           ((string=? head "--hub-key-file")
+            (if (pair? tail)
+                (loop (cdr tail) mode hub-key (car tail))
+                (loop tail mode hub-key hub-key-file)))
+           ((or (string=? head "--headless") (string=? head "--batch"))
+            (loop tail 'headless hub-key hub-key-file))
+           ((or (string=? head "--install-bundle") (string=? head "--bundle"))
+            (loop tail 'install-bundle hub-key hub-key-file))
+           ((string=? head "--status")
+            (loop tail 'status hub-key hub-key-file))
+           ((string=? head "--monitor")
+            (loop tail 'monitor hub-key hub-key-file))
+           ((string=? head "--monitor-json")
+            (loop tail 'monitor-json hub-key hub-key-file))
+           ((or (string=? head "--check-revocations") (string=? head "--sync-revocations"))
+            (loop tail 'check-revocations hub-key hub-key-file))
+           ((string=? head "--self-test")
+            (loop tail 'self-test hub-key hub-key-file))
+           ((or (string=? head "--help") (string=? head "-h"))
+            (loop tail 'help hub-key hub-key-file))
+           (else
+            (err (format #f "Unknown option: ~s" head))
+            (show-help)
+            (exit 1)))))))
+
+(parse-and-run (cdr (command-line)))

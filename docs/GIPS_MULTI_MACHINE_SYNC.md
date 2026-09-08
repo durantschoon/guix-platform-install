@@ -46,60 +46,35 @@ guix package -m gips/manifest.scm
 
 ---
 
-### Step 2: Initialize Keys and Daemons
+### Step 2: Initialize the Hub (Node 1 - Builder / Producer)
 
-On both machines:
+On your primary build machine:
 
 ```bash
-# 1. Generate narinfo signing keys (signing-key.sec/pub with mode 0600) and create ~/.config/gips/gipsd.toml
-make gips-setup
-
-# 2. Start IPFS and GIPS daemons in the background (with log redirection to ~/.config/gips/)
-make gips-start
-
-# 3. Check service health
-make gips-status
+make gips-hub
 ```
+
+This single command:
+1. Generates private/public narinfo signing keys (mode `0600`) and configures `~/.config/gips/gipsd.toml`.
+2. Starts `ipfs daemon` and `gipsd` in the background with logging to `~/.config/gips/`.
+3. Displays the Hub's public key with instructions for connecting any Spoke node.
 
 ---
 
-### Step 3: Link Your Machines (The 2-Key Ceremony)
+### Step 3: Connect Spoke Nodes (Node 2, 3, etc. - Consumers)
 
-GIPS relies on two separate keys:
-1. **Feed Key (Ed25519 PEM)**: GIPS-internal key to sign feed snapshots.
-2. **Guix Key (libgcrypt s-expression)**: Guix-native key that signs `.narinfo` files.
+On each consumer machine:
 
-#### On Machine 1 (Producer / Builder):
-
-Export the public halves:
 ```bash
-# Print feed public key
-cd gips && cargo run -p gips -- key export-feed
-
-# Print Guix signing public key
-cat ~/.config/gips/signing-key.pub
+make gips-spoke
 ```
 
-#### On Machine 2 (Consumer / Client):
+When prompted:
+1. Paste the Hub's signing public key (from Step 2).
+2. The script automatically authorizes the key in Guix's `/etc/guix/acl` via `sudo guix archive --authorize`.
+3. Configures `gipsd.toml` for consumer mode and starts `ipfs daemon` and `gipsd` in the background.
 
-1. **Authorize Machine 1's Guix key** in Guix's ACL:
-   ```bash
-   sudo guix archive --authorize
-   # Paste Machine 1's signing-key.pub s-expression and press Ctrl+D
-   ```
-
-2. **Trust Machine 1's feed key** in `~/.config/gips/gipsd.toml`:
-   ```toml
-   [[trust.trusted_publishers]]
-   name = "machine1"
-   public_key = "<paste Machine 1's feed public key PEM>"
-   ```
-
-3. **Restart GIPS daemon on Machine 2**:
-   ```bash
-   make gips-stop
-   make gips-start
-   ```
+*(For automated scripts, you can also pass `make gips-spoke HUB_KEY='(public-key ...)'` or `make gips-spoke HUB_KEY_FILE=hub.pub` without interactive prompts).*
 
 ---
 
@@ -130,6 +105,8 @@ Substitutes will be downloaded peer-to-peer over the IPFS swarm in seconds witho
 | Target | Description |
 |---|---|
 | `make gips-bundle` | Installs complete GIPS tooling bundle (`go-ipfs`, `rust`, `guile-gcrypt`, etc.) via `gips/manifest.scm`. |
+| `make gips-hub` | Initializes this node as the Hub (builder): sets up keys, starts daemons, and outputs Spoke connection info. |
+| `make gips-spoke` | Connects this node as a Spoke (consumer): authorizes Hub key in `/etc/guix/acl` and starts daemons. |
 | `make gips-setup` | Runs the post-install recipe: creates secure config dir, generates keys (`0600`/`0700`), and writes default config. |
 | `make gips-start` | Starts `ipfs daemon` and `gipsd` in the background with logging to `~/.config/gips/`. |
 | `make gips-stop` | Stops background `gipsd` and `ipfs daemon` processes cleanly. |
