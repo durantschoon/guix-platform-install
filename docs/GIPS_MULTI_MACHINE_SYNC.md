@@ -29,14 +29,22 @@ Traditional binary-sharing tools have friction:
 > - **x86_64 Nodes**: Oracle `VM.Standard.E2.1.Micro` (Always Free AMD), Framework laptops, x86_64 PCs, and standard cloud VPSs.
 > - **aarch64 Nodes**: Apple Silicon Macs (M1/M2/M3/M4 native), Oracle `VM.Standard.A1.Flex` (Always Free Ampere), Raspberry Pi 3/4/5.
 
-### 💡 For Apple Silicon Mac Users Targeting x86_64 Fleets
-If your personal fleet is based on x86_64 (like the published Oracle image and x86 laptops), your Apple Silicon Mac can still participate as an x86_64 builder and substitute cache!
+### 💡 Deciding Your Architecture Strategy
 
-Run your local Guix container using Docker/OrbStack with Rosetta x86_64 emulation:
-```bash
-docker run --platform linux/amd64 ...
-```
-Any substitute built or cached in this container will produce native `x86_64` binaries, allowing your Oracle cloud VM and x86 laptops to pull them via GIPS with 100% hash parity.
+Because Guix packages must match architectures, decide based on what machines you own:
+
+1. **Option A: Standardize on `x86_64` (Best if you have ANY x86 laptops or PCs)**
+   - If you have an Intel/AMD laptop (like a Framework), x86 desktop, or x86 VPS, stick with **`x86_64` everywhere**.
+   - Your Apple Silicon Mac can fully participate as an `x86_64` builder and substitute cache by running your Guix container via Rosetta:
+     ```bash
+     docker run --platform linux/amd64 ...
+     ```
+   - All packages built on your Mac, laptops, and Oracle `VM.Standard.E2.1.Micro` instance will share identical bit-for-bit substitutes.
+
+2. **Option B: Standardize on `aarch64` (Best if you ONLY sync between your Apple Silicon Mac and Oracle)**
+   - If you don't care about x86 machines and want to sync **strictly between your Mac and Oracle**, you can launch an Always Free **Oracle Ampere A1 (`VM.Standard.A1.Flex`)** instance.
+   - Both your Mac and the Oracle instance will run native `aarch64` at maximum silicon speed with zero emulation.
+   - *Note: You cannot share these binaries with x86 machines.*
 
 ---
 
