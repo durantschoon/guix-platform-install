@@ -99,7 +99,9 @@ gips-check: gips-test
 
 gips-bundle gips-install:
 	@command -v guix >/dev/null 2>&1 || { echo "guix is required to install the GIPS manifest" >&2; exit 2; }
-	guix package -m gips/manifest.scm
+	# go-moremath's upstream TestMeanCI uses exact float equality and fails on
+	# aarch64 by a few ulps; skip only that dependency's test phase.
+	guix package --without-tests=go-github-com-aclements-go-moremath -m gips/manifest.scm
 	@echo "[OK] GIPS toolchain bundle installed successfully."
 
 gips-setup:

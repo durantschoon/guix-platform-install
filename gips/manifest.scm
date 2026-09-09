@@ -11,8 +11,8 @@
 ;;;   guix package -m gips/manifest.scm
 ;;;
 ;;; Includes:
-;;;   - IPFS: go-ipfs (provides the 'ipfs' CLI and Kubo P2P daemon)
-;;;   - Rust toolchain: rust, cargo, pkg-config, openssl, sqlite
+;;;   - IPFS: kubo (provides the 'ipfs' CLI and Kubo P2P daemon)
+;;;   - Rust toolchain: rust, pkg-config, openssl, sqlite (rust includes cargo)
 ;;;   - Scheme runtime: guile, guile-gcrypt (for libgcrypt narinfo signing)
 ;;;   - Utilities: just, curl, jq
 
@@ -34,14 +34,13 @@
       (and fallback (safe-specification->package fallback))))
 
 ;; Specifications with sensible fallbacks:
-;; - IPFS is packaged as 'go-ipfs' in official GNU Guix (provides /bin/ipfs).
-;; - Rust toolchain provides 'cargo'; in some channels 'cargo' is a distinct package.
+;; - Kubo is packaged as 'kubo' in current GNU Guix (provides /bin/ipfs).
+;; - The 'rust' package provides both rustc and cargo.
 ;; - Guile 3.0 is aliased to 'guile'.
 (define desired-packages
   (list
-   (resolve-package "go-ipfs" "ipfs")
+   (resolve-package "kubo" "go-ipfs")
    (resolve-package "rust" #f)
-   (resolve-package "cargo" #f)
    (resolve-package "pkg-config" #f)
    (resolve-package "openssl" #f)
    (resolve-package "sqlite" #f)

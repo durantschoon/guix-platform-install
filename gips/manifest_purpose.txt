@@ -14,17 +14,17 @@ or:
 STRUCTURE & JUSTIFICATIONS
 --------------------------
 1. Resilient Specification Resolution:
-   - Uses `safe-specification->package` with fallbacks (`go-ipfs` -> `ipfs`,
+   - Uses `safe-specification->package` with a compatibility fallback (`kubo` -> `go-ipfs`,
      `guile` -> `guile-3.0`).
-   - In GNU Guix, the Kubo IPFS implementation is packaged under `go-ipfs` (which
+   - In current GNU Guix, the Kubo IPFS implementation is packaged under `kubo` (which
      provides `/bin/ipfs`). If a user attempts `guix install ipfs`, Guix errors
-     with 'unknown package'. Resolving `go-ipfs` solves this cleanly.
+     with 'unknown package'. Resolving `kubo` solves this cleanly.
    - Non-existent packages fail closed to `#f` and are filtered out, avoiding
      hard evaluation aborts across different Guix channel revisions.
 
 2. Comprehensive Toolchain:
-   - Includes `go-ipfs` for the peer-to-peer substitute transport.
-   - Includes `rust`, `cargo`, `pkg-config`, `openssl`, and `sqlite` for building
+   - Includes `kubo` for the peer-to-peer substitute transport.
+   - Includes `rust` (which provides cargo), `pkg-config`, `openssl`, and `sqlite` for building
      and running the `gips` CLI and `gipsd` daemon.
    - Includes `guile` and `guile-gcrypt` for libgcrypt narinfo s-expression signing.
    - Includes `just`, `curl`, and `jq` for workflow execution and telemetry queries.

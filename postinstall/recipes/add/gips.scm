@@ -232,8 +232,8 @@ secret_key = ~s
       (ok "IPFS CLI (kubo) is installed in PATH")
       (begin
         (warn "IPFS CLI ('ipfs') is not in PATH.")
-        (info "In GNU Guix, the package is 'go-ipfs' (not 'ipfs'):")
-        (info "  guix install go-ipfs")
+        (info "In GNU Guix, the package is 'kubo' (not 'ipfs'):")
+        (info "  guix install kubo")
         (info "Or install the complete GIPS toolchain bundle:")
         (info "  guix package -m gips/manifest.scm (or 'make gips-bundle')")))
 
@@ -527,7 +527,8 @@ allow_unsigned = false
                     (err "Failed to install GIPS manifest."))))
             (begin
               (info "Manifest file not found locally; falling back to direct package installation...")
-              (let ((status (system* "guix" "install" "go-ipfs" "rust" "pkg-config" "openssl" "sqlite" "guile-gcrypt" "just" "curl" "jq")))
+              ;; go-moremath's exact float test fails on aarch64 by a few ulps.
+              (let ((status (system* "guix" "install" "--without-tests=go-github-com-aclements-go-moremath" "kubo" "rust" "pkg-config" "openssl" "sqlite" "guile-gcrypt" "just" "curl" "jq")))
                 (if (zero? (status:exit-val status))
                     (ok "Successfully installed GIPS packages.")
                     (err "Failed to install GIPS packages."))))))))

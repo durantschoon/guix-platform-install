@@ -44,7 +44,7 @@ STRUCTURE & JUSTIFICATIONS
      requiring live cloud or network access.
 
 7. Package Detection & Bundle Installation (`--install-bundle`):
-   - Explicitly warns that GNU Guix packages the Kubo IPFS daemon under `go-ipfs` (which supplies the `ipfs` command), preventing user confusion from running `guix install ipfs`.
+   - Explicitly warns that current GNU Guix packages the Kubo IPFS daemon under `kubo` (which supplies the `ipfs` command), preventing user confusion from running `guix install ipfs`.
    - Provides `--install-bundle` to install the complete GIPS dependencies manifest (`gips/manifest.scm`) via `guix package -m`.
 
 8. Hub & Spoke Role Setup (`--hub`, `--spoke`):

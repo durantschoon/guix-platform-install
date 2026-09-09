@@ -33,9 +33,9 @@ Guix store paths are content-addressed and architecture-specific:
 
 > [!NOTE]
 > **IPFS Package Name in GNU Guix:**
-> In GNU Guix, the IPFS (Kubo) package is named **`go-ipfs`** (`gnu/packages/ipfs.scm`). Running `guix install ipfs` will fail with `unknown package`.
+> In current GNU Guix, the IPFS (Kubo) package is named **`kubo`** (`gnu/packages/ipfs.scm`). Running `guix install ipfs` will fail with `unknown package`.
 
-To install all GIPS build, runtime, and cryptographic dependencies in one shot (`go-ipfs`, `rust`, `cargo`, `pkg-config`, `openssl`, `sqlite`, `guile-gcrypt`, `just`, `curl`, `jq`), run on each machine:
+To install all GIPS build, runtime, and cryptographic dependencies in one shot (`kubo`, `rust` with cargo, `pkg-config`, `openssl`, `sqlite`, `guile-gcrypt`, `just`, `curl`, `jq`), run on each machine:
 
 ```bash
 # From repository root:
@@ -104,7 +104,7 @@ Substitutes will be downloaded peer-to-peer over the IPFS swarm in seconds witho
 
 | Target | Description |
 |---|---|
-| `make gips-bundle` | Installs complete GIPS tooling bundle (`go-ipfs`, `rust`, `guile-gcrypt`, etc.) via `gips/manifest.scm`. |
+| `make gips-bundle` | Installs complete GIPS tooling bundle (`kubo`, `rust`, `guile-gcrypt`, etc.) via `gips/manifest.scm`. |
 | `make gips-hub` | Initializes this node as the Hub (builder): sets up keys, starts daemons, and outputs Spoke connection info. |
 | `make gips-spoke` | Connects this node as a Spoke (consumer): authorizes Hub key in `/etc/guix/acl` and starts daemons. |
 | `make gips-setup` | Runs the post-install recipe: creates secure config dir, generates keys (`0600`/`0700`), and writes default config. |
@@ -120,4 +120,3 @@ Substitutes will be downloaded peer-to-peer over the IPFS swarm in seconds witho
 | `make gips-check` | Runs both Scheme and Rust test suites verifying parity. |
 
 For deep technical details and protocol invariants, see [`gips/docs/personal-sync-quickstart.md`](../gips/docs/personal-sync-quickstart.md) and [`gips/docs/architecture.md`](../gips/docs/architecture.md).
-
