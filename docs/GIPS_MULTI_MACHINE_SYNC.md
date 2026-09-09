@@ -21,9 +21,22 @@ Traditional binary-sharing tools have friction:
 
 ## Architecture Compatibility
 
-Guix store paths are content-addressed and architecture-specific:
-- **x86_64 machines** (e.g. Oracle `VM.Standard.E2.1.Micro`, Framework laptops, x86_64 VPS) share x86_64 binaries.
-- **ARM64 machines** (e.g. Apple Silicon Macs, Oracle `VM.Standard.A1.Flex` Ampere instances, Raspberry Pi) share aarch64 binaries natively.
+> [!IMPORTANT]
+> **Substitutes Only Match Identical CPU Architectures:**
+> GNU Guix store paths encode the system tuple (e.g. `x86_64-linux` vs `aarch64-linux`).
+> `guix-daemon` will refuse to install an `aarch64` binary on an `x86_64` system.
+> 
+> - **x86_64 Nodes**: Oracle `VM.Standard.E2.1.Micro` (Always Free AMD), Framework laptops, x86_64 PCs, and standard cloud VPSs.
+> - **aarch64 Nodes**: Apple Silicon Macs (M1/M2/M3/M4 native), Oracle `VM.Standard.A1.Flex` (Always Free Ampere), Raspberry Pi 3/4/5.
+
+### 💡 For Apple Silicon Mac Users Targeting x86_64 Fleets
+If your personal fleet is based on x86_64 (like the published Oracle image and x86 laptops), your Apple Silicon Mac can still participate as an x86_64 builder and substitute cache!
+
+Run your local Guix container using Docker/OrbStack with Rosetta x86_64 emulation:
+```bash
+docker run --platform linux/amd64 ...
+```
+Any substitute built or cached in this container will produce native `x86_64` binaries, allowing your Oracle cloud VM and x86 laptops to pull them via GIPS with 100% hash parity.
 
 ---
 

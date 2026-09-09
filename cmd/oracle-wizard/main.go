@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -445,12 +446,23 @@ func main() {
 	fmt.Println("  1. Navigation Menu -> Compute -> Instances -> 'Create Instance'.")
 	fmt.Println("  2. Configure the following fields:")
 	fmt.Println("     - Name: guix-oracle")
-	fmt.Println("     - Shape: VM.Standard.E2.1.Micro (Always Free)")
+	fmt.Println("     - Shape: VM.Standard.E2.1.Micro (x86_64, Always Free)")
+	fmt.Println("       CRITICAL: This published image is x86_64. Do NOT select Ampere A1 (ARM64)")
+	fmt.Println("       for this image, or the instance will fail to boot.")
 	fmt.Println("     - Image: Click 'Change Image' -> 'Custom Images' -> select 'guix-oracle'")
 	fmt.Println("     - Networking: Select the public subnet created above")
 	fmt.Println("     - Add SSH keys: Select 'Paste public keys' and paste:")
 	fmt.Println()
 	fmt.Printf("       %s\n\n", pubKeyContent)
+	if runtime.GOARCH == "arm64" {
+		fmt.Println("     [NOTE FOR APPLE SILICON MAC USERS]")
+		fmt.Println("     Your local host is ARM64 (aarch64), while this Oracle VM is x86_64.")
+		fmt.Println("     If you plan to use GIPS to share pre-compiled binary substitutes between")
+		fmt.Println("     this Mac and Oracle, run an x86_64 container on your Mac:")
+		fmt.Println("       docker run --platform linux/amd64 ...")
+		fmt.Println("     (See docs/GIPS_MULTI_MACHINE_SYNC.md for architecture details)")
+		fmt.Println()
+	}
 	fmt.Println("  3. Click 'Create'.")
 	fmt.Println("  4. Wait ~1 minute until the instance state icon turns green ('RUNNING').")
 	fmt.Println()
