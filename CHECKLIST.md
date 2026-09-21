@@ -122,7 +122,17 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   `publish-none` / `publish-zstd` (plain `guix publish` on the hub), one
   primary + three explanatory comparisons fixed in advance, attribution rule
   in protocol amendment 4. 77 offline checks. Not yet run anywhere.
-- [ ] **G1.1b NEW BLOCKER (2026-09-21): cross-machine discovery.** A spoke
+- **G1.1b DECIDED by the user 2026-09-21: discovery is real GNS, no shim.**
+  So GIPS gets fixed rather than worked around: publish through
+  `gnunet-namestore -a` (resolve via `gnunet-gns -u` already matches the real
+  tool). That implies, and none of it is built or tested yet: a GNUnet peer on
+  every node; a zone (ego) on the hub that owns the feed label; the spoke
+  learning the hub's zone key, which fits the existing "paste the Hub key"
+  step in `gips-spoke`; and the two peers actually finding each other
+  (HELLO/bootstrap) so a lookup on the spoke reaches the hub's record.
+  `gnunet` goes into `gips/manifest.scm`. The fix is a GIPS source change --
+  make it in `../GIPS` and reconcile the copies in the same sitting.
+- [ ] **G1.1b (original finding, 2026-09-21): cross-machine discovery.** A spoke
   finds the hub only via GNS, through `gnunet-gns`; GNUnet is not in
   `gips/manifest.scm`, not on the micros, and the publish invocation
   (`gnunet-gns record ...`) looks like it is not a real GNUnet command
@@ -137,8 +147,11 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   - HIGH, blocks everything: where gipsd gets built. User chose 2026-09-21 to
     try the micros. `guix build -f gips/gips.scm` cannot work (empty
     `#:cargo-inputs`), so a single-job `cargo build --release` inside
-    `guix shell` was started on `minius-02` (log `~/build-gips.log`). Outcome
-    pending; if it succeeds, copy the binaries to `z5-02` (same image).
+    `guix shell` was started on `minius-02`. **DONE 2026-09-21:** built in
+    ~50 min (needed `CC=gcc`; no OOM), rpath-fixed, runtime libs GC-rooted,
+    and installed as `~/.local/gips/bin/{gipsd,gips}` on both guests with
+    identical hashes. Details in `docs/ORACLE_VALIDATION_CHECKPOINT.md`.
+    Still to install on both: kubo, gnunet, guile-gcrypt, guile-json.
   - DONE 2026-09-21: SSH access to `z5-02`; renamed `guix-oracle-z5-02`
     (transient). New wrinkle: it runs guix `9f08b3d`, `minius-02` runs
     `df2d121`, so binaries built on one need `guix copy` of their runtime

@@ -5,6 +5,33 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-09-21 (gipsd built and installed on both guests): build attempt 2 on
+  `minius-02` finished `EXIT 0` in 30m34s (197 crates, `CARGO_BUILD_JOBS=1`,
+  `CC=gcc HOST_CC=gcc`, no OOM; ~50 min across both attempts). So a 1 GiB
+  micro CAN build gipsd. What was then done, all under the standing
+  authorization:
+  - The binaries' RUNPATH pointed at the throwaway `guix shell` profile, which
+    any `guix gc` would delete. They link only three store items --
+    `openssl-3.5.7`, `gcc-16.1.0-lib`, `glibc-2.41` (131.5 MiB closure; sqlite
+    is static). Copies in `~/.local/gips/bin/` were `patchelf --set-rpath`ed
+    to the real items, and the three items were GC-rooted as
+    `/var/guix/gcroots/gips-runtime-{1,2,3}` on BOTH guests -- essential on the
+    consumer, which is garbage-collected before every trial. (`~/bin` could not
+    be used: on `minius-02` it is a symlink into the store.)
+  - The hub's `/etc/guix/signing-key.pub` was authorized on the consumer
+    (`guix archive --authorize`; ACL now has 3 keys). Side effect, as guix
+    warned: `/etc/guix/acl` on `z5-02` was a symlink and is now a regular file,
+    so a future `guix system reconfigure` there would replace it. This same key
+    is what the `guix publish` control arms need.
+  - `guix archive --export -r` on the hub piped through the controller into
+    `guix archive --import` on the consumer; binaries copied by tar.
+  - Verified on both: `env -i ~/.local/gips/bin/gips --help` runs; sha256
+    `e71367a1...` (gipsd) and `348e6536...` (gips) identical on both.
+  - Accident, harmless: probing `gipsd --version` (no such flag) started the
+    daemon briefly on the hub and created a default `~/.config/gips/` with an
+    auth token and empty database. No daemon is running on either guest.
+  Not yet installed on either: kubo (`ipfs`), gnunet, guile-gcrypt/guile-json.
+
 - 2026-09-21 (z5-02 reachable): the user added this controller's
   `id_ed25519_guix_oracle.pub` to `~guix/.ssh/authorized_keys` on
   `guix-oracle-z5-02` (from the Termux phone that launched it). Probe:

@@ -345,6 +345,13 @@ almost nothing over the network was not cold.
   succeed in the build sandbox for the 315-crate workspace; gipsd has to be
   built with plain `cargo` inside `guix shell` (network on).
 
+  **Decision, user, 2026-09-21: discovery stays real GNS; no shim.** The
+  benchmark therefore measures GIPS with the discovery mechanism it was
+  designed around, and the write-up needs no "discovery was not GNS" caveat.
+  The cost is that GNS publishing must be fixed in GIPS and a GNUnet peer must
+  run on both guests before any GIPS trial. GNUnet's own resolution time is
+  inside `first_available_ms`, where it belongs.
+
   **(f) Option 2 stays planned** as a second `gips` arm variant
   (`gips-ondemand`) once gipsd can resolve through subscriptions without
   pinning. Section 3's original text describes that arm and is kept for it.
