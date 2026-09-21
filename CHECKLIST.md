@@ -97,7 +97,10 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   add on-demand resolve to gipsd / both) are in protocol section 9,
   amendment 2(a). Follow-ons blocked on it: gipsd restart in the reset (2b),
   `guix publish` control arm (2d), ACL + 1000-item preflight checks (2g).
-- [ ] G1.1 Decide shape and topology (blocks everything below; protocol
+- ✅ G1.1 roles decided 2026-09-21: **hub = `guix-oracle-minius-02`
+  (10.0.0.71), consumer = `guix-oracle-z5-02` (10.0.0.225)**, both
+  E2.1.Micro, same /24. Shape for Goal 2 stays deferred. Original item:
+- [x] ~~G1.1 Decide shape and topology~~ (blocks everything below; protocol
   section 5 explains why topology changes what the result is allowed to claim,
   and the Goal 2 note explains why shape is a shared decision)
   - Live inventory 2026-09-20 (read-only OCI query): both Always Free micro
@@ -136,13 +139,17 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
     `#:cargo-inputs`), so a single-job `cargo build --release` inside
     `guix shell` was started on `minius-02` (log `~/build-gips.log`). Outcome
     pending; if it succeeds, copy the binaries to `z5-02` (same image).
-  - MEDIUM, blocks the run but is a 2-minute fix: SSH access to `z5-02`.
+  - DONE 2026-09-21: SSH access to `z5-02`; renamed `guix-oracle-z5-02`
+    (transient). New wrinkle: it runs guix `9f08b3d`, `minius-02` runs
+    `df2d121`, so binaries built on one need `guix copy` of their runtime
+    closure (or a rebuild) to run on the other. Private addresses:
+    `minius-02` 10.0.0.71, `z5-02` 10.0.0.225, same /24.
   - LOW, half done 2026-09-21: distinct guest hostnames. **Convention: a
     guest's hostname is its OCI display name** (`guix-oracle-minius-02`), which
     OCI already serves at `/opc/v2/instance/` as `hostname`; roles (hub,
     consumer) are per-experiment and go in the results, never in the name.
-    `minius-02` renamed transiently (`sudo hostname ...`; reverts on reboot,
-    `/etc/hosts` still says `guix-oracle`). `z5-02` waits on SSH access.
+    Both guests renamed transiently (`sudo hostname ...`; reverts on reboot,
+    `/etc/hosts` still says `guix-oracle`).
     Durable fix, not started: a boot-time service in `oracle/image/` that sets
     the hostname from instance metadata, beside `metadata-ssh-keys.scm` --
     the generic image must not hardcode a name, and there is no

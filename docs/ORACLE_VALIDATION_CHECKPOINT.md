@@ -5,6 +5,20 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-09-21 (z5-02 reachable): the user added this controller's
+  `id_ed25519_guix_oracle.pub` to `~guix/.ssh/authorized_keys` on
+  `guix-oracle-z5-02` (from the Termux phone that launched it). Probe:
+  x86_64, 2 vCPU, 965 MiB + 2 GiB swap, 38 GiB free, `sudo -n` works, 2 ACL
+  keys, **guix `9f08b3d`, generation 1, no nonguix** -- a different commit from
+  `minius-02` (`df2d121` + nonguix), so the two stores do not share paths and a
+  binary built on one will not find its libraries on the other without
+  `guix copy`. No `curl` (use `wget`), no GIPS tooling. Renamed transiently to
+  `guix-oracle-z5-02`. Both guests share subnet 10.0.0.0/24: `minius-02` is
+  10.0.0.71, `z5-02` is 10.0.0.225 (private addresses, stable for the life of
+  the VNIC). gipsd build attempt 1 on `minius-02` failed after 19 min / 90
+  crates on `cc` not found (Guix ships `gcc`, no `cc`), not on memory; attempt
+  2 with `CC=gcc` is running, first log kept as `~/build-gips.attempt1.log`.
+
 - 2026-09-21 (later still): `sudo hostname guix-oracle-minius-02` on that
   guest, so the benchmark's `--consumer-host` guard can tell the two micros
   apart. Transient: a reboot restores `guix-oracle`, and `/etc/hosts` was not

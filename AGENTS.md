@@ -57,7 +57,10 @@ Oracle Cloud, configured the way they like.
   Then G1.2: one substitute served end to end between two nodes.
 - **Live Oracle inventory (read-only query, 2026-09-20)**: both Always Free
   micro slots are used by running Guix guests `guix-oracle-minius-02` and
-  `guix-oracle-z5-02` (Ashburn AD-1). The Oracle Linux micro named in
+  `guix-oracle-z5-02` (Ashburn AD-1). For the GIPS benchmark `minius-02` is
+  the hub and `z5-02` the consumer; both are reachable from the controller
+  with `~/.ssh/id_ed25519_guix_oracle` and carry transient hostnames equal to
+  their OCI display names. The Oracle Linux micro named in
   `docs/ORACLE_VALIDATION_CHECKPOINT.md` no longer exists.
 - **Friend-facing remainder**: the console-only walkthrough and screenshots.
 

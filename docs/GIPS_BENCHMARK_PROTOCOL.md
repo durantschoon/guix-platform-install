@@ -402,9 +402,10 @@ numbers turn out to flatter. Each claim is licensed by a specific
 configuration; a claim whose configuration was not run is not made.
 
 **Configuration A (first run):** two `VM.Standard.E2.1.Micro` guests in the
-same Ashburn availability domain and VCN (the account's two existing micros,
-`guix-oracle-minius-02` and `guix-oracle-z5-02`, are both in AD-1; which is
-hub and which is consumer is not yet chosen), one hub holding the full closure, one
+same Ashburn availability domain and VCN (the account's two existing micros, both in AD-1 and on subnet 10.0.0.0/24.
+**Roles fixed by the user on 2026-09-21: `guix-oracle-minius-02` (10.0.0.71)
+is the hub, `guix-oracle-z5-02` (10.0.0.225) is the consumer** -- the consumer
+is garbage-collected before every trial, and z5-02 has the least to lose), one hub holding the full closure, one
 consumer, central arm = `ci.guix.gnu.org` + `bordeaux.guix.gnu.org`.
 
 | If A shows | We may say | We may NOT say |
