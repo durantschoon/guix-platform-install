@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "gips"
-version = "0.1.0"
+version = "2026.9.21"
 dependencies = [
  "anyhow",
  "axum",
@@ -833,7 +833,7 @@ dependencies = [
 
 [[package]]
 name = "gips-config"
-version = "0.1.0"
+version = "2026.9.21"
 dependencies = [
  "anyhow",
  "dirs",
@@ -952,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "gips-workspace"
-version = "0.1.0"
+version = "2026.9.21"
 dependencies = [
  "axum",
  "base64",
@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "gipsd"
-version = "0.1.0"
+version = "2026.9.21"
 dependencies = [
  "anyhow",
  "axum",

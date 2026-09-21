@@ -1,7 +1,8 @@
 [package]
 name = "gips-config"
-version = "0.1.0"
+version = "2026.9.21"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 dirs = "5.0"

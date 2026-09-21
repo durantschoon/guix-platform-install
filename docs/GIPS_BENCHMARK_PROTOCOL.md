@@ -122,7 +122,9 @@ The answer depends on these, so a result without them is not a result:
   guests in one VCN talk over the datacentre's internal links);
 - number of GIPS peers holding the closure (the claim "one nearby peer beats a
   transatlantic server" differs from "a swarm beats a server");
-- `guix describe` on the consumer, `gipsd` and `kubo` versions;
+- `guix describe` on the consumer; `gipsd --version` on every node (release,
+  commit and tree state -- a `dirty` build is not a publishable measurement);
+  `ipfs version`; `gnunet-arm --version`;
 - workload name, item count, closure size in bytes;
 - schedule seed, block count, wall-clock span of the run.
 

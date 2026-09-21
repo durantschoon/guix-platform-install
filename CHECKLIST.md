@@ -193,6 +193,16 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   a `(service gips-service-type)` line alone cannot work yet; it should extend
   or require kubo and gnunet services; (3) `gips/guix.scm` lists `gnunet` but
   not `kubo`, and cannot build at all until `#:cargo-inputs` is real.
+- ✅ G1.1d gipsd reports what it is (2026-09-21): ChronVer by commit date +
+  commit/tree state + protocol versions, via `gipsd --version`,
+  `gips --version` and `GET /status`; `gipsd` no longer swallows arguments
+  silently. Scheme and rationale in `gips/README.md`. Tested on macOS (137
+  tests across the four touched crates); **not yet rebuilt on the guests, whose
+  installed binaries predate it.** FLAGGED: `make gips-start` and the
+  benchmark's default `--gipsd-start` pass `--config PATH`, which gipsd has
+  always ignored -- it worked only because PATH is the default location. It
+  now logs a warning. Decide: drop the flag from callers, or make gipsd honour
+  it.
 - [ ] G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
   substitute end to end (`guix build /gnu/store/...-hello` on the consumer with
   `--substitute-urls=http://127.0.0.1:8080` only). This is roadmap Step 1 below

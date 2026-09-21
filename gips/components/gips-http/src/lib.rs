@@ -452,6 +452,19 @@ pub struct ManifestEntry {
 #[derive(Debug, Serialize)]
 pub struct StatusResponse {
     pub ok: bool,
+    /// ChronVer release, `YYYY.MM.DD` by commit date.
+    pub version: String,
+    /// Short commit hash; `null` when the build had no git to ask.
+    pub commit: Option<&'static str>,
+    /// `null` means unknown, which is not the same as clean.
+    pub dirty: Option<bool>,
+    pub protocols: StatusProtocols,
+}
+
+/// Wire-format versions a peer can use to decide whether it can talk to us.
+#[derive(Debug, Serialize)]
+pub struct StatusProtocols {
+    pub gossip: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2735,7 +2748,15 @@ async fn get_native_nar(
 }
 
 async fn get_status() -> Json<StatusResponse> {
-    Json(StatusResponse { ok: true })
+    // Unauthenticated on purpose (health checks use it), so it exposes only
+    // what `gipsd --version` prints: nothing about config, peers or keys.
+    Json(StatusResponse {
+        ok: true,
+        version: gips_config::version::release(),
+        commit: gips_config::version::commit(),
+        dirty: gips_config::version::dirty(),
+        protocols: StatusProtocols { gossip: gips_config::version::GOSSIP_PROTOCOL },
+    })
 }
 
 /// The dashboard page, compiled into the binary.
@@ -4332,6 +4353,30 @@ async fn process_gossiped_fraud(state: &Arc<AppState>, payload_bytes: &[u8]) {
 #[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
+
+    /// The gossip protocol number lives in `gips_config::version` (so
+    /// `--version` and `/status` can report it) and is also spelled inside the
+    /// topic names. If someone bumps one and not the other, peers would
+    /// advertise a version they do not speak.
+    #[test]
+    fn gossip_topics_carry_the_advertised_protocol_version() {
+        let suffix = format!(".v{}", gips_config::version::GOSSIP_PROTOCOL);
+        assert!(TOPIC_VOUCH.ends_with(&suffix), "{TOPIC_VOUCH} vs {suffix}");
+        assert!(TOPIC_FRAUD.ends_with(&suffix), "{TOPIC_FRAUD} vs {suffix}");
+    }
+
+    #[tokio::test]
+    async fn status_reports_version_commit_and_protocols() {
+        let Json(status) = get_status().await;
+        let body = serde_json::to_value(&status).unwrap();
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["version"], gips_config::version::release());
+        assert_eq!(body["protocols"]["gossip"], gips_config::version::GOSSIP_PROTOCOL);
+        // Present even when unknown: `null`, never a missing key, so a client
+        // can tell "unknown" from "an older gipsd that does not report it".
+        assert!(body.as_object().unwrap().contains_key("commit"));
+        assert!(body.as_object().unwrap().contains_key("dirty"));
+    }
 
     #[test]
     fn test_process_feed_rejects_by_default() {

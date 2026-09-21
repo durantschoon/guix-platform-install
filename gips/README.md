@@ -48,6 +48,41 @@ Your packages are now pinned to your local IPFS node, and a manifest is publishe
 
 See the [User Guide](docs/user_guide.md) for full instructions on setting up subscriptions and downloading substitutes.
 
+## Versioning
+
+`gipsd --version` and `gips --version` print one line, and `GET /status`
+returns the same facts as JSON:
+
+```
+gipsd 2026.09.21 (206054f, clean) gossip=v1
+```
+
+Three identifiers, because they answer three different questions:
+
+- **Release -- ChronVer by commit date**, `YYYY.MM.DD` in UTC. The *commit*
+  date, not the build date, so two builds of the same source report the same
+  version (what a reproducible Guix build expects). Cargo only accepts
+  SemVer-shaped versions and SemVer forbids leading zeros, so `Cargo.toml`
+  carries `2026.9.21` and the programs print `2026.09.21`. A build with no git
+  available (a tarball, the Guix sandbox) falls back to that `Cargo.toml`
+  value; packagers can pass `GIPS_COMMIT_EPOCH` and `GIPS_COMMIT` instead.
+- **Commit and tree state** -- exactly which code. Two builds on one day share
+  a release; a bug report or a benchmark result has to name the build. `dirty`
+  means uncommitted changes; when the build could not look, the state is
+  omitted (`null` in `/status`) rather than reported as clean.
+- **Protocol versions** -- whether two peers can talk. Neither a date nor a
+  SemVer number says whether another node's messages are readable, so each
+  wire format has its own integer, bumped only when compatibility breaks.
+  Today that is `gossip` (the `gips.vouch.v1` / `gips.fraud.v1` topics; a test
+  keeps the constant and the topic names from drifting). **The feed format has
+  no version field yet** -- it should get one before a second, incompatible
+  feed layout ever exists.
+
+`gipsd` takes no options besides `--version` and `--help`; its configuration
+is `gipsd.toml` in the configuration directory (`GIPS_CONFIG_DIR` overrides
+it). Other arguments are ignored **with a warning in the log** -- before
+2026-09 they were ignored silently, so `gipsd --version` started a daemon.
+
 ## Repository layout
 
 The codebase is organized in a **Polylith-style** structure:

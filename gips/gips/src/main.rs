@@ -9,9 +9,19 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 
+/// The text after the program name in `gips --version`.
+fn cli_version() -> &'static str {
+    let line = gips_config::version::long_version("gips");
+    let rest = line.strip_prefix("gips ").unwrap_or(&line).to_string();
+    Box::leak(rest.into_boxed_str())
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "gips")]
 #[command(about = "CLI for interacting with a local gipsd daemon")]
+// `--version` / `-V`. clap needs a 'static str and the version is assembled at
+// run time from build-script values, so it is leaked once at startup.
+#[command(version = cli_version())]
 struct Cli {
     #[arg(long, global = true, default_value = "http://127.0.0.1:8080")]
     daemon: String,

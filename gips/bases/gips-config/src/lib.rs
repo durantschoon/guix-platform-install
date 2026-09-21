@@ -1,4 +1,6 @@
 use anyhow::Result;
+pub mod version;
+
 use dirs::{config_dir, home_dir};
 use serde::{Deserialize, Serialize};
 use std::fmt;

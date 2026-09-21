@@ -84,14 +84,63 @@ fn audit_executables_named_by_config(config: &GipsdConfig) {
     }
 }
 
+/// What to do with the command line, decided before anything is started.
+#[derive(Debug, PartialEq, Eq)]
+enum Invocation {
+    /// Print this text and exit 0 without starting the daemon.
+    PrintAndExit(String),
+    /// Start the daemon. `ignored` holds arguments gipsd does not understand.
+    Run { ignored: Vec<String> },
+}
+
+/// gipsd takes its configuration from the config directory, never from
+/// arguments -- and until 2026-09 it did not look at its arguments at all, so
+/// `gipsd --version` quietly started a daemon and `gipsd --config PATH`
+/// (which the installer's Makefile passes) was accepted and ignored. Unknown
+/// arguments are still tolerated, because callers in the wild pass `--config`,
+/// but they are now reported instead of vanishing.
+fn parse_invocation(arguments: &[String]) -> Invocation {
+    if arguments.iter().any(|a| a == "--version" || a == "-V") {
+        return Invocation::PrintAndExit(gips_config::version::long_version("gipsd"));
+    }
+    if arguments.iter().any(|a| a == "--help" || a == "-h") {
+        return Invocation::PrintAndExit(format!(
+            "{}\n\nUsage: gipsd [--version] [--help]\n\n\
+             gipsd takes no other options. Its configuration is gipsd.toml in the\n\
+             configuration directory ({} overrides the location).",
+            gips_config::version::long_version("gipsd"),
+            gips_config::CONFIG_DIR_ENV
+        ));
+    }
+    Invocation::Run { ignored: arguments.to_vec() }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let ignored = match parse_invocation(&arguments) {
+        Invocation::PrintAndExit(text) => {
+            println!("{text}");
+            return Ok(());
+        }
+        Invocation::Run { ignored } => ignored,
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+
+    info!("{}", gips_config::version::long_version("gipsd"));
+    if !ignored.is_empty() {
+        tracing::warn!(
+            "ignoring command-line arguments {:?}: gipsd reads gipsd.toml from its \
+             configuration directory and takes no options besides --version/--help",
+            ignored
+        );
+    }
 
     let config = startup_config(gips_config::config_home()).await?;
 
@@ -214,6 +263,57 @@ mod tests {
     use super::*;
     use std::net::TcpStream;
     use std::time::Duration;
+
+    fn arguments(list: &[&str]) -> Vec<String> {
+        list.iter().map(|a| a.to_string()).collect()
+    }
+
+    /// `gipsd --version` must print and exit. Before this existed it started a
+    /// daemon, which is how a version probe once created a config directory
+    /// and auth token on a machine nobody meant to configure.
+    #[test]
+    fn version_flag_prints_and_does_not_run() {
+        for flag in ["--version", "-V"] {
+            match parse_invocation(&arguments(&[flag])) {
+                Invocation::PrintAndExit(text) => {
+                    assert!(text.starts_with("gipsd "), "{text}");
+                    assert!(text.contains("gossip=v"), "{text}");
+                }
+                other => panic!("{flag} would start the daemon: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn version_flag_wins_even_beside_other_arguments() {
+        let parsed = parse_invocation(&arguments(&["--config", "/x/gipsd.toml", "--version"]));
+        assert!(matches!(parsed, Invocation::PrintAndExit(_)));
+    }
+
+    #[test]
+    fn help_flag_names_the_config_directory_variable() {
+        match parse_invocation(&arguments(&["--help"])) {
+            Invocation::PrintAndExit(text) => {
+                assert!(text.contains(gips_config::CONFIG_DIR_ENV), "{text}")
+            }
+            other => panic!("--help would start the daemon: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_arguments_runs_with_nothing_ignored() {
+        assert_eq!(parse_invocation(&[]), Invocation::Run { ignored: vec![] });
+    }
+
+    /// `--config PATH` is what the installer's Makefile passes. It must keep
+    /// starting the daemon (not break existing callers) AND be reported.
+    #[test]
+    fn unknown_arguments_still_run_but_are_reported() {
+        assert_eq!(
+            parse_invocation(&arguments(&["--config", "/x/gipsd.toml"])),
+            Invocation::Run { ignored: arguments(&["--config", "/x/gipsd.toml"]) }
+        );
+    }
 
     /// Enumerated test 2: a `listen` of `0.0.0.0:9090` with no `insecure_bind`
     /// stops startup before anything is bound.
