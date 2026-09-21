@@ -5,6 +5,11 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-09-21 (later still): `sudo hostname guix-oracle-minius-02` on that
+  guest, so the benchmark's `--consumer-host` guard can tell the two micros
+  apart. Transient: a reboot restores `guix-oracle`, and `/etc/hosts` was not
+  changed. The gipsd build was at ~40 crates (tokio), 329 MiB into swap.
+
 - 2026-09-21 (later): first state-changing actions on `guix-oracle-minius-02`
   under the standing authorization. (1) Copied the `gips/` source tree (no
   `target/`, no `.git`) to `~/gips-src`. (2) `guix shell gnunet` to test the

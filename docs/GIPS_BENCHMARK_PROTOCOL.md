@@ -512,8 +512,10 @@ itself relies on unpinned blocks on the consumer is boundary 3 in section 8.
   machine's hostname, so a command pasted into the wrong terminal fails there.
   **Weakness found 2026-09-21:** the generic Oracle image names every guest
   `guix-oracle`, so on the two benchmark machines this check cannot tell hub
-  from consumer. It still stops a laptop or the controller. Give the two
-  guests distinct hostnames before the first run.
+  from consumer. It still stops a laptop or the controller. Convention
+  adopted: hostname = OCI display name. `minius-02` was renamed transiently on
+  2026-09-21; **a reboot silently undoes it**, so check `hostname` on both
+  guests at the start of every run until the image sets it from metadata.
 - `hub-prepare` leaves `/var/tmp/gips-benchmark-hub`; `run` refuses on any
   machine that has it. Collecting garbage on the hub deletes what it serves.
 - `--yes` skips the question, never those two checks.

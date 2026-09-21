@@ -137,8 +137,16 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
     `guix shell` was started on `minius-02` (log `~/build-gips.log`). Outcome
     pending; if it succeeds, copy the binaries to `z5-02` (same image).
   - MEDIUM, blocks the run but is a 2-minute fix: SSH access to `z5-02`.
-  - LOW (noted, not blocking): distinct guest hostnames -- the hub-marker guard
-    already protects the hub; do it when first logging in to both.
+  - LOW, half done 2026-09-21: distinct guest hostnames. **Convention: a
+    guest's hostname is its OCI display name** (`guix-oracle-minius-02`), which
+    OCI already serves at `/opc/v2/instance/` as `hostname`; roles (hub,
+    consumer) are per-experiment and go in the results, never in the name.
+    `minius-02` renamed transiently (`sudo hostname ...`; reverts on reboot,
+    `/etc/hosts` still says `guix-oracle`). `z5-02` waits on SSH access.
+    Durable fix, not started: a boot-time service in `oracle/image/` that sets
+    the hostname from instance metadata, beside `metadata-ssh-keys.scm` --
+    the generic image must not hardcode a name, and there is no
+    `/etc/config.scm` on the guest to reconfigure from.
   - LOW (noted): `gips/` vs `../GIPS`. Checked 2026-09-21: **no Rust source
     differs**, so the gipsd binary is identical either way; the drift is in the
     Scheme API/service (`dashboard?` field), justfile, two docs, `test_api.scm`.
