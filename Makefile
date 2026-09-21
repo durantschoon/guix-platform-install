@@ -17,7 +17,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
 .PHONY: gips-test gips-rust-test gips-check gips-daemon gips-status ipfs-docker
 .PHONY: gips-bundle gips-install gips-setup gips-hub gips-spoke gips-start gips-stop gips-push gips-pull
-.PHONY: oracle-help oracle-test oracle-test-all
+.PHONY: oracle-help oracle-test oracle-test-all gips-benchmark-report
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
 .PHONY: oracle-instance oracle-evidence oracle-stage0 oracle-stage1
@@ -260,6 +260,13 @@ oracle-test:
 	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-capacity.scm
 	$(GUILE) --no-auto-compile -s oracle/tests/test-oracle-validation.scm
 	$(GUILE) --no-auto-compile -s oracle/tests/test-gips-cloud-validation.scm
+	$(GUILE) --no-auto-compile -s oracle/tests/test-gips-benchmark.scm
+
+# Analyse a GIPS benchmark results file (docs/GIPS_BENCHMARK_PROTOCOL.md).
+# Pure Guile: runs on the macOS controller, no guix needed.
+gips-benchmark-report:
+	@test -n "$(RESULTS)" || { echo "usage: make gips-benchmark-report RESULTS=results.tsv" >&2; exit 2; }
+	$(GUILE) --no-auto-compile -s oracle/scripts/gips-benchmark.scm report --in "$(RESULTS)"
 
 oracle-test-all: oracle-test oracle-test-preferences oracle-test-image
 

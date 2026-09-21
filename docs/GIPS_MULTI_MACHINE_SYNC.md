@@ -15,7 +15,7 @@ Traditional binary-sharing tools have friction:
 **With GIPS:**
 - Uses the global **IPFS libp2p swarm** for automatic NAT hole-punching and peer discovery across home firewalls and cloud data centers.
 - Runs a local substitute HTTP proxy (`http://127.0.0.1:8080`) that `guix-daemon` queries transparently.
-- When one of your machines builds or downloads a package, your other machines fetch that exact substitute binary directly via IPFS instead of compiling from source.
+- When one of your machines publishes a package, your other machines -- once **subscribed** to it -- mirror that exact substitute binary over IPFS in the background and then serve it to `guix-daemon` locally, instead of compiling from source.
 
 ---
 
@@ -99,6 +99,32 @@ When prompted:
 
 ---
 
+### Step 3b: Subscribe Each Spoke to the Hub's Name
+
+`make gips-spoke` authorizes the Hub's key but does **not** subscribe. Trusting
+a publisher and fetching from it are separate steps, and this is the one that
+is easiest to forget (the upstream quickstart says the same). On each Spoke,
+using the name the Hub pushes under in Step 4:
+
+```bash
+gips subscribe cluster.gnu        # or: cd gips && just subscribe cluster.gnu
+```
+
+How it then works, verified by reading `gips/components/gips-http/src/lib.rs`
+on 2026-09-20, not yet by a live two-node run:
+
+- The Spoke's `gipsd` answers `guix-daemon` only from its **local** database.
+  It does not fetch from the Hub on demand.
+- A background mirror worker wakes every 60 s, walks each subscribed feed, and
+  downloads **and pins** every new item before it becomes visible to Guix. So
+  there is a delay of up to a minute plus transfer time between `gips-push` on
+  the Hub and the package being installable on the Spoke.
+- The worker refuses more than 1000 pinned items per publisher.
+- Narinfos are signed by the Spoke's *own* `gipsd` key, so that key must also
+  be in the Spoke's `/etc/guix/acl`.
+
+---
+
 ### Step 4: Share and Substitute Packages
 
 - **On Machine 1 (Producer)**:
@@ -117,7 +143,17 @@ When prompted:
   make gips-pull MANIFEST=sync-manifest.scm
   ```
 
-Substitutes will be downloaded peer-to-peer over the IPFS swarm in seconds without compiling from source!
+> [!WARNING]
+> **The `https://ci.guix.gnu.org` fallback hides a broken GIPS setup.** With it
+> in the URL list, a Spoke that never subscribed (or has not mirrored yet) still
+> installs everything -- from the central server -- and nothing tells you GIPS
+> served none of it. To confirm GIPS is really serving, install one package
+> with `--substitute-urls="http://127.0.0.1:8080"` alone and check that it
+> succeeds.
+
+Whether this is faster than the central servers has **not been measured**. The
+plan for measuring it, and what may and may not be claimed from the result, is
+[GIPS_BENCHMARK_PROTOCOL.md](GIPS_BENCHMARK_PROTOCOL.md).
 
 ---
 

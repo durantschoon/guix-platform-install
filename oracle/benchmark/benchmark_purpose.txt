@@ -1,0 +1,24 @@
+========================================================================
+oracle/benchmark/ -- workloads for the GIPS substitute benchmark
+========================================================================
+Protocol: docs/GIPS_BENCHMARK_PROTOCOL.md.  Runner: oracle/scripts/gips-benchmark.scm.
+
+workload-small.scm
+  Four tiny packages.  Purpose: expose per-item overhead (narinfo lookup,
+  connection setup, IPFS content routing), which a throughput-dominated
+  workload would hide.  If GIPS loses anywhere it is most likely here, which
+  is the reason to include it.
+
+workload-medium.scm
+  emacs-minimal, git, python.  Purpose: a closure large enough that nar
+  transfer dominates, approximating a real first-day install.
+
+STATEMENT OF OMISSION: there is no "large" workload yet.  The natural one is
+the local-model runtime from the next goal (see CHECKLIST.md), but whether that
+package has central substitutes for the chosen architecture has not been
+checked, and a workload the central arm cannot serve fails preflight.
+
+STATEMENT OF OMISSION: manifests name packages, not store paths, on purpose.
+The store paths are frozen per experiment by `hub-prepare' into
+workload.paths / workload.closure, which belong with the results, not in git:
+they are only meaningful for one channel commit and one architecture.

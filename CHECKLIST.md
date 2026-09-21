@@ -7,7 +7,7 @@ This checklist tracks remaining work for the guix-platform-install project.
 **When completing an item:**
 1. Move the completed item to [archive/CHECKLIST_COMPLETED.md](archive/CHECKLIST_COMPLETED.md) (newest at top)
 2. Remove it from the active checklist sections below
-3. Update the "Latest Completed Items" section below with the 3 most recent completions
+3. Update the "Latest Completed Items" section below with the 5 most recent completions (the count `CLAUDE.md` sets)
 4. Keep the active checklist focused on **remaining work only**
 
 **Format for archive:**
@@ -73,6 +73,106 @@ This checklist tracks remaining work for the guix-platform-install project.
   - Release gate passed: live hashed computation, attributable result, exact
     instance confirmed `TERMINATED`
   - Deferred post-release: retained-instance task joining and MCP facade
+
+### NEAR-TERM GOAL (set 2026-09-20): measured GIPS speedup on Oracle, then local models
+
+**Goal 1 -- timing data that would convince a sceptic.** Same consumer, same
+store items, equally cold caches, substitution from the central servers vs
+through GIPS, repeated in randomized paired blocks. Protocol (pre-registered,
+fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PROTOCOL.md).
+
+- ✅ G1.0 Protocol written; harness `oracle/scripts/gips-benchmark.scm`
+  (plan / hub-prepare / preflight / run / report) with 77 offline checks in
+  `oracle/tests/test-gips-benchmark.scm`. **Evidence boundary: offline only.
+  `report` has seen synthetic rows; `run`, `preflight` and `hub-prepare` have
+  never executed on a Guix machine.**
+- ✅ G1.0b decided 2026-09-21: **time-to-available first, on-demand fetch in
+  gipsd later, reported as two claims** (protocol amendment 3). Harness
+  reworked: symmetric reset (gipsd stop + DB wipe + unpin + gc + restart),
+  subscribe-and-poll mirror wait, sub-phase timings, `mirror-timeout` status. Still never executed on a Guix machine. Original finding:
+- [x] ~~G1.0b BLOCKING design decision (found in review, 2026-09-20):~~ gipsd
+  serves guix only what its mirror worker has already downloaded *and pinned*,
+  so the protocol's cold GIPS arm cannot exist; as drafted it would have timed
+  a local-disk read and reported a huge speedup. Options (time-to-available /
+  add on-demand resolve to gipsd / both) are in protocol section 9,
+  amendment 2(a). Follow-ons blocked on it: gipsd restart in the reset (2b),
+  `guix publish` control arm (2d), ACL + 1000-item preflight checks (2g).
+- [ ] G1.1 Decide shape and topology (blocks everything below; protocol
+  section 5 explains why topology changes what the result is allowed to claim,
+  and the Goal 2 note explains why shape is a shared decision)
+  - Live inventory 2026-09-20 (read-only OCI query): both Always Free micro
+    slots in Ashburn AD-1 are in use by `guix-oracle-minius-02` and
+    `guix-oracle-z5-02`, both RUNNING Guix guests (`used: 2, available: 0`).
+    `docs/ORACLE_VALIDATION_CHECKPOINT.md` still lists an Oracle Linux micro
+    that no longer exists -- that file's "Live resources" section is stale.
+  - 2026-09-21: user confirmed both instances exist only for this repo and may
+    be used freely (not terminated) until further notice. Probe results are in
+    `docs/ORACLE_VALIDATION_CHECKPOINT.md`. Three practical blockers found:
+    (1) `z5-02` rejects the only Oracle key on this controller; (2) neither
+    GIPS nor kubo nor a Rust toolchain is installed on `minius-02`, and
+    compiling gipsd on 1 GiB RAM / 1/8 OCPU is not realistic -- it needs to be
+    built elsewhere (x86_64) and copied, or installed from `gips/gips.scm`
+    with a substitute; (3) the generic image gives every guest the hostname
+    `guix-oracle`, so `run --consumer-host` cannot tell hub from consumer --
+    only the hub marker does, until the hostnames differ.
+- ✅ G1.0c Compression-confound controls (user decision 2026-09-21): arms
+  `publish-none` / `publish-zstd` (plain `guix publish` on the hub), one
+  primary + three explanatory comparisons fixed in advance, attribution rule
+  in protocol amendment 4. 77 offline checks. Not yet run anywhere.
+- [ ] **G1.1b NEW BLOCKER (2026-09-21): cross-machine discovery.** A spoke
+  finds the hub only via GNS, through `gnunet-gns`; GNUnet is not in
+  `gips/manifest.scm`, not on the micros, and the publish invocation
+  (`gnunet-gns record ...`) looks like it is not a real GNUnet command
+  (unverified -- protocol amendment 3(e)). Decide: make GNUnet work on both
+  nodes, or point `gns_command` at something else.
+- **Open decisions ranked by how much they change the outcome (2026-09-21):**
+  - HIGH, blocks everything: discovery route (G1.1b) -- real GNUnet vs a
+    `gns_command` shim. **Verified 2026-09-21 on the micro:** `gnunet-gns`
+    0.27.0 is lookup-only; GIPS's publish invocation exits 1 with `invalid
+    option -- n`. Either way GIPS needs a code change or a wrapper (publish
+    via `gnunet-namestore -a`, or a shim).
+  - HIGH, blocks everything: where gipsd gets built. User chose 2026-09-21 to
+    try the micros. `guix build -f gips/gips.scm` cannot work (empty
+    `#:cargo-inputs`), so a single-job `cargo build --release` inside
+    `guix shell` was started on `minius-02` (log `~/build-gips.log`). Outcome
+    pending; if it succeeds, copy the binaries to `z5-02` (same image).
+  - MEDIUM, blocks the run but is a 2-minute fix: SSH access to `z5-02`.
+  - LOW (noted, not blocking): distinct guest hostnames -- the hub-marker guard
+    already protects the hub; do it when first logging in to both.
+  - LOW (noted): `gips/` vs `../GIPS`. Checked 2026-09-21: **no Rust source
+    differs**, so the gipsd binary is identical either way; the drift is in the
+    Scheme API/service (`dashboard?` field), justfile, two docs, `test_api.scm`.
+    Record the commit the binary was built from in the results; reconcile the
+    copies separately.
+  - LOW (noted): `make gips-spoke` does not subscribe (doc now says so; the
+    benchmark subscribes itself). `benchmark-sync.sh --full` times a no-op
+    (superseded by this harness; remove or fix at leisure).
+- [ ] G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
+  substitute end to end (`guix build /gnu/store/...-hello` on the consumer with
+  `--substitute-urls=http://127.0.0.1:8080` only). This is roadmap Step 1 below
+  and has never been done; the benchmark is meaningless until it passes.
+- [ ] G1.3 Cross the six boundaries in protocol section 8 on that pair
+  (log format, `guix gc` coldness, `ipfs repo gc` coldness, gipsd caching,
+  publish -> fetchable, `sudo -n`)
+- [ ] G1.4 Pilot: 2 blocks of `small`; confirm every row is `ok` and rx_bytes
+  is plausible for both arms
+- [ ] G1.5 Full run: 20 blocks x 4 arms, each of `small` and `medium` (fixed
+  n, no interim look; 160 trials -- size it from the pilot first); append a dated
+  results section to the protocol, whatever the verdict
+- [ ] G1.6 Second configuration (different hub distance or peer count) so the
+  write-up can say where the effect does and does not hold
+
+**Goal 2 -- run local models (ollama) on the Oracle machines.** Set up after
+Goal 1. Constraint already known: the only published image is x86_64
+`VM.Standard.E2.1.Micro` (1 GiB RAM, 1/8 OCPU), which cannot hold a useful
+model. Local models need Always Free `VM.Standard.A1.Flex` (aarch64, up to
+4 OCPU / 24 GiB), which needs an aarch64 Guix image that does not exist yet.
+
+- [ ] G2.0 aarch64 Oracle image (build host, `--shape-config`, capacity)
+- [ ] G2.1 Check whether `ollama` is packaged in the pinned Guix at all, and
+  whether it (or `llama-cpp`) has aarch64 substitutes
+- [ ] G2.2 Model runtime + one small model serving a prompt on A1.Flex
+- [ ] G2.3 Use the runtime's closure as the benchmark's `large` workload
 
 ### GIPS Live Testing & Dual-Image Strategy (Roadmap)
 - Step 1: Live testing with GIPS on Oracle instances (peer discovery, narinfo signing, substitute serving over OCI VNIC)

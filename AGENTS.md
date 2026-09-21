@@ -3,7 +3,7 @@
 Orientation for any AI agent working in this repository. Vendor-neutral: the
 rules below apply whichever assistant you are.
 
-**Current-state snapshot refreshed 2026-08-27.** Anything about *current state* rots; the "Conventions"
+**Current-state snapshot refreshed 2026-09-21.** Anything about *current state* rots; the "Conventions"
 section does not. When they disagree, trust `git log` and `CHECKLIST.md` over
 this file, and fix this file.
 
@@ -15,11 +15,12 @@ this file, and fix this file.
 | **`CHECKLIST.md`** | What is done and what is next. The five most recent completions are at the top; older ones are in `archive/CHECKLIST_COMPLETED.md`. |
 | **`docs/ORACLE_VALIDATION_CHECKPOINT.md`** | The live-cloud restart point, current evidence boundary, and exact next action. |
 | **`docs/ORACLE_VALIDATION_STAGES.md`** | The Oracle validation work currently in flight and its release gates. |
+| **`docs/GIPS_BENCHMARK_PROTOCOL.md`** | The near-term goal: the pre-registered GIPS timing experiment, its blocking amendment, and what may be claimed from it. |
 | **`docs/ORACLE_ONE_CLICK_ROADMAP.md`** | The friend-facing Oracle path; only the console walkthrough/screenshots remain. |
 | **`docs/stages/README.md`** | How delegated implementation works here — numbered stage prompts, isolated worktrees, review gates. Five stages are merged. |
 | **`docs/STORY.md`** | Narrative of how the hard problems were actually diagnosed. The one doc that inverts the usual technical/narrative ratio. Optional, but it explains *why* several odd-looking decisions are correct. |
 
-## Where the project is (2026-08-27)
+## Where the project is (2026-09-21)
 
 The goal: someone with no Guix experience gets a free always-on Guix machine on
 Oracle Cloud, configured the way they like.
@@ -42,6 +43,22 @@ Oracle Cloud, configured the way they like.
   and transitive Web-of-Trust with cryptographic fraud proof gossip).
 - **In flight / Planned next**: Retained-instance multi-execution identity (Stage 08)
   and MCP tool facade (Stage 09).
+- **Near-term goal (set 2026-09-20)**: a convincing, paired, cold-cache timing
+  comparison of GIPS against the central substitute servers on Oracle, then
+  local models on the same machines. Protocol:
+  `docs/GIPS_BENCHMARK_PROTOCOL.md`; tasks G1.x / G2.x in `CHECKLIST.md`. The
+  harness is offline-tested only. gipsd serves guix only what its mirror
+  worker has already downloaded and pinned, so the GIPS arm measures
+  *time-to-available* (subscribe -> mirrored -> installed), with plain
+  `guix publish` control arms for the compression confound (protocol
+  amendments 2-4). **Current blocker (G1.1b):** cross-machine discovery runs
+  through `gnunet-gns`, which is not installed anywhere and whose publish
+  invocation looks wrong -- hub -> spoke sync has probably never worked live.
+  Then G1.2: one substitute served end to end between two nodes.
+- **Live Oracle inventory (read-only query, 2026-09-20)**: both Always Free
+  micro slots are used by running Guix guests `guix-oracle-minius-02` and
+  `guix-oracle-z5-02` (Ashburn AD-1). The Oracle Linux micro named in
+  `docs/ORACLE_VALIDATION_CHECKPOINT.md` no longer exists.
 - **Friend-facing remainder**: the console-only walkthrough and screenshots.
 
 ## Not in git, and easy to miss
@@ -92,8 +109,9 @@ lib/validate-before-deploy.sh --verbose   # exit 0; "Failed:" must be 0
 ./update-manifest.sh                      # if it covers a file you changed
 ```
 
-`make check` runs the first two commands. `make oracle-test` runs the two
-portable offline Oracle suites; `make oracle-test-all` adds preferences and
+`make check` runs the first two commands. `make oracle-test` runs the four
+portable offline Oracle suites (capacity, validation, GIPS cloud validation,
+GIPS benchmark); `make oracle-test-all` adds preferences and
 image evaluation and therefore requires Guix.
 
 Inherited state, not your breakage: about 15 validation warnings. On a

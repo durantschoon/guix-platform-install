@@ -5,6 +5,45 @@ should be able to resume from this file without relying on chat history.
 
 ## Last update
 
+- 2026-09-21 (later): first state-changing actions on `guix-oracle-minius-02`
+  under the standing authorization. (1) Copied the `gips/` source tree (no
+  `target/`, no `.git`) to `~/gips-src`. (2) `guix shell gnunet` to test the
+  GNS publish command -- result in `docs/GIPS_BENCHMARK_PROTOCOL.md` amendment
+  3(e): `gnunet-gns` has no publish mode. (3) Started, in the background, a
+  single-job release build: `~/build-gips.sh`, log `~/build-gips.log`
+  (`guix shell -m manifest.scm gcc-toolchain -- cargo build --release -p gipsd
+  -p gips`, `CARGO_BUILD_JOBS=1`). Whether 965 MiB RAM + 2 GiB swap can finish
+  it is the thing being tested; the log has START/EXIT timestamps. The guest
+  reports 2 vCPUs (AMD EPYC 7551). Nothing was done to `z5-02`.
+
+- 2026-09-21: **Ownership established by the user:** `guix-oracle-minius-02`
+  and `guix-oracle-z5-02` exist only to advance this repository and may be
+  used for that until the user says otherwise. This authorizes use (installs,
+  daemons, `guix gc`, benchmark trials); terminating an instance or deleting a
+  boot volume still needs an explicit yes. First live action under it was a
+  read-only SSH probe:
+  - `guix-oracle-minius-02` (157.151.255.3): reachable as `guix` with
+    `~/.ssh/id_ed25519_guix_oracle`. Hostname `guix-oracle`, x86_64, 965 MiB
+    RAM + 2 GiB swap, 28 GiB free on `/gnu/store`, guix `df2d121` + nonguix
+    `73baab3` (generation of 2026-09-09), `sudo -n` works, 2 keys in
+    `/etc/guix/acl`. **No `gips`, `gipsd`, `ipfs` or `cargo` installed, no
+    repo checkout, nothing GIPS-related running.**
+  - `guix-oracle-z5-02` (129.213.123.216): `Permission denied (publickey)`
+    with that key. Not probed further; no other key was tried.
+  Public IPs are ephemeral and were read from OCI at the time of the probe.
+
+- 2026-09-20: Read-only inventory only; no resource was created, changed or
+  terminated. `oci limits resource-availability get` reports
+  `vm-standard-e2-1-micro-count` in US-ASHBURN-AD-1 as `used: 2, available: 0`.
+  The two non-terminated instances are `guix-oracle-minius-02` and
+  `guix-oracle-z5-02`, both `VM.Standard.E2.1.Micro`, both `RUNNING`. **The
+  "Live resources" section below is stale:** the `oracle-linux-e2-micro-20260822`
+  instance it marks "do not stop, modify, or terminate" no longer exists, and
+  these two Guix guests are not listed there. Their ownership and purpose were
+  not established by this query -- ask before treating either as disposable.
+  Context: they are the candidate hub/consumer pair for the GIPS benchmark
+  (`docs/GIPS_BENCHMARK_PROTOCOL.md`).
+
 - 2026-08-27: OV-6 live release acceptance passed in run
   `20260827T201856Z-dd6f-661af`. The exact source snapshot hash was recorded,
   the guest hashed its transferred `SOURCE_MANIFEST.txt` and returned result

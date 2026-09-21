@@ -43,7 +43,7 @@ Make assignments override the defaults.
 The read-only/local targets are:
 
 ```sh
-make oracle-test                 # two portable offline suites
+make oracle-test                 # four portable offline suites
 make oracle-test-all             # all four suites; requires Guix
 make oracle-test-validation      # focused validator/controller suite
 make oracle-auth

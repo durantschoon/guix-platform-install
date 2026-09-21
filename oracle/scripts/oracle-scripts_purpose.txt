@@ -437,3 +437,55 @@ Statement of omission: gips-validation-workload.scm does not mutate cloud
 resources, establish persistent firewall exceptions, or weaken OV-3 fresh
 ownership and disposable instance lifecycle termination gates.
 
+========================================================================
+gips-benchmark-common.scm / gips-benchmark.scm (GIPS timing goal, 2026-09-20)
+========================================================================
+Paired cold-cache comparison of substitution through GIPS against the central
+substitute servers.  The specification is docs/GIPS_BENCHMARK_PROTOCOL.md.
+
+gips-benchmark-common.scm holds every pure function: the seeded randomized
+block schedule, shell command construction, /proc/net/dev and guix-log
+parsing, the per-trial provenance verdict, the TSV row format, and the
+statistics (bootstrap interval, exact sign-flip permutation test, paired
+comparison, decision rule).  It is pure so that oracle/tests/test-gips-benchmark.scm
+can exercise all of it on the macOS controller, without guix or a cloud.
+
+gips-benchmark.scm is the effectful shell around it: plan, hub-prepare,
+preflight, run, report.
+
+Why a seeded LCG instead of Guile's `random': the schedule and the bootstrap
+must be regenerable from the recorded seed by a third party on any Guile.
+
+Why the workload is literal store paths: `guix build /gnu/store/...' times
+substitution alone and cannot fall back to compiling.
+
+Why zero parsed downloads is "unattributed" rather than "ok": if guix's log
+format changes, every trial must stop counting, not start passing.
+
+STATEMENT OF OMISSION: `run' does not launch, find, or terminate cloud
+instances.  It runs on a guest that the existing lifecycle tooling provided.
+Tempting to fold a two-instance launcher in here; left out because the OV-3
+ownership gate and exact-instance cleanup live in validate.scm /
+validation-lifecycle.scm and must not grow a second, weaker copy.
+
+STATEMENT OF OMISSION: there is no "best of N".  gips/scripts/benchmark-sync.sh
+reports the minimum of repeated runs; for a fetch into a store, every run after
+the first is a no-op, so the minimum is the no-op.  That script is left in
+place (it still measures narinfo lookup with --dry-run) and is FLAGGED for the
+user to decide whether its --full mode should be removed.
+
+Update 2026-09-21 (protocol amendments 3 and 4):
+The gips arm measures time-to-available (subscribe -> mirrored -> installed),
+because gipsd serves only what its mirror worker already pinned; a cold
+on-demand fetch does not exist to be timed.  The reset became identical for
+every arm and now stops gipsd, deletes its database, removes every IPFS pin and
+restarts gipsd.  Two optional control arms, publish-none and publish-zstd
+(plain `guix publish' on the hub), separate the compression and topology
+effects from anything attributable to GIPS.  planned-comparisons fixes one
+primary and three explanatory comparisons in code so that adding arms cannot
+quietly add headline verdicts.
+
+STATEMENT OF OMISSION: the harness does not start `guix publish' on the hub or
+open firewall ports.  Those are changes to a second machine and to OCI
+networking; they are documented steps, done deliberately by a person.
+

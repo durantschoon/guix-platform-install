@@ -6,7 +6,8 @@ pre-commit gates in their required order; it deliberately does not regenerate
 the manifest because that writes a shared generated file and is only needed
 when a covered source changed.
 
-`oracle-test` runs the capacity and validator/controller suites, the two Oracle
+`oracle-test` runs the capacity and validator/controller suites (plus the two
+GIPS suites added later, all pure Guile), the Oracle
 suites that are genuinely offline and portable. The preferences and image
 evaluation suites import Guix modules unavailable on the macOS development
 host. `oracle-test-all` adds both and fails clearly when `guix` is absent.
@@ -54,3 +55,10 @@ and developer-facing targets (`dev-check`, `dev-test`, `dev-manifest`, `dev-orac
 `make dev-help` and `make oracle-help` provide discoverability for development, testing,
 and full cloud lifecycle validation. Backward-compatible aliases (`check`, `test`, etc.)
 are preserved.
+
+`gips-benchmark-report RESULTS=file.tsv` analyses a GIPS benchmark results file
+with oracle/scripts/gips-benchmark.scm. It exists as a Make target because the
+report is the one benchmark step that runs on the controller rather than a
+guest, and it refuses an empty RESULTS rather than reporting on nothing.
+`oracle-test` also runs oracle/tests/test-gips-benchmark.scm, which is pure
+Guile and needs neither guix nor a cloud.

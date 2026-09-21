@@ -77,7 +77,10 @@ See [`QUICKSTART.md`](QUICKSTART.md) for complete instructions.
   Optimize download speeds globally
 - 🔄 **P2P Binary Sync (GIPS)**: See
   [`docs/GIPS_MULTI_MACHINE_SYNC.md`](docs/GIPS_MULTI_MACHINE_SYNC.md) -
-  Zero-config binary substitute sharing between home and cloud via IPFS
+  Binary substitute sharing between your own machines via IPFS, with no VPN
+  or port-forwarding (setup is a few commands per machine, not zero). Whether
+  it is faster than the central servers is unmeasured; the experiment is
+  specified in [`docs/GIPS_BENCHMARK_PROTOCOL.md`](docs/GIPS_BENCHMARK_PROTOCOL.md)
 - 📚 **Installation Knowledge**: See
   [`docs/INSTALLATION_KNOWLEDGE.md`](docs/INSTALLATION_KNOWLEDGE.md) -
   Deep technical details and lessons learned
