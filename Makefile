@@ -16,7 +16,7 @@ EVIDENCE_DIR ?= $(ORACLE_EVIDENCE_DIR)
 .PHONY: help dev-help test check manifest dev-test dev-check dev-manifest
 .PHONY: wizard oracle-wizard download ssh oracle-download oracle-ssh personal-setup set-ip
 .PHONY: gips-test gips-rust-test gips-check gips-daemon gips-status ipfs-docker
-.PHONY: gips-bundle gips-install gips-setup gips-hub gips-spoke gips-start gips-stop gips-push gips-pull
+.PHONY: gips-bundle gips-install gips-setup gips-hub gips-spoke gips-subscribe gips-start gips-stop gips-push gips-pull
 .PHONY: oracle-help oracle-test oracle-test-all gips-benchmark-report
 .PHONY: oracle-test-capacity oracle-test-image oracle-test-preferences
 .PHONY: oracle-test-validation oracle-auth oracle-inventory
@@ -37,7 +37,8 @@ help:
 	@echo "GIPS (P2P Package Substitute Sharing):"
 	@echo "  make gips-bundle        Install complete GIPS tooling bundle into Guix profile"
 	@echo "  make gips-hub           Initialize this machine as the GIPS Hub (builder/publisher)"
-	@echo "  make gips-spoke         Connect this machine as a Spoke (consumer) to the Hub"
+	@echo "  make gips-spoke         Connect this machine as a Spoke: authorize Hub key, start daemons, subscribe (GNS_NAME=$(GNS_NAME))"
+	@echo "  make gips-subscribe     Subscribe this node to a Hub feed (GNS_NAME=...)"
 	@echo "  make gips-setup         Run GIPS post-install configuration wizard"
 	@echo "  make gips-start         Start IPFS and GIPS daemons in background"
 	@echo "  make gips-stop          Stop background IPFS and GIPS daemons"
@@ -121,6 +122,31 @@ gips-spoke:
 		$(if $(strip $(HUB_KEY_FILE)),--hub-key-file='$(HUB_KEY_FILE)',) \
 		$(if $(strip $(HUB_KEY)),--hub-key='$(HUB_KEY)',)
 	@$(MAKE) gips-start
+	@$(MAKE) gips-subscribe GNS_NAME='$(GNS_NAME)'
+
+# Subscribe this node's gipsd to a publisher's feed. Authorizing the Hub's key
+# only says whose signatures to trust; without a subscription the mirror worker
+# has nothing to mirror, gipsd answers 404 for everything, and -- because
+# gips-pull lists ci.guix.gnu.org as a fallback -- installs still succeed, so
+# the Spoke looks healthy while GIPS serves nothing. Runs after gips-start
+# because /subscribe is a daemon endpoint. Fails loudly: a Spoke that did not
+# subscribe is not set up.
+gips-subscribe:
+	@test -n "$(GNS_NAME)" || { echo "[ERROR] GNS_NAME is empty; pass the name the Hub pushes under (make gips-push GNS_NAME=...)" >&2; exit 2; }
+	@i=0; until curl -s -m 2 http://127.0.0.1:8080/status >/dev/null 2>&1; do \
+		i=$$((i+1)); \
+		if [ $$i -ge 30 ]; then echo "[ERROR] gipsd did not answer /status within 30 s; cannot subscribe (log: ~/.config/gips/gipsd.log)" >&2; exit 1; fi; \
+		sleep 1; \
+	done
+	@echo "[INFO] Subscribing to Hub feed '$(GNS_NAME)'..."
+	@if command -v gips >/dev/null 2>&1; then \
+		gips subscribe '$(GNS_NAME)'; \
+	elif command -v cargo >/dev/null 2>&1; then \
+		cd gips && cargo run -q -p gips -- subscribe '$(GNS_NAME)'; \
+	else \
+		echo "[ERROR] 'gips' or 'cargo' required. Run 'make gips-bundle'." >&2; exit 1; \
+	fi
+	@echo "[OK] Subscribed to '$(GNS_NAME)'. The mirror worker checks every 60 s; items appear after it has downloaded and pinned them."
 
 gips-start:
 	@mkdir -p "$${XDG_CONFIG_HOME:-$$HOME/.config}/gips"

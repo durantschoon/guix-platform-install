@@ -99,16 +99,27 @@ When prompted:
 
 ---
 
-### Step 3b: Subscribe Each Spoke to the Hub's Name
+### Step 3b: The Subscription (done for you by `make gips-spoke`)
 
-`make gips-spoke` authorizes the Hub's key but does **not** subscribe. Trusting
-a publisher and fetching from it are separate steps, and this is the one that
-is easiest to forget (the upstream quickstart says the same). On each Spoke,
-using the name the Hub pushes under in Step 4:
+Trusting a publisher and fetching from it are separate steps, and the second is
+the one that is easiest to forget (the upstream quickstart says the same). As
+of 2026-09-21 `make gips-spoke` finishes by running `make gips-subscribe`,
+which waits for `gipsd` and subscribes to `GNS_NAME` (default `cluster.gnu`,
+the same default `make gips-push` publishes under). If your Hub pushes under a
+different name, pass it on both sides:
 
 ```bash
-gips subscribe cluster.gnu        # or: cd gips && just subscribe cluster.gnu
+make gips-spoke GNS_NAME=myfleet.gnu     # Spoke
+make gips-push  GNS_NAME=myfleet.gnu     # Hub
+
+make gips-subscribe GNS_NAME=other.gnu   # add another feed later
 ```
+
+> [!WARNING]
+> Subscribing records the name; *resolving* it goes through GNS. As verified on
+> 2026-09-21, GIPS's GNS **publish** command does not match the real
+> `gnunet-gns` tool, so a Hub cannot yet announce its feed and a subscribed
+> Spoke has nothing to resolve. Tracked as G1.1b in `CHECKLIST.md`.
 
 How it then works, verified by reading `gips/components/gips-http/src/lib.rs`
 on 2026-09-20, not yet by a live two-node run:
@@ -163,7 +174,8 @@ plan for measuring it, and what may and may not be claimed from the result, is
 |---|---|
 | `make gips-bundle` | Installs complete GIPS tooling bundle (`kubo`, `rust`, `guile-gcrypt`, etc.) via `gips/manifest.scm`. |
 | `make gips-hub` | Initializes this node as the Hub (builder): sets up keys, starts daemons, and outputs Spoke connection info. |
-| `make gips-spoke` | Connects this node as a Spoke (consumer): authorizes Hub key in `/etc/guix/acl` and starts daemons. |
+| `make gips-spoke` | Connects this node as a Spoke (consumer): authorizes Hub key in `/etc/guix/acl`, starts daemons, and subscribes to `GNS_NAME`. |
+| `make gips-subscribe` | Subscribes this node's `gipsd` to the feed `GNS_NAME` (waits for the daemon; fails loudly). |
 | `make gips-setup` | Runs the post-install recipe: creates secure config dir, generates keys (`0600`/`0700`), and writes default config. |
 | `make gips-start` | Starts `ipfs daemon` and `gipsd` in the background with logging to `~/.config/gips/`. |
 | `make gips-stop` | Stops background `gipsd` and `ipfs daemon` processes cleanly. |

@@ -144,8 +144,9 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
     Scheme API/service (`dashboard?` field), justfile, two docs, `test_api.scm`.
     Record the commit the binary was built from in the results; reconcile the
     copies separately.
-  - LOW (noted): `make gips-spoke` does not subscribe (doc now says so; the
-    benchmark subscribes itself). `benchmark-sync.sh --full` times a no-op
+  - DONE 2026-09-21: `make gips-spoke` now ends with `make gips-subscribe`
+    (waits for gipsd, subscribes to `GNS_NAME`, fails loudly). Checked with
+    `make -n` only; never run against a live gipsd. `benchmark-sync.sh --full` times a no-op
     (superseded by this harness; remove or fix at leisure).
 - [ ] G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
   substitute end to end (`guix build /gnu/store/...-hello` on the consumer with

@@ -62,3 +62,13 @@ report is the one benchmark step that runs on the controller rather than a
 guest, and it refuses an empty RESULTS rather than reporting on nothing.
 `oracle-test` also runs oracle/tests/test-gips-benchmark.scm, which is pure
 Guile and needs neither guix nor a cloud.
+
+`gips-subscribe GNS_NAME=...` subscribes the local gipsd to a publisher feed,
+and `gips-spoke` calls it last. It is a separate target, run after `gips-start`,
+because /subscribe is an endpoint of the running daemon -- the post-install
+recipe runs before the daemon exists and so cannot do it. It fails rather than
+warns: a Spoke without a subscription serves nothing, and the ci.guix.gnu.org
+fallback in `gips-pull` would hide that indefinitely.
+STATEMENT OF OMISSION: `gips-hub` does not subscribe to anything; a Hub
+publishes, and subscribing it to itself would make it mirror its own feed.
+
