@@ -130,6 +130,14 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   learning the hub's zone key, which fits the existing "paste the Hub key"
   step in `gips-spoke`; and the two peers actually finding each other
   (HELLO/bootstrap) so a lookup on the spoke reaches the hub's record.
+  **Measured on the hub 2026-09-21 (GNUnet 0.27.0, `~/gnunet-probe.sh`):** a
+  full peer (22 services) raised `used` memory from 309 to 337 MiB with no
+  swap growth -- largest process 20 MiB -- so it fits a 1 GiB micro beside
+  gipsd. The real commands work locally: `gnunet-identity -C ZONE`, then
+  `gnunet-namestore -z ZONE -a -n LABEL -t TXT -V VALUE -e 1h -p`, then
+  `gnunet-gns -r -t TXT -u LABEL.ZONE` returned the value, exit 0. NOT yet
+  tested: resolving from the OTHER machine (needs the spoke to know the hub's
+  zone key, and the two peers to connect). Peer stopped; test ego deleted.
   `gnunet` goes into `gips/manifest.scm`. The fix is a GIPS source change --
   make it in `../GIPS` and reconcile the copies in the same sitting.
 - [ ] **G1.1b (original finding, 2026-09-21): cross-machine discovery.** A spoke
@@ -176,6 +184,15 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
     (waits for gipsd, subscribes to `GNS_NAME`, fails loudly). Checked with
     `make -n` only; never run against a live gipsd. `benchmark-sync.sh --full` times a no-op
     (superseded by this harness; remove or fix at leisure).
+- [ ] G1.1c Dependencies as declared files, not folklore (2026-09-21).
+  `gips/manifest.scm` now includes `gnunet` and `guile-json` and warns when a
+  package cannot be found (verified on the hub). Remaining: (1) split it into
+  a runtime manifest and a build manifest, so a node given prebuilt binaries
+  skips Rust; (2) the declarative path -- `gips-service-type` requires a
+  shepherd `ipfs` service it does not provide and knows nothing of GNUnet, so
+  a `(service gips-service-type)` line alone cannot work yet; it should extend
+  or require kubo and gnunet services; (3) `gips/guix.scm` lists `gnunet` but
+  not `kubo`, and cannot build at all until `#:cargo-inputs` is real.
 - [ ] G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
   substitute end to end (`guix build /gnu/store/...-hello` on the consumer with
   `--substitute-urls=http://127.0.0.1:8080` only). This is roadmap Step 1 below
@@ -977,6 +994,70 @@ user who states the preference up front never needs the switch tool at all —
 the postinstall path stays for users who start minimal and upgrade later.
 
 **Impact:** ⭐⭐⭐ High — this is the "enter some information" half of the vision
+
+##### R1a. Prompt: "Keep awake while plugged in?" (requested 2026-09-21)
+
+**Status:** ❌ Not started — rides on R1 (it is one more preference prompt
+feeding the same generator).
+
+**Why it is a prompt and not a default.** By default a Guix laptop with a
+desktop suspends when the lid closes or the session idles, plugged in or not.
+That is right for a laptop that lives in a bag and wrong for one that doubles
+as an always-on machine: an SSH target, a build box, a GIPS seeder (the case
+that raised it -- a seeder that sleeps mid-benchmark silently turns a 3-peer
+result into a 1-peer one). Neither is the correct answer for everyone, which
+by the known-good/generic rule makes it a question, not a constant.
+
+**The prompt must say why, in the prompt.** The user asked for this
+explicitly: a bare "Keep awake on AC? [y/N]" gives a newcomer nothing to
+decide with. Draft wording (ASCII only -- it is read on the ISO terminal; read
+the answer from `/dev/tty`):
+
+```
+Keep this laptop awake while it is plugged in?
+
+  By default it suspends when you close the lid or leave it idle, even on AC.
+  Say yes if you want to reach it over SSH, leave long jobs running, or use it
+  as an always-on node with the lid closed.
+
+  It ONLY applies on AC power. On battery, closing the lid still suspends, so
+  it cannot cook in a bag.
+
+  Trade-offs if you say yes: it draws power and makes heat around the clock
+  while plugged in, and a closed lid cools worse -- check temperatures once
+  under load. You can change this later in /etc/config.scm.
+
+Keep awake on AC? [y/N]
+```
+
+**What to emit** (only meaningful when a desktop is selected, because
+`elogind` arrives with `%desktop-services`; a console-only config has no
+elogind and nothing suspends it -- in that case skip the question and say so):
+
+```scheme
+(modify-services %desktop-services
+  (elogind-service-type config =>
+    (elogind-configuration
+      (inherit config)
+      (handle-lid-switch-external-power 'ignore)
+      (idle-action 'ignore))))
+```
+
+**Not covered by the system config, so tell the user at the end of install:**
+GNOME keeps its own per-user "automatic suspend when plugged in" timer
+(`gsettings set org.gnome.settings-daemon.plugins.power
+sleep-inactive-ac-type 'nothing'`), and WiFi power saving can drop long-lived
+connections on a machine that is fully awake. Both belong in `guix home` or
+postinstall notes, not in the generated system config.
+
+**Unverified:** the field names above are from the Guix manual as remembered,
+not from an evaluated config. Evaluate the snippet on the pinned commit before
+the generator emits it, and add a regression test beside the kernel-argument
+one in `03-config-dual-boot_test.go` that the default answer (No) leaves
+elogind untouched.
+
+**Impact:** ⭐ Low-medium — small, but it removes a confusing "my laptop keeps
+disappearing" moment for anyone using it as a server.
 
 ---
 

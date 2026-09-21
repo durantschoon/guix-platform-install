@@ -29,9 +29,18 @@
       #f)))
 
 (define (resolve-package spec fallback)
-  "Resolve SPEC, or FALLBACK if SPEC is unavailable."
+  "Resolve SPEC, or FALLBACK if SPEC is unavailable.  A spec that resolves to
+nothing is still dropped (so one renamed package does not make the whole
+manifest unusable), but it is reported on stderr: a manifest that silently
+omits kubo installs cleanly and then GIPS cannot start, which is a worse
+failure than a warning."
   (or (safe-specification->package spec)
-      (and fallback (safe-specification->package fallback))))
+      (and fallback (safe-specification->package fallback))
+      (begin
+        (format (current-error-port)
+                "[WARN] gips/manifest.scm: no package found for ~s~a; it is NOT in this profile\n"
+                spec (if fallback (format #f " (nor fallback ~s)" fallback) ""))
+        #f)))
 
 ;; Specifications with sensible fallbacks:
 ;; - Kubo is packaged as 'kubo' in current GNU Guix (provides /bin/ipfs).
@@ -46,6 +55,13 @@
    (resolve-package "sqlite" #f)
    (resolve-package "guile" "guile-3.0")
    (resolve-package "guile-gcrypt" #f)
+   ;; gipsd's narinfo-signing helpers (components/gips-trust/guile/) import
+   ;; (json); without it every signing attempt fails at run time.
+   (resolve-package "guile-json" #f)
+   ;; Discovery is real GNS (decision 2026-09-21): a spoke finds a hub's feed
+   ;; by resolving its name through a local GNUnet peer, and the hub publishes
+   ;; it with gnunet-namestore.  No GNUnet, no cross-machine sync.
+   (resolve-package "gnunet" #f)
    (resolve-package "just" #f)
    (resolve-package "curl" #f)
    (resolve-package "jq" #f)))

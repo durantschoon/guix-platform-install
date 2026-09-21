@@ -39,3 +39,26 @@ STATEMENTS OF OMISSION
   Reason: Preserves Guix's reproducible source-to-binary trust chain.
 - Omission: Does not hardcode GNUnet unless needed.
   Reason: GIPS operates natively over IPFS without requiring a running GNUnet daemon.
+
+Update 2026-09-21:
+gnunet -- added. Discovery is real GNS by decision; a spoke resolves the hub's
+  feed name through a local GNUnet peer and the hub publishes with
+  gnunet-namestore. Measured on a 1 GiB Oracle micro: a full peer costs about
+  30 MiB of used memory.
+guile-json -- added. gipsd's Guile signing helpers import (json); it was in
+  gips/guix.scm's inputs but missing here, so a manifest-installed node could
+  serve narinfos and fail to sign them.
+resolve-package now WARNS on stderr when a spec resolves to nothing. It still
+  drops the package rather than aborting (the original reason stands: one
+  renamed package should not make the whole manifest unusable), but dropping
+  silently meant a profile without kubo installed cleanly and looked fine.
+Verified on guix-oracle-minius-02 (guix df2d121): `guix shell -m manifest.scm`
+  provides ipfs, gnunet-arm, gnunet-namestore, gnunet-gns, cargo, guile, jq,
+  and Guile loads (json) and (gcrypt pk-crypto).
+
+STATEMENT OF OMISSION: this manifest still mixes BUILD tools (rust,
+  pkg-config, openssl, sqlite, just) with RUNTIME needs (kubo, gnunet, guile,
+  guile-gcrypt, guile-json, curl, jq). A node that receives prebuilt binaries
+  does not need the Rust toolchain (hundreds of MiB). Splitting it into
+  runtime and build manifests is planned, not done -- see CHECKLIST.md.
+
