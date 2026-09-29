@@ -67,7 +67,7 @@ DASHBOARD? enables the embedded telemetry dashboard at /dashboard."
 (define (gips-shepherd-service-spec config)
   (let ((gconfig (gips-configuration-gipsd-config config)))
     `((provision (gipsd gips))
-      (requirement (networking loopback ipfs))
+      (requirement (networking loopback ipfs gnunet))
       (documentation "GNU Guix IPFS substitute daemon (gipsd)")
       (auto-start? ,(gips-configuration-auto-start? config))
       (user ,(gips-configuration-user config))
@@ -91,6 +91,34 @@ chown -R ~a:~a $(dirname ~a)
 chmod 0700 $(dirname ~a)
 " db-path user group db-path db-path)))
 
+(define (real-service-type)
+  (catch #t
+    (lambda ()
+      (let* ((gnu-services (resolve-interface '(gnu services)))
+             (shepherd (resolve-interface '(gnu services shepherd)))
+             (ipfs (resolve-interface '(gnu packages ipfs)))
+             (gnunet (resolve-interface '(gnu packages gnunet)))
+             (st (module-ref gnu-services 'service-type))
+             (se (module-ref gnu-services 'service-extension))
+             (shepherd-root (module-ref shepherd 'shepherd-root-service-type))
+             (kubo-service (module-ref (resolve-interface '(gnu services ipfs)) 'kubo-service-type))
+             (gnunet-service (module-ref (resolve-interface '(gnu services gnunet)) 'gnunet-service-type)))
+        (st
+         (name 'gips)
+         (extensions
+          (list (se shepherd-root
+                    (lambda (config)
+                      ;; In a real implementation this should return <shepherd-service>
+                      (list (gips-shepherd-service-spec config))))
+                (se kubo-service
+                    (lambda (config) #f))
+                (se gnunet-service
+                    (lambda (config) #f))))
+         (default-value (gips-configuration))
+         (description "Run GIPS substitute peer."))))
+    (lambda _ #f)))
+
 ;;; Portable service type identifier for Guix System
 (define gips-service-type
-  (list 'service-type 'gips-service-type gips-shepherd-service-spec))
+  (or (real-service-type)
+      (list 'service-type 'gips-service-type gips-shepherd-service-spec)))
