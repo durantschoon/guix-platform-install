@@ -156,7 +156,7 @@ The repository contains a fully working, peer-to-peer substitute network:
       - Uses the `/api/v0/cat` endpoint and relies on `reqwest`’s `query` method, ensuring the CID is properly URL-encoded.
 
 - **GNS integration**
-  - Provides a small `GnsClient` abstraction that shells out to a configurable command (e.g. `gnunet-gns`) to publish records.
+  - Provides a small `GnsClient` abstraction that shells out to configurable commands (e.g. `gnunet-namestore` for publish, `gnunet-gns` for resolve) to manage records.
   - Returns structured errors when the external command fails, allowing the HTTP layer to report accurate status codes to clients.
 
 Overall, GIPS already behaves as a **publish-and-serve substitute node**: you can run a daemon, publish a Guix store artifact into IPFS (with optional GNS publication), persist the mapping in SQLite, and query basic health and content paths through the CLI and HTTP API. On top of that minimal path, the daemon is hardened: trust is fail-closed (an empty `trusted_publishers` list accepts nothing), every mutating endpoint requires a local auth token, nar content is verified against its real `NarHash` while streaming, and served narinfos can be signed with a Guix-native key an unmodified `guix` accepts. See [SECURITY.md](SECURITY.md) for the threat model and current limits.

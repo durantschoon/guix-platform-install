@@ -112,7 +112,7 @@ sequenceDiagram
     DB-->>gips_db: OK
     alt gns_name provided
         gips_http->>gips_gns: publish(name, narinfo_json)
-        gips_gns->>GNS: shell: gnunet-gns record ...
+        gips_gns->>GNS: shell: gnunet-namestore -a ...
         GNS-->>gips_gns: status
         gips_gns-->>gips_http: Ok / Err
     end
