@@ -7,7 +7,8 @@
              (gnu packages gnunet)
              (gnu packages gnupg)
              (gnu packages pkg-config)
-             (gnu packages rust-apps))
+             (gnu packages rust-apps)
+             (gnu packages ipfs))
 
 (define (gips-source-select? file stat)
   (let ((base (basename file)))
@@ -26,13 +27,19 @@
                       #:select? gips-source-select?))
   (build-system cargo-build-system)
   (arguments
-   `(#:cargo-inputs () ;; NOTE: A full offline Guix build requires all rust-* packages listed here
+   `(#:cargo-inputs () 
+     ;; NOTE: A full offline Guix build requires all rust-* packages corresponding
+     ;; to the Cargo.toml dependencies to be listed here. It currently fails
+     ;; because packaging all transitive Rust crates (tokio, hyper, reqwest, etc.)
+     ;; natively in Guix is a massive undertaking, and some specific versions
+     ;; required by Cargo.lock may not be packaged in Guix yet.
      #:tests? #f))
   (native-inputs
    (list pkg-config
          just))
   (inputs
    (list sqlite
+         kubo
          gnunet
          guile-3.0
          guile-json-4
