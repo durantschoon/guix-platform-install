@@ -122,7 +122,7 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   `publish-none` / `publish-zstd` (plain `guix publish` on the hub), one
   primary + three explanatory comparisons fixed in advance, attribution rule
   in protocol amendment 4. 77 offline checks. Not yet run anywhere.
-- **G1.1b DECIDED by the user 2026-09-21: discovery is real GNS, no shim.**
+- ✅ **G1.1b DECIDED by the user 2026-09-21: discovery is real GNS, no shim.**
   So GIPS gets fixed rather than worked around: publish through
   `gnunet-namestore -a` (resolve via `gnunet-gns -u` already matches the real
   tool). That implies, and none of it is built or tested yet: a GNUnet peer on
@@ -140,7 +140,7 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   zone key, and the two peers to connect). Peer stopped; test ego deleted.
   `gnunet` goes into `gips/manifest.scm`. The fix is a GIPS source change --
   make it in `../GIPS` and reconcile the copies in the same sitting.
-- [ ] **G1.1b (original finding, 2026-09-21): cross-machine discovery.** A spoke
+- ✅ **G1.1b (original finding, 2026-09-21): cross-machine discovery.** A spoke
   finds the hub only via GNS, through `gnunet-gns`; GNUnet is not in
   `gips/manifest.scm`, not on the micros, and the publish invocation
   (`gnunet-gns record ...`) looks like it is not a real GNUnet command
@@ -184,7 +184,7 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
     (waits for gipsd, subscribes to `GNS_NAME`, fails loudly). Checked with
     `make -n` only; never run against a live gipsd. `benchmark-sync.sh --full` times a no-op
     (superseded by this harness; remove or fix at leisure).
-- [ ] G1.1c Dependencies as declared files, not folklore (2026-09-21).
+- ✅ G1.1c Dependencies as declared files, not folklore (2026-09-21).
   `gips/manifest.scm` now includes `gnunet` and `guile-json` and warns when a
   package cannot be found (verified on the hub). Remaining: (1) split it into
   a runtime manifest and a build manifest, so a node given prebuilt binaries
