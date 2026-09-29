@@ -90,7 +90,10 @@ enum Invocation {
     /// Print this text and exit 0 without starting the daemon.
     PrintAndExit(String),
     /// Start the daemon. `ignored` holds arguments gipsd does not understand.
-    Run { ignored: Vec<String> },
+    Run {
+        config_file: Option<PathBuf>,
+        ignored: Vec<String>,
+    },
 }
 
 /// gipsd takes its configuration from the config directory, never from
@@ -105,26 +108,54 @@ fn parse_invocation(arguments: &[String]) -> Invocation {
     }
     if arguments.iter().any(|a| a == "--help" || a == "-h") {
         return Invocation::PrintAndExit(format!(
-            "{}\n\nUsage: gipsd [--version] [--help]\n\n\
-             gipsd takes no other options. Its configuration is gipsd.toml in the\n\
-             configuration directory ({} overrides the location).",
+            "{}\n\nUsage: gipsd [--version] [--help] [--config PATH]\n\n\
+             Its configuration is gipsd.toml in the configuration directory ({} overrides the location).\n\
+             The --config flag specifies the path to gipsd.toml directly.",
             gips_config::version::long_version("gipsd"),
             gips_config::CONFIG_DIR_ENV
         ));
     }
-    Invocation::Run { ignored: arguments.to_vec() }
+
+    let mut ignored = Vec::new();
+    let mut config_file = None;
+    let mut i = 0;
+
+    while i < arguments.len() {
+        if arguments[i] == "--config" && i + 1 < arguments.len() {
+            config_file = Some(PathBuf::from(&arguments[i + 1]));
+            i += 2;
+            continue;
+        } else if arguments[i].starts_with("--config=") {
+            config_file = Some(PathBuf::from(&arguments[i]["--config=".len()..]));
+            i += 1;
+            continue;
+        }
+        ignored.push(arguments[i].clone());
+        i += 1;
+    }
+
+    Invocation::Run {
+        config_file,
+        ignored,
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let ignored = match parse_invocation(&arguments) {
+    let (ignored, config_file) = match parse_invocation(&arguments) {
         Invocation::PrintAndExit(text) => {
             println!("{text}");
             return Ok(());
         }
-        Invocation::Run { ignored } => ignored,
+        Invocation::Run { config_file, ignored } => (config_file, ignored),
     };
+
+    if let Some(path) = config_file {
+        if let Some(parent) = path.parent() {
+            std::env::set_var(gips_config::CONFIG_DIR_ENV, parent);
+        }
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -302,16 +333,26 @@ mod tests {
 
     #[test]
     fn no_arguments_runs_with_nothing_ignored() {
-        assert_eq!(parse_invocation(&[]), Invocation::Run { ignored: vec![] });
+        assert_eq!(parse_invocation(&[]), Invocation::Run { config_file: None, ignored: vec![] });
     }
 
-    /// `--config PATH` is what the installer's Makefile passes. It must keep
-    /// starting the daemon (not break existing callers) AND be reported.
+    /// `--config PATH` is what the installer's Makefile passes. It must now
+    /// be parsed and respected, instead of being ignored.
     #[test]
-    fn unknown_arguments_still_run_but_are_reported() {
+    fn config_argument_is_parsed_and_respected() {
         assert_eq!(
             parse_invocation(&arguments(&["--config", "/x/gipsd.toml"])),
-            Invocation::Run { ignored: arguments(&["--config", "/x/gipsd.toml"]) }
+            Invocation::Run {
+                config_file: Some(PathBuf::from("/x/gipsd.toml")),
+                ignored: vec![],
+            }
+        );
+        assert_eq!(
+            parse_invocation(&arguments(&["--config=/y/gipsd.toml", "--other"])),
+            Invocation::Run {
+                config_file: Some(PathBuf::from("/y/gipsd.toml")),
+                ignored: arguments(&["--other"]),
+            }
         );
     }
 
