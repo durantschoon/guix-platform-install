@@ -931,7 +931,7 @@ async fn publish_from_store(
             }
         }
 
-        if let Err(e) = state.gns.publish(name, &return_cid, 65536).await {
+        if let Err(e) = state.gns.publish(name, &return_cid, 16).await {
             error!(
                 "failed to publish GNS record for {}: {:?}",
                 sanitize_log(name),
@@ -1132,7 +1132,7 @@ async fn publish_tree_from_store(
             }
         }
 
-        if let Err(e) = state.gns.publish(name, &return_cid, 65536).await {
+        if let Err(e) = state.gns.publish(name, &return_cid, 16).await {
             error!(
                 "failed to publish GNS record for {}: {:?}",
                 sanitize_log(name),
@@ -1781,7 +1781,7 @@ async fn resolve_manifest_entry(
         //    it gets its own series rather than being folded into the total.
         let gns_result = metrics::timed(
             &state.metrics.gns_resolve,
-            state.gns.resolve(&gns_name, 65536),
+            state.gns.resolve(&gns_name, 16),
         )
         .await;
         match &gns_result {
@@ -3368,7 +3368,7 @@ async fn create_snapshot(
     // what the error below has to say: a 502 here does not mean "no snapshot",
     // it means "snapshot created and pinned, name not updated".
     if let Some(name) = &gns_name {
-        if let Err(e) = state.gns.publish(name, &snapshot_cid, 65536).await {
+        if let Err(e) = state.gns.publish(name, &snapshot_cid, 16).await {
             error!(
                 "snapshot {} was created and pinned, but publishing it to GNS name {} failed: {:?}",
                 sanitize_log(&snapshot_cid),
@@ -3784,7 +3784,7 @@ async fn run_mirror_pass(state: &Arc<AppState>) -> Result<(), anyhow::Error> {
     for row in rows {
         let gns_name: String = row.try_get("gns_name")?;
 
-        match state.gns.resolve(&gns_name, 65536).await {
+        match state.gns.resolve(&gns_name, 16).await {
             Ok(feed_cid) => {
                 if let Err(e) = sync_feed(state, &gns_name, &feed_cid).await {
                     error!("Failed to process feed for {}: {:?}", gns_name, e);

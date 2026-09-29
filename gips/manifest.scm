@@ -47,7 +47,9 @@
    (resolve-package "gnunet" #f)
    (resolve-package "just" #f)
    (resolve-package "curl" #f)
-   (resolve-package "jq" #f)))
+   (resolve-package "jq" #f)
+   (resolve-package "rust" #f)
+   (list (resolve-package "rust" #f) "cargo")))
 
 (packages->manifest
  (delete-duplicates
