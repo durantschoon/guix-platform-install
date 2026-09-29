@@ -203,7 +203,7 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   always ignored -- it worked only because PATH is the default location. It
   now logs a warning. Decide: drop the flag from callers, or make gipsd honour
   it.
-- [ ] G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
+- ✅ G1.2 Two live nodes, hub + consumer, with GIPS actually serving one
   substitute end to end (`guix build /gnu/store/...-hello` on the consumer with
   `--substitute-urls=http://127.0.0.1:8080` only). This is roadmap Step 1 below
   and has never been done; the benchmark is meaningless until it passes.
