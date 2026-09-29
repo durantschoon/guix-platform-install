@@ -380,3 +380,10 @@ artifact changes.  Never place OCI credentials or private-key paths there.
 - 2026-08-25 23:05-23:25 EDT: built, structurally verified, uploaded, and
   imported OV-3 with explicit runtime lookup and serial-visible boundaries.
   Added resumable image import and historical prediction/actual timing tooling.
+- 2026-09-29: G1.2 Live End-to-End Substitute Verification (Stage 19) passed!
+  The Hub (`minius-02`) and Consumer (`z5-02`) successfully synced a substitute using `gips`.
+  - Discovered that `gips publish-tree` creates a feed, which is what the consumer expects (not a Fat Manifest).
+  - Bypassed Guix version derivation drift by creating a Fixed-Output Derivation (FOD) for a static text file.
+  - The Consumer's `gipsd` strips signatures and re-signs locally, requiring `guix archive --authorize` of its local `[guix_signing]` key.
+  - GNS record types were fixed to `16` (TXT) instead of `65536`.
+  - The data plane is proven to work live on Oracle.
