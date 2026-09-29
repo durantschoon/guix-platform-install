@@ -2755,7 +2755,9 @@ async fn get_status() -> Json<StatusResponse> {
         version: gips_config::version::release(),
         commit: gips_config::version::commit(),
         dirty: gips_config::version::dirty(),
-        protocols: StatusProtocols { gossip: gips_config::version::GOSSIP_PROTOCOL },
+        protocols: StatusProtocols {
+            gossip: gips_config::version::GOSSIP_PROTOCOL,
+        },
     })
 }
 
@@ -4371,7 +4373,10 @@ mod tests {
         let body = serde_json::to_value(&status).unwrap();
         assert_eq!(body["ok"], true);
         assert_eq!(body["version"], gips_config::version::release());
-        assert_eq!(body["protocols"]["gossip"], gips_config::version::GOSSIP_PROTOCOL);
+        assert_eq!(
+            body["protocols"]["gossip"],
+            gips_config::version::GOSSIP_PROTOCOL
+        );
         // Present even when unknown: `null`, never a missing key, so a client
         // can tell "unknown" from "an older gipsd that does not report it".
         assert!(body.as_object().unwrap().contains_key("commit"));
@@ -5022,16 +5027,18 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let log = dir.path().join("gns-invocations");
         let script = dir.path().join("fake-gnunet-gns");
-        std::fs::write(
-            &script,
-            format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"{}\"\nexit {}\n",
-                log.display(),
-                exit_code
-            ),
-        )
-        .unwrap();
+        let script_content = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"{}\"\nexit {}\n",
+            log.display(),
+            exit_code
+        );
+        std::fs::write(&script, &script_content).unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let script2 = dir.path().join("fake-gnunet-namestore");
+        std::fs::write(&script2, &script_content).unwrap();
+        std::fs::set_permissions(&script2, std::fs::Permissions::from_mode(0o755)).unwrap();
+        
         (script.to_string_lossy().into_owned(), log)
     }
 

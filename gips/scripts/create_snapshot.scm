@@ -109,7 +109,7 @@
           (format #t "Published Fat Manifest to IPFS: ~a\n" manifest-cid)
           
           ;; 3. Publish to GNS
-          (run-cmd-get-output "gnunet-gns" (list "record" "-n" gns-name "-t" "65536" "-a" manifest-cid))
+          (run-cmd-get-output "gnunet-namestore" (list "-a" "-n" gns-name "-t" "65536" "-V" manifest-cid "-e" "1h" "-p"))
           (format #t "Published ~a to GNS name ~a\n" manifest-cid gns-name)
           (display "Done.\n"))))))
 

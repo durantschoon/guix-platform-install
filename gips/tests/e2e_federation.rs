@@ -213,6 +213,7 @@ fn create_mock_gns_script(dir: &Path, gns_db_file: &Path) -> (String, PathBuf) {
     use std::os::unix::fs::PermissionsExt;
 
     let script_path = dir.join("mock-gnunet-gns");
+    let script2_path = dir.join("mock-gnunet-namestore");
     let script_content = format!(
         r#"#!/bin/sh
 DB="{}"
@@ -227,6 +228,20 @@ if [ "$1" = "record" ]; then
             -n) shift; if [ "$1" = "--" ]; then shift; fi; NAME="$1"; shift ;;
             -t) shift; TYPE="$1"; shift ;;
             -a) shift; if [ "$1" = "--" ]; then shift; fi; VAL="$1"; shift ;;
+            *) shift ;;
+        esac
+    done
+    echo "$NAME|$TYPE|$VAL" >> "$DB"
+    exit 0
+elif [ "$1" = "-a" ] || [ "$2" = "-a" ] || [ "$1" = "-n" ]; then
+    NAME=""
+    TYPE=""
+    VAL=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -n) shift; if [ "$1" = "--" ]; then shift; fi; NAME="$1"; shift ;;
+            -t) shift; TYPE="$1"; shift ;;
+            -V) shift; if [ "$1" = "--" ]; then shift; fi; VAL="$1"; shift ;;
             *) shift ;;
         esac
     done
@@ -254,9 +269,13 @@ fi
 "#,
         gns_db_file.display()
     );
-    std::fs::write(&script_path, script_content).unwrap();
+    std::fs::write(&script_path, &script_content).unwrap();
+    std::fs::write(&script2_path, &script_content).unwrap();
     #[cfg(unix)]
-    std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    {
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&script2_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
     (
         script_path.to_string_lossy().into_owned(),
         gns_db_file.to_path_buf(),

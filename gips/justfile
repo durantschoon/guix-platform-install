@@ -48,6 +48,18 @@ hub:
     @just start
     guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --hub
 
+# Set up GNUnet GNS ego on the hub and display its peer URI
+hub-setup ego_name="gips-hub":
+    #!/usr/bin/env bash
+    set -e
+    echo "[INFO] Creating GNUnet ego '{{ego_name}}' on Hub..."
+    gnunet-identity -C {{ego_name}} || echo "[WARN] Ego might already exist."
+    echo "[INFO] Hub Ego public key:"
+    gnunet-identity -d | grep {{ego_name}} || true
+    echo "[INFO] Hub Peer HELLO URI (provide this to Spokes for connection):"
+    gnunet-peerinfo -s || true
+    echo "[OK] Hub ego created and peer URI retrieved."
+
 # Connect this machine as GIPS Spoke (Consumer) to the Hub
 spoke hub_key_file="":
     #!/usr/bin/env bash
@@ -57,6 +69,15 @@ spoke hub_key_file="":
         guile --no-auto-compile -s ../postinstall/recipes/add/gips.scm --spoke; \
     fi
     just start
+
+# Configure GNUnet on the spoke to connect to the hub via its HELLO URI
+spoke-setup hub_hello_uri:
+    #!/usr/bin/env bash
+    set -e
+    echo "[INFO] Connecting GNUnet Spoke to Hub peer..."
+    gnunet-peerinfo -p "{{hub_hello_uri}}"
+    echo "[OK] Spoke configured to connect to Hub."
+
 
 # Start IPFS and GIPS daemons in background
 start:

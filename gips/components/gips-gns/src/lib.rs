@@ -43,16 +43,20 @@ impl GnsClient {
             anyhow::bail!("invalid CID value");
         }
 
-        let mut child = Command::new(&self.command)
-            .arg("record")
+        let publish_cmd = self.command.replace("gnunet-gns", "gnunet-namestore");
+        let mut child = Command::new(&publish_cmd)
+            .arg("-a")
             .arg("-n")
             .arg("--")
             .arg(name)
             .arg("-t")
             .arg(record_type.to_string())
-            .arg("-a")
+            .arg("-V")
             .arg("--")
             .arg(value)
+            .arg("-e")
+            .arg("1h")
+            .arg("-p")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
@@ -116,16 +120,20 @@ impl GnsClient {
             anyhow::bail!("empty TXT value");
         }
 
-        let mut child = Command::new(&self.command)
-            .arg("record")
+        let publish_cmd = self.command.replace("gnunet-gns", "gnunet-namestore");
+        let mut child = Command::new(&publish_cmd)
+            .arg("-a")
             .arg("-n")
             .arg("--")
             .arg(name)
             .arg("-t")
             .arg("16")
-            .arg("-a")
+            .arg("-V")
             .arg("--")
             .arg(value)
+            .arg("-e")
+            .arg("1h")
+            .arg("-p")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
