@@ -387,3 +387,11 @@ artifact changes.  Never place OCI credentials or private-key paths there.
   - The Consumer's `gipsd` strips signatures and re-signs locally, requiring `guix archive --authorize` of its local `[guix_signing]` key.
   - GNS record types were fixed to `16` (TXT) instead of `65536`.
   - The data plane is proven to work live on Oracle.
+- 2026-09-29: G1.3 Cross Benchmark Boundaries (Stage 20) passed.
+  - Successfully verified all six boundary conditions on the live Hub (`minius-02`) and Consumer (`z5-02`) instances required for the GIPS benchmark protocol.
+  - Log format: `guix build --substitute-urls=...` correctly logs `downloading from <url>`.
+  - `guix gc` coldness: `guix gc -D` removes the specified item from the store.
+  - `ipfs repo gc` coldness: IPFS unpin + GC successfully drops blocks and reduces repo size.
+  - `gipsd` caching: A database wipe and `gipsd` restart successfully forces 404s, proving no hidden consumer cache exists.
+  - `gips publish` fetchability: Publishing an item on the Hub made its JSON metadata resolvable over IPFS on the Consumer.
+  - `sudo -n`: Both guest users have passwordless sudo access.
