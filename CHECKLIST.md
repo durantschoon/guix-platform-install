@@ -207,7 +207,7 @@ fixed before any data): [docs/GIPS_BENCHMARK_PROTOCOL.md](docs/GIPS_BENCHMARK_PR
   substitute end to end (`guix build /gnu/store/...-hello` on the consumer with
   `--substitute-urls=http://127.0.0.1:8080` only). This is roadmap Step 1 below
   and has never been done; the benchmark is meaningless until it passes.
-- [ ] G1.3 Cross the six boundaries in protocol section 8 on that pair
+- ✅ G1.3 Cross the six boundaries in protocol section 8 on that pair
   (log format, `guix gc` coldness, `ipfs repo gc` coldness, gipsd caching,
   publish -> fetchable, `sudo -n`)
 - [ ] G1.4 Pilot: 2 blocks of `small`; confirm every row is `ok` and rx_bytes
