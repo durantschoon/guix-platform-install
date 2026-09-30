@@ -395,3 +395,8 @@ artifact changes.  Never place OCI credentials or private-key paths there.
   - `gipsd` caching: A database wipe and `gipsd` restart successfully forces 404s, proving no hidden consumer cache exists.
   - `gips publish` fetchability: Publishing an item on the Hub made its JSON metadata resolvable over IPFS on the Consumer.
   - `sudo -n`: Both guest users have passwordless sudo access.
+- 2026-09-30: Stage 21 (G1.4 Benchmark Pilot Run) was halted during Consumer `preflight`.
+  - The `preflight` command failed for `gips` (`0/22 narinfos available`).
+  - Analysis showed that `hub-prepare` relies on `gips publish` which still calls GNS with type `65536`, and `gnunet-gns` is completely missing from the Consumer (G1.1b blocker).
+  - The Consumer's `gns_wrapper.sh` also only uses `head -n 1`, meaning it could never resolve multiple items appended to `bench.gnu`.
+  - Execution was halted as instructed (`STOP and ask if any rows fail`) and reported in `stage-21-REPORT.md`.
