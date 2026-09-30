@@ -143,7 +143,7 @@ fn parse_invocation(arguments: &[String]) -> Invocation {
 #[tokio::main]
 async fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let (ignored, config_file) = match parse_invocation(&arguments) {
+    let (config_file, ignored) = match parse_invocation(&arguments) {
         Invocation::PrintAndExit(text) => {
             println!("{text}");
             return Ok(());
