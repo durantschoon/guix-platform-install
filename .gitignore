@@ -46,3 +46,5 @@ oracle/image/authorized-key.pub
 # Ephemeral test configs
 postinstall/tests/test-work.scm
 
+# Generated at the repo root by test and install runs.
+logs/
