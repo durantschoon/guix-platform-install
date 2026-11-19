@@ -753,6 +753,36 @@ Learned the complete workflow for getting Framework 13 fully operational after m
 
 ## 📋 Remaining Work
 
+### 🔵 IDEA, NOT STARTED — Hardware-faceted solution sharing ("nixos-hardware for Guix") (2026-11-19)
+
+**Full write-up: [docs/HARDWARE_FACETS_ROADMAP.md](docs/HARDWARE_FACETS_ROADMAP.md).**
+Recorded so it is not re-derived. No commitment, no schedule.
+
+**The idea:** name facts about your machine one at a time and have the
+candidate answers narrow until one is left --
+`guix-system + framework-13 + amd + audio-capture` resolves to a single fix.
+Faceted classification, not a tag cloud.
+
+**Why it is credible:** `nixos-hardware` already does exactly this, as a
+directory tree rather than a website, and the reason it works is that the leaf
+is executable config instead of prose -- config breaks loudly and gets fixed,
+prose rots silently. **There is no Guix equivalent.** This repo is already
+faceted by hardware without having named it (`framework/`, `framework-dual/`,
+`known-good/framework-dual-geeeks`).
+
+**Possible GIPS tie-in:** hardware profiles are small content-addressed
+artifacts, the same shape GIPS already distributes, so a machine could compute
+a hardware fingerprint and subscribe to profiles matching it. The blocker is
+trust, and it is harder than for substitutes: a substitute is a verifiable
+build of a package you chose, while a profile is arbitrary config you have not
+read. Matching hardware implies no trust whatsoever. Radicle signed refs and
+the stage-18 auth work are the primitives; the policy question is unanswered.
+
+**Smallest first step:** a channel with exactly one module,
+`(framework 13 amd)`, carrying the fixes already proven on `geeeks` (gfx1152
+Mesa override, keyd, audio capture). One real module beats a schema for zero
+modules.
+
 ### 🟢 APPROVED FUTURE WORK — "Friend Clicks a Button, Gets Guix on Oracle" (2026-08-08)
 
 **Full plan: [docs/ORACLE_ONE_CLICK_ROADMAP.md](docs/ORACLE_ONE_CLICK_ROADMAP.md).**
